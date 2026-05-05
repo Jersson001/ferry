@@ -1,0 +1,75 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN' ||
+         (request.auth.token.email == "jfescobar0913@gmail.com" && request.auth.token.email_verified == true));
+    }
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'role', 'createdAt']) &&
+             data.uid is string &&
+             data.role in ['USER', 'STORE', 'ADMIN'] &&
+             data.createdAt is timestamp &&
+             (!('email' in data) || data.email is string) &&
+             (!('phoneNumber' in data) || data.phoneNumber is string) &&
+             (!('displayName' in data) || data.displayName is string);
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) &&
+                      (request.resource.data.role != 'ADMIN' || isAdmin());
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) &&
+                      request.resource.data.role == resource.data.role &&
+                      request.resource.data.uid == resource.data.uid;
+      allow delete: if isAdmin();
+    }
+
+    match /quoteRequests/{requestId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    match /quotes/{quoteId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    match /catalog/{productId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() &&
+                               request.resource.data.storeId == request.auth.uid;
+      allow delete: if isAuthenticated() &&
+                      resource.data.storeId == request.auth.uid;
+    }
+
+    match /payments/{paymentId} {
+      allow create: if request.auth != null
+                    && request.resource.data.userId == request.auth.uid;
+      allow read:   if request.auth != null
+                    && (resource.data.userId == request.auth.uid
+                        || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'STORE'
+                        || request.auth.token.email == "jfescobar0913@gmail.com");
+      allow update, delete: if request.auth.token.email == "jfescobar0913@gmail.com";
+    }
+
+    // Perfiles públicos de tiendas — Doc ID == uid del dueño
+    match /stores/{storeId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isOwner(storeId);
+      allow delete: if isAdmin();
+    }
+
+  }
+}

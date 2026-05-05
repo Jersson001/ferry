@@ -1,0 +1,7 @@
+{
+  "name": "Ferry 1.2",
+  "description": "El Hábitat digital para la construcción: conecta clientes, contratistas y ferreterías.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

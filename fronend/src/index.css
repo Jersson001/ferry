@@ -1,0 +1,234 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================
+   FERRY SPLASH SCREEN — CUSTOM ANIMATIONS
+   ============================================ */
+
+/* --- Subtle Revving / Vibration ---
+   Much gentler than before — just a soft tremor. */
+@keyframes revving {
+
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+
+  25% {
+    transform: translate(-0.5px, 0.3px) rotate(-0.3deg);
+  }
+
+  50% {
+    transform: translate(0.5px, -0.3px) rotate(0.3deg);
+  }
+
+  75% {
+    transform: translate(-0.3px, 0.2px) rotate(-0.2deg);
+  }
+}
+
+/* --- Speed Lines ---
+   Horizontal lines that shoot out from behind the cart to the left,
+   like the reference image. Each line starts at x=0 and slides left
+   while fading out. */
+@keyframes speedLine1 {
+  0% {
+    opacity: 0;
+    width: 0;
+    transform: translateX(0);
+  }
+
+  15% {
+    opacity: 0.9;
+    width: 35px;
+  }
+
+  100% {
+    opacity: 0;
+    width: 55px;
+    transform: translateX(-40px);
+  }
+}
+
+@keyframes speedLine2 {
+  0% {
+    opacity: 0;
+    width: 0;
+    transform: translateX(0);
+  }
+
+  18% {
+    opacity: 0.8;
+    width: 45px;
+  }
+
+  100% {
+    opacity: 0;
+    width: 65px;
+    transform: translateX(-50px);
+  }
+}
+
+@keyframes speedLine3 {
+  0% {
+    opacity: 0;
+    width: 0;
+    transform: translateX(0);
+  }
+
+  12% {
+    opacity: 0.7;
+    width: 30px;
+  }
+
+  100% {
+    opacity: 0;
+    width: 50px;
+    transform: translateX(-35px);
+  }
+}
+
+@keyframes speedLine4 {
+  0% {
+    opacity: 0;
+    width: 0;
+    transform: translateX(0);
+  }
+
+  20% {
+    opacity: 0.85;
+    width: 40px;
+  }
+
+  100% {
+    opacity: 0;
+    width: 60px;
+    transform: translateX(-45px);
+  }
+}
+
+@keyframes speedLine5 {
+  0% {
+    opacity: 0;
+    width: 0;
+    transform: translateX(0);
+  }
+
+  14% {
+    opacity: 0.75;
+    width: 28px;
+  }
+
+  100% {
+    opacity: 0;
+    width: 48px;
+    transform: translateX(-38px);
+  }
+}
+
+@keyframes speedLine6 {
+  0% {
+    opacity: 0;
+    width: 0;
+    transform: translateX(0);
+  }
+
+  16% {
+    opacity: 0.65;
+    width: 32px;
+  }
+
+  100% {
+    opacity: 0;
+    width: 52px;
+    transform: translateX(-42px);
+  }
+}
+
+@keyframes speedLine7 {
+  0% {
+    opacity: 0;
+    width: 0;
+    transform: translateX(0);
+  }
+
+  13% {
+    opacity: 0.7;
+    width: 25px;
+  }
+
+  100% {
+    opacity: 0;
+    width: 42px;
+    transform: translateX(-30px);
+  }
+}
+
+/* --- Splash fade-out --- */
+@keyframes splashFadeOut {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.06);
+  }
+}
+
+/* --- Gentle float/idle --- */
+@keyframes gentleFloat {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+/* --- Utility classes --- */
+.animate-revving {
+  animation: revving 0.2s infinite ease-in-out;
+}
+
+.animate-gentle-float {
+  animation: gentleFloat 2s ease-in-out infinite;
+}
+
+.animate-splash-fade-out {
+  animation: splashFadeOut 0.5s ease-in forwards;
+}
+
+/* Speed line utilities — staggered durations & delays */
+.animate-speed-line-1 {
+  animation: speedLine1 0.8s ease-out infinite;
+}
+
+.animate-speed-line-2 {
+  animation: speedLine2 0.9s ease-out 0.1s infinite;
+}
+
+.animate-speed-line-3 {
+  animation: speedLine3 0.75s ease-out 0.2s infinite;
+}
+
+.animate-speed-line-4 {
+  animation: speedLine4 0.85s ease-out 0.05s infinite;
+}
+
+.animate-speed-line-5 {
+  animation: speedLine5 0.7s ease-out 0.25s infinite;
+}
+
+.animate-speed-line-6 {
+  animation: speedLine6 0.95s ease-out 0.15s infinite;
+}
+
+.animate-speed-line-7 {
+  animation: speedLine7 0.65s ease-out 0.3s infinite;
+}
