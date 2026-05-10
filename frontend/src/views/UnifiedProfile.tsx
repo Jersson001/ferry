@@ -487,7 +487,7 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
                       {isUpdatingLocation ? 'Obteniendo GPS...' : '📍 Fijar ubicación de la tienda'}
                     </p>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      {profile?.location
+                      {profile?.location?.lat && profile?.location?.lng
                         ? `✅ ${profile.location.lat.toFixed(4)}, ${profile.location.lng.toFixed(4)}`
                         : 'Los usuarios te encontrarán en el mapa'}
                     </p>
