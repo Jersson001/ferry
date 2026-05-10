@@ -10,7 +10,7 @@ import { UserQuotesInbox } from './views/UserQuotesInbox';
 import { LoginScreen } from './views/LoginScreen';
 import { CompleteProfileScreen, isProfileIncomplete } from './views/CompleteProfileScreen';
 import { UserRole, MaterialRequest, RequestStatus, Quote, Product, QuoteLineItem, UserProfile } from './types';
-import { Home, ShoppingBag, Briefcase, User, CheckCircle2, Inbox, Package, ShieldAlert, X, Store } from 'lucide-react';
+import { Home, ShoppingBag, Briefcase, User, CheckCircle2, Inbox, Package, ShieldAlert, X, Store, LogOut } from 'lucide-react';
 import ferryLogo from './assets/logo.svg';
 import { getCurrentUser, signOut as logoutUser } from './services/authService';
 import { loadGuestCart, GuestCart } from './hooks/useGuestCart';
@@ -303,11 +303,40 @@ const App: React.FC = () => {
           <img src={ferryLogo} alt="Ferry" className="h-8 object-contain" />
           <span className="text-ferry-500 text-[10px] font-bold align-top -ml-1">V2</span>
         </div>
-        <button onClick={handleCycleRole} className="text-[10px] text-slate-500 font-medium border border-slate-200 bg-slate-50 rounded px-2 py-1 hover:bg-slate-100 transition-colors">
-          {currentUserRole === UserRole.USER && 'Usuario'}
-          {currentUserRole === UserRole.STORE && 'Tienda'}
-          {currentUserRole === UserRole.ADMIN && 'Admin'}
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={handleCycleRole} className="text-[10px] text-slate-500 font-medium border border-slate-200 bg-slate-50 rounded px-2 py-1 hover:bg-slate-100 transition-colors">
+            {currentUserRole === UserRole.USER && 'Usuario'}
+            {currentUserRole === UserRole.STORE && 'Tienda'}
+            {currentUserRole === UserRole.ADMIN && 'Admin'}
+          </button>
+          
+          {!isGuest ? (
+            <button 
+              onClick={() => {
+                logoutUser();
+                setIsLoggedIn(false);
+                setIsGuest(true);
+                setCurrentUserProfile(null);
+                setCurrentView('HOME');
+              }}
+              className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+              title="Cerrar Sesión"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
+          ) : (
+            <button 
+              onClick={() => {
+                setIsGuest(false);
+                setIsLoggedIn(false);
+                setCurrentUserProfile(null);
+              }}
+              className="px-3 py-1.5 bg-ferry-500 text-white text-[10px] font-bold rounded-lg hover:bg-ferry-600 transition-colors shadow-sm"
+            >
+              Iniciar Sesión
+            </button>
+          )}
+        </div>
       </header>
 
       <main className="flex-1 overflow-y-auto p-4 no-scrollbar">

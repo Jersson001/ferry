@@ -164,12 +164,21 @@ export const HomeView: React.FC<Props> = ({
             >
               <ShoppingBag className="w-4 h-4" /> Materiales
             </button>
-            <button
-              onClick={() => onNavigate('HUB')}
-              className="flex-1 bg-white/10 hover:bg-white/20 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 backdrop-blur-sm transition-all"
-            >
-              <Briefcase className="w-4 h-4" /> Servicios
-            </button>
+            {isGuest ? (
+              <button
+                onClick={() => onRegister?.('constructor')}
+                className="flex-1 bg-white/10 hover:bg-white/20 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 backdrop-blur-sm transition-all"
+              >
+                <ArrowRight className="w-4 h-4" /> Iniciar Sesión
+              </button>
+            ) : (
+              <button
+                onClick={() => onNavigate('HUB')}
+                className="flex-1 bg-white/10 hover:bg-white/20 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 backdrop-blur-sm transition-all"
+              >
+                <Briefcase className="w-4 h-4" /> Servicios
+              </button>
+            )}
           </div>
         </div>
         <div className="absolute top-0 right-0 w-32 h-32 bg-ferry-500 rounded-full blur-3xl opacity-20 -mr-10 -mt-10"></div>
@@ -210,6 +219,15 @@ export const HomeView: React.FC<Props> = ({
             </button>
 
           </div>
+          <p className="text-center mt-4 text-xs text-slate-400 font-medium">
+            ¿Ya tienes cuenta?{' '}
+            <button 
+              onClick={() => onRegister?.('constructor')}
+              className="text-ferry-600 font-bold hover:underline transition-all"
+            >
+              Inicia sesión aquí
+            </button>
+          </p>
         </div>
       )}
 
