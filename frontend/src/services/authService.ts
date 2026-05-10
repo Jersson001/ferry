@@ -44,15 +44,15 @@ export async function signInWithEmail(email: string, password: string): Promise<
   return { role: mapRole(data.user.role), isNew: false };
 }
 
-export async function registerWithEmail(email: string, password: string, role: FerryRole): Promise<AuthResult> {
+export async function registerWithEmail(email: string, password: string, role: string, displayName?: string): Promise<AuthResult> {
   const response = await fetch(`${API_URL}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ 
       email, 
       password, 
-      role: role === 'ferreteria' ? 'STORE' : 'USER',
-      displayName: role === 'ferreteria' ? 'Mi Ferretería' : 'Usuario'
+      role,
+      displayName: displayName || (role === 'STORE' ? 'Mi Ferretería' : 'Usuario')
     }),
   });
   

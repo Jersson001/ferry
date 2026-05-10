@@ -1,35 +1,31 @@
 /**
- * LoginScreen.tsx  ·  src/views/LoginScreen.tsx
+ * LoginScreen.tsx — src/views/LoginScreen.tsx
  * ─────────────────────────────────────────────────────────────────────────────
- * Pantalla de autenticación de Ferry.
- *
- * Flujo de pasos:
- *   0 → Splash animado
- *   1 → Selección de rol (Contratista / Ferretería)
- *   2 → Selección de método (Google / Celular OTP)
- *   3 → Formulario de autenticación (Phone input → OTP)
+ * Flujo de autenticación Ferry:
+ *   Paso 0 → Splash animado
+ *   Paso 1 → Selección de rol (Constructor / Ferretería)
+ *   Paso 2 → Formulario email + contraseña (login o registro)
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   ArrowLeft,
-  ArrowRight,
-  Phone,
   Loader2,
-  CheckCircle2,
   Hammer,
   Store,
-  ShieldAlert,
-  X,
+  Eye,
+  EyeOff,
+  Mail,
+  Lock,
+  User,
   ChevronRight,
 } from 'lucide-react';
-import ferryLogo     from '../assets/logo.svg';
+import ferryLogo       from '../assets/logo.svg';
 import ferryLogoBlanco from '../assets/Logo Ferry3 - Blanco.png';
 import {
   signInWithEmail,
   registerWithEmail,
   friendlyAuthError,
-  RbacError,
   type FerryRole,
 } from '../services/authService';
 
@@ -38,41 +34,43 @@ import {
 interface Props {
   onLogin: (role: FerryRole) => void;
   onGuestLogin?: () => void;
-  /** Rol pre-seleccionado desde un CTA externo (ej. HomeView) */
   preselectedRole?: FerryRole | null;
 }
 
 // ─── Constantes de diseño ─────────────────────────────────────────────────────
 
-const ACCENT_BY_ROLE: Record<FerryRole, { ring: string; text: string; bg: string; hero: string; border: string }> = {
+const ACCENT: Record<FerryRole, { hero: string; btn: string; ring: string; text: string }> = {
   constructor: {
-    ring:   'ring-ferry-200',
-    text:   'text-ferry-600',
-    bg:     'bg-ferry-50',
-    hero:   'from-ferry-600 to-ferry-500',
-    border: 'border-ferry-400',
+    hero: 'from-ferry-600 to-ferry-500',
+    btn:  'bg-ferry-600 hover:bg-ferry-700 focus:ring-ferry-400',
+    ring: 'focus:ring-ferry-400 border-ferry-300',
+    text: 'text-ferry-600',
   },
   ferreteria: {
-    ring:   'ring-amber-200',
-    text:   'text-amber-600',
-    bg:     'bg-amber-50',
-    hero:   'from-amber-600 to-amber-500',
-    border: 'border-amber-400',
+    hero: 'from-amber-600 to-amber-500',
+    btn:  'bg-amber-600 hover:bg-amber-700 focus:ring-amber-400',
+    ring: 'focus:ring-amber-400 border-amber-300',
+    text: 'text-amber-600',
   },
 };
 
-// ─── Componentes auxiliares ───────────────────────────────────────────────────
+// ─── Validaciones del cliente ─────────────────────────────────────────────────
 
-const GoogleLogo: React.FC<{ size?: number }> = ({ size = 20 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
-    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-  </svg>
-);
+const validateEmail = (v: string) =>
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()) ? null : 'Ingresa un correo válido';
 
-/** Indicador de paso activo en la parte superior */
+const validatePassword = (v: string, isRegister: boolean) => {
+  if (!v) return 'La contraseña es requerida';
+  if (isRegister) {
+    if (v.length < 8)       return 'Mínimo 8 caracteres';
+    if (!/[A-Z]/.test(v))   return 'Debe tener al menos una mayúscula';
+    if (!/[0-9]/.test(v))   return 'Debe tener al menos un número';
+  }
+  return null;
+};
+
+// ─── Componente indicador de pasos ────────────────────────────────────────────
+
 const StepDots: React.FC<{ current: number; total: number }> = ({ current, total }) => (
   <div className="flex items-center justify-center gap-1.5 py-2">
     {Array.from({ length: total }, (_, i) => (
@@ -90,72 +88,43 @@ const StepDots: React.FC<{ current: number; total: number }> = ({ current, total
   </div>
 );
 
-/**
- * Input de 6 celdas para el código OTP.
- * Estado interno: array de 6 strings de un dígito c/u.
- * El valor expuesto al padre es siempre una cadena de dígitos puros (sin espacios).
- */
-const OtpInput: React.FC<{
-  value: string;           // cadena de 0-6 dígitos (sin espacios)
-  onChange: (v: string) => void;
-  disabled?: boolean;
-}> = ({ value, onChange, disabled }) => {
-  const inputs = useRef<(HTMLInputElement | null)[]>([]);
+// ─── Indicador de fortaleza de contraseña ─────────────────────────────────────
 
-  // Normaliza el value externo a un array de exactamente 6 slots
-  const digits = Array.from({ length: 6 }, (_, i) => value[i] ?? '');
+const PasswordStrength: React.FC<{ password: string }> = ({ password }) => {
+  const checks = [
+    { ok: password.length >= 8,    label: '8+ caracteres' },
+    { ok: /[A-Z]/.test(password),  label: 'Mayúscula' },
+    { ok: /[0-9]/.test(password),  label: 'Número' },
+  ];
+  const strength = checks.filter(c => c.ok).length;
+  const colors = ['bg-red-400', 'bg-yellow-400', 'bg-green-400'];
 
-  const handleChange = (idx: number, raw: string) => {
-    const digit = raw.replace(/[^0-9]/g, '').slice(-1); // solo el último dígito
-    const next = digits.slice(); // copia del array
-    next[idx] = digit;
-    onChange(next.join('')); // exporta string puro sin espacios
-    if (digit && idx < 5) inputs.current[idx + 1]?.focus();
-  };
-
-  const handleKeyDown = (idx: number, e: React.KeyboardEvent) => {
-    if (e.key === 'Backspace') {
-      if (!digits[idx] && idx > 0) {
-        const next = digits.slice();
-        next[idx - 1] = '';
-        onChange(next.join(''));
-        inputs.current[idx - 1]?.focus();
-      } else if (digits[idx]) {
-        const next = digits.slice();
-        next[idx] = '';
-        onChange(next.join(''));
-      }
-    }
-  };
-
-  const handlePaste = (e: React.ClipboardEvent) => {
-    e.preventDefault();
-    const pasted = e.clipboardData.getData('text').replace(/[^0-9]/g, '').slice(0, 6);
-    onChange(pasted);
-    inputs.current[Math.min(pasted.length, 5)]?.focus();
-  };
+  if (!password) return null;
 
   return (
-    <div className="flex justify-center gap-2" onPaste={handlePaste}>
-      {digits.map((d, i) => (
-        <input
-          key={i}
-          ref={(el) => { inputs.current[i] = el; }}
-          type="text"
-          inputMode="numeric"
-          maxLength={1}
-          value={d}
-          onChange={(e) => handleChange(i, e.target.value)}
-          onKeyDown={(e) => handleKeyDown(i, e)}
-          disabled={disabled}
-          className={`w-12 h-14 text-center text-2xl font-bold rounded-2xl border-2 outline-none transition-all duration-150
-            ${d
-              ? 'border-ferry-500 bg-ferry-50 text-ferry-700'
-              : 'border-slate-200 bg-slate-50 text-slate-800'}
-            focus:border-ferry-500 focus:ring-2 focus:ring-ferry-200 focus:bg-white
-            disabled:opacity-50`}
-        />
-      ))}
+    <div className="mt-2 space-y-1.5">
+      <div className="flex gap-1">
+        {[0, 1, 2].map(i => (
+          <div
+            key={i}
+            className={`h-1 flex-1 rounded-full transition-all duration-300 ${
+              i < strength ? colors[strength - 1] : 'bg-slate-100'
+            }`}
+          />
+        ))}
+      </div>
+      <div className="flex gap-2 flex-wrap">
+        {checks.map((c, i) => (
+          <span
+            key={i}
+            className={`text-[10px] font-medium transition-colors ${
+              c.ok ? 'text-green-600' : 'text-slate-400'
+            }`}
+          >
+            {c.ok ? '✓' : '○'} {c.label}
+          </span>
+        ))}
+      </div>
     </div>
   );
 };
@@ -163,374 +132,186 @@ const OtpInput: React.FC<{
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export const LoginScreen: React.FC<Props> = ({ onLogin, onGuestLogin, preselectedRole }) => {
-  // ── Pasos ──
-  const [step,         setStep]         = useState<0 | 1 | 2 | 3>(0);
+  // Pasos: 0=splash, 1=rol, 2=formulario
+  const [step,         setStep]         = useState<0 | 1 | 2>(0);
   const [selectedRole, setSelectedRole] = useState<FerryRole | null>(null);
 
-  // ── Estado del splash ──
-  const [splashPhase, setSplashPhase]   = useState<'idle' | 'revving' | 'fadeout'>('idle');
+  // Splash
+  const [splashPhase, setSplashPhase] = useState<'idle' | 'revving' | 'fadeout'>('idle');
 
-  // ── Estado Google ──
-  const [googleLoading, setGoogleLoading] = useState(false);
+  // Formulario
+  const [isLogin,      setIsLogin]    = useState(true);   // true=login, false=registro
+  const [email,        setEmail]      = useState('');
+  const [password,     setPassword]   = useState('');
+  const [displayName,  setDisplayName]= useState('');
+  const [showPass,     setShowPass]   = useState(false);
 
-  // ── Estado Phone OTP ──
-  const [phone,    setPhone]    = useState('');
-  const [otp,      setOtp]      = useState('');
-  const [otpSent,  setOtpSent]  = useState(false);
-  const [otpLoading, setOtpLoading] = useState(false);
+  // Estados de UI
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState<string | null>(null);
 
-  // ── Errores ──
-  const [error,     setError]     = useState<string | null>(null);
-  const [rbacError, setRbacError] = useState(false);
+  // Errores de campo
+  const [emailErr,    setEmailErr]   = useState<string | null>(null);
+  const [passwordErr, setPasswordErr]= useState<string | null>(null);
 
-  // ── Refs para auth OTP ──
-  const recaptchaRef    = useRef<any>(null);
-  const confirmationRef = useRef<any>(null);
-
-  // ── Destruir el RecaptchaVerifier al desmontar LoginScreen ──
-  // Evita widgets zombie en el DOM si el usuario navega atrás o cambia de rol.
-  useEffect(() => {
-    return () => {
-      try { recaptchaRef.current?.clear(); } catch (_) {}
-      recaptchaRef.current = null;
-      confirmationRef.current = null;
-    };
-  }, []);
-
-  // ── Splash automático ──
-
+  // ── Splash automático ─────────────────────────────────────────────────────
   useEffect(() => {
     if (preselectedRole) {
       setSelectedRole(preselectedRole);
       setStep(2);
       return;
     }
-    const t1 = setTimeout(() => setSplashPhase('revving'),  1000);
-    const t2 = setTimeout(() => setSplashPhase('fadeout'),  2200);
-    const t3 = setTimeout(() => setStep(1),                 2700);
+    const t1 = setTimeout(() => setSplashPhase('revving'),  900);
+    const t2 = setTimeout(() => setSplashPhase('fadeout'),  2000);
+    const t3 = setTimeout(() => setStep(1),                 2500);
     return () => [t1, t2, t3].forEach(clearTimeout);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const accent = ACCENT_BY_ROLE[selectedRole ?? 'constructor'];
+  const accent = ACCENT[selectedRole ?? 'constructor'];
 
-  // ── Handlers ──
+  // ── Navegación ────────────────────────────────────────────────────────────
   const selectRole = (role: FerryRole) => {
     setSelectedRole(role);
     setError(null);
-    setRbacError(false);
+    setEmailErr(null);
+    setPasswordErr(null);
     setStep(2);
   };
 
   const goBack = useCallback(() => {
     setError(null);
-    setRbacError(false);
-    if (step === 3) { setOtpSent(false); setOtp(''); setStep(2); }
-    else if (step === 2) setStep(1);
+    setEmailErr(null);
+    setPasswordErr(null);
+    if (step === 2) setStep(1);
     else if (step === 1) setStep(0);
   }, [step]);
 
-  // Auth con Google — simplificado a email temporal (Google OAuth requiere backend)
-  const handleGoogle = async () => {
-    if (!selectedRole) return;
-    setGoogleLoading(true);
+  const toggleMode = () => {
+    setIsLogin(v => !v);
     setError(null);
-    setRbacError(false);
-    try {
-      // TODO: implementar OAuth con el backend
-      setError('Google Sign-In estará disponible próximamente. Usa el acceso por celular.');
-    } finally {
-      setGoogleLoading(false);
-    }
+    setEmailErr(null);
+    setPasswordErr(null);
+    setPassword('');
   };
 
-  // Enviar OTP — envia el código via el backend
-  const handleSendOtp = async () => {
-    const phoneDigits = phone.replace(/\D/g, '');
-    if (phoneDigits.length < 10) { setError('Ingresa un número de 10 dígitos'); return; }
-    setOtpLoading(true);
-    setError(null);
-    try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-      const res = await fetch(`${API_URL}/auth/send-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: `+57${phoneDigits}`, role: selectedRole }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Error al enviar OTP');
-      confirmationRef.current = data.sessionId;
-      setOtpSent(true);
-    } catch (err: any) {
-      const msg = friendlyAuthError(err);
-      if (msg) setError(msg);
-    } finally {
-      setOtpLoading(false);
-    }
-  };
-
-  // Verificar OTP
-  const handleVerifyOtp = async () => {
-    const clean = otp.replace(/[^0-9]/g, '');
-    if (clean.length !== 6) {
-      setError('Ingresa los 6 dígitos del código');
-      return;
-    }
-    if (!confirmationRef.current) {
-      setError('La sesión de verificación expiró. Por favor solicita un nuevo código.');
-      setOtpSent(false);
-      setOtp('');
-      return;
-    }
+  // ── Submit ────────────────────────────────────────────────────────────────
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!selectedRole) return;
 
-    setOtpLoading(true);
+    // Validar campos
+    const eErr = validateEmail(email);
+    const pErr = validatePassword(password, !isLogin);
+    setEmailErr(eErr);
+    setPasswordErr(pErr);
+    if (eErr || pErr) return;
+
     setError(null);
-    setRbacError(false);
+    setLoading(true);
+
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-      const res = await fetch(`${API_URL}/auth/verify-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: confirmationRef.current, code: clean, role: selectedRole }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Código incorrecto');
-      localStorage.setItem('access_token', data.access_token);
-      localStorage.setItem('user', JSON.stringify(data.user));
-      onLogin(data.user.role === 'STORE' ? 'ferreteria' : 'constructor');
+      if (isLogin) {
+        await signInWithEmail(email, password);
+        onLogin(selectedRole);
+      } else {
+        const name = displayName.trim() || (selectedRole === 'ferreteria' ? 'Mi Ferretería' : 'Usuario');
+        const apiRole = selectedRole === 'ferreteria' ? 'STORE' : 'USER';
+        await registerWithEmail(email, password, apiRole, name);
+        onLogin(selectedRole);
+      }
     } catch (err: any) {
-      if (err instanceof RbacError) { setRbacError(true); }
-      else setError(friendlyAuthError(err));
+      setError(friendlyAuthError(err));
     } finally {
-      setOtpLoading(false);
+      setLoading(false);
     }
   };
 
-  const resetOtp = async () => {
-    setOtp('');
-    setOtpSent(false);
-    setError(null);
-    recaptchaRef.current = null;
-    confirmationRef.current = null;
-    await handleSendOtp();
-  };
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // PASO 0: Splash
-  // ─────────────────────────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+  // RENDER: Paso 0 — Splash
+  // ═══════════════════════════════════════════════════════════════════════════
   if (step === 0) {
     return (
       <div
-        className={`h-screen bg-ferry-500 flex items-center justify-center flex-col gap-4
-          ${splashPhase === 'fadeout' ? 'animate-splash-fade-out' : 'animate-in fade-in duration-700'}`}
+        className={`h-screen bg-gradient-to-br from-ferry-600 to-ferry-500 flex flex-col items-center justify-center transition-opacity duration-500 ${
+          splashPhase === 'fadeout' ? 'opacity-0' : 'opacity-100'
+        }`}
       >
-        <div className="relative">
-          {splashPhase === 'revving' && (
-            <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-full flex flex-col items-end gap-[3px] pr-1">
-              {[70, 55, 80, 45, 65, 50, 72].map((w, i) => (
-                <div key={i} className={`h-[2.5px] rounded-full bg-white/70 animate-speed-line-${i + 1}`}
-                  style={{ width: w }} />
-              ))}
-            </div>
-          )}
-          <img
-            src={ferryLogoBlanco}
-            alt="Ferry"
-            className={`h-36 w-36 object-contain drop-shadow-2xl
-              ${splashPhase === 'revving' ? 'animate-revving' : 'animate-gentle-float'}`}
-          />
+        <div
+          className={`bg-white rounded-3xl shadow-2xl p-6 transition-transform duration-700 ${
+            splashPhase === 'revving' ? 'scale-110' : 'scale-100'
+          }`}
+        >
+          <img src={ferryLogo} alt="Ferry" className="h-16 object-contain" />
         </div>
-        <p className="text-white/70 text-sm font-medium tracking-widest animate-pulse">
-          Cargando ecosistema...
+        <p className="text-white/70 text-sm mt-6 font-medium tracking-wide animate-pulse">
+          Conectando ferreterías y constructores…
         </p>
       </div>
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // PASO 1: Selección de Rol
-  // ─────────────────────────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+  // RENDER: Paso 1 — Selección de rol
+  // ═══════════════════════════════════════════════════════════════════════════
   if (step === 1) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex flex-col items-center justify-center p-6 animate-in fade-in slide-in-from-bottom-6 duration-500">
-
-        {/* Logo + heading */}
-        <div className="flex flex-col items-center mb-10 gap-3">
-          <div className="bg-white rounded-3xl p-4 shadow-lg shadow-slate-200/60">
-            <img src={ferryLogo} alt="Ferry" className="h-12 object-contain" />
-          </div>
-          <h1 className="text-2xl font-bold text-slate-800 text-center leading-snug">
-            Bienvenido a <span className="text-ferry-600">Ferry</span>
-          </h1>
-          <p className="text-slate-400 text-sm text-center">
-            ¿Cómo vas a usar la plataforma?
-          </p>
+      <div className="h-screen flex flex-col bg-slate-50">
+        {/* Hero */}
+        <div className="relative bg-gradient-to-br from-ferry-600 to-ferry-500 px-6 pt-14 pb-16 text-white text-center overflow-hidden">
+          <div className="absolute -bottom-8 -right-8 w-40 h-40 bg-white/10 rounded-full" />
+          <div className="absolute -top-4 -left-4 w-24 h-24 bg-white/5 rounded-full" />
+          <img src={ferryLogoBlanco} alt="Ferry" className="h-10 object-contain mx-auto mb-4" />
+          <h1 className="text-2xl font-black leading-tight">Bienvenido a Ferry</h1>
+          <p className="text-white/80 text-sm mt-1">¿Cómo vas a usar la plataforma?</p>
         </div>
 
-        {/* Role cards */}
-        <div className="w-full max-w-sm space-y-4">
+        <StepDots current={0} total={2} />
 
-          {/* Contratista */}
+        <div className="flex-1 px-5 py-4 space-y-3 overflow-y-auto">
+          {/* Rol constructor */}
           <button
-            id="role-btn-contratista"
+            id="role-constructor"
             onClick={() => selectRole('constructor')}
-            className="w-full p-5 bg-white rounded-3xl border-2 border-slate-100 shadow-sm
-              flex items-center gap-4 group transition-all duration-200
-              hover:border-ferry-400 hover:shadow-lg hover:shadow-ferry-100/50 active:scale-[0.98]"
+            className="w-full bg-white border-2 border-slate-100 rounded-3xl p-5 flex items-center gap-4 text-left hover:border-ferry-300 hover:shadow-md transition-all active:scale-[0.98]"
           >
-            <div className="w-14 h-14 bg-ferry-50 rounded-2xl flex items-center justify-center
-              group-hover:bg-ferry-100 transition-colors ring-4 ring-ferry-50 group-hover:ring-ferry-100">
+            <div className="w-14 h-14 bg-ferry-100 rounded-2xl flex items-center justify-center flex-shrink-0">
               <Hammer className="w-7 h-7 text-ferry-600" />
             </div>
-            <div className="flex-1 text-left">
-              <p className="font-bold text-slate-800 text-base leading-tight">Soy Contratista</p>
-              <p className="text-xs text-slate-400 mt-0.5">Pide materiales y gestiona tus obras</p>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-slate-800 text-base">Soy Constructor</p>
+              <p className="text-sm text-slate-500 mt-0.5 leading-snug">
+                Busco materiales y cotizo con ferreterías cercanas
+              </p>
             </div>
-            <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-ferry-500 group-hover:translate-x-1 transition-all" />
+            <ChevronRight className="w-5 h-5 text-slate-300 flex-shrink-0" />
           </button>
 
-          {/* Ferretería */}
+          {/* Rol ferretería */}
           <button
-            id="role-btn-ferreteria"
+            id="role-ferreteria"
             onClick={() => selectRole('ferreteria')}
-            className="w-full p-5 bg-white rounded-3xl border-2 border-slate-100 shadow-sm
-              flex items-center gap-4 group transition-all duration-200
-              hover:border-amber-400 hover:shadow-lg hover:shadow-amber-100/50 active:scale-[0.98]"
+            className="w-full bg-white border-2 border-slate-100 rounded-3xl p-5 flex items-center gap-4 text-left hover:border-amber-300 hover:shadow-md transition-all active:scale-[0.98]"
           >
-            <div className="w-14 h-14 bg-amber-50 rounded-2xl flex items-center justify-center
-              group-hover:bg-amber-100 transition-colors ring-4 ring-amber-50 group-hover:ring-amber-100">
+            <div className="w-14 h-14 bg-amber-100 rounded-2xl flex items-center justify-center flex-shrink-0">
               <Store className="w-7 h-7 text-amber-600" />
             </div>
-            <div className="flex-1 text-left">
-              <p className="font-bold text-slate-800 text-base leading-tight">Soy Ferretería</p>
-              <p className="text-xs text-slate-400 mt-0.5">Recibe pedidos y haz crecer tu negocio</p>
-            </div>
-            <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-amber-500 group-hover:translate-x-1 transition-all" />
-          </button>
-
-          {/* Invitado */}
-          {onGuestLogin && (
-            <button
-              onClick={onGuestLogin}
-              className="w-full py-4 rounded-2xl text-slate-400 text-sm font-medium
-                hover:text-slate-600 transition-colors border-2 border-dashed border-slate-200
-                hover:border-slate-300 hover:bg-slate-50"
-            >
-              Continuar sin registrarme →
-            </button>
-          )}
-        </div>
-
-        <p className="text-slate-300 text-xs mt-10">Ferry App v2.0</p>
-      </div>
-    );
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // PASO 2: Métodos de acceso
-  // ─────────────────────────────────────────────────────────────────────────────
-  if (step === 2) {
-    const isStore = selectedRole === 'ferreteria';
-    return (
-      <div className="min-h-screen bg-white flex flex-col animate-in slide-in-from-right duration-400">
-
-        {/* Hero banner */}
-        <div className={`bg-gradient-to-br ${accent.hero} px-6 pt-safe-top pb-10 flex flex-col items-center text-center`}
-          style={{ paddingTop: 'max(env(safe-area-inset-top), 48px)' }}
-        >
-          <img src={ferryLogo} alt="Ferry" className="h-9 object-contain mb-4 opacity-90" />
-          <h1 className="text-2xl font-bold text-white leading-tight">
-            {isStore ? 'Panel Ferretería' : '¡Hola, Contratista!'}
-          </h1>
-          <p className="text-white/80 text-sm mt-1">
-            {isStore ? 'Gestiona pedidos y vende más' : 'Encuentra los mejores materiales'}
-          </p>
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 px-6 py-8 max-w-sm mx-auto w-full space-y-5">
-
-          {/* Back + step dots */}
-          <div className="flex items-center justify-between">
-            <button onClick={goBack} className="flex items-center gap-1 text-sm text-slate-400 hover:text-slate-700 transition-colors">
-              <ArrowLeft className="w-4 h-4" /> Cambiar rol
-            </button>
-            <StepDots current={1} total={3} />
-          </div>
-
-          {/* RBAC error */}
-          {rbacError && (
-            <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 flex items-start gap-3 animate-in slide-in-from-top-3 duration-300">
-              <ShieldAlert className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-              <p className="text-sm text-red-700 flex-1 leading-snug">
-                Esta cuenta no tiene permisos para este panel. Verifica tu tipo de registro.
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-slate-800 text-base">Soy Ferretería</p>
+              <p className="text-sm text-slate-500 mt-0.5 leading-snug">
+                Recibo solicitudes y envío cotizaciones a clientes
               </p>
-              <button onClick={() => setRbacError(false)}>
-                <X className="w-4 h-4 text-red-400 hover:text-red-600" />
-              </button>
             </div>
-          )}
-
-          {error && (
-            <p className="text-red-500 text-xs font-medium bg-red-50 border border-red-100 rounded-xl px-3 py-2">
-              {error}
-            </p>
-          )}
-
-          {/* Google */}
-          <button
-            id="auth-btn-google"
-            onClick={handleGoogle}
-            disabled={googleLoading}
-            className="w-full py-4 px-5 bg-white border-2 border-slate-200 rounded-2xl
-              flex items-center gap-4 shadow-sm
-              hover:border-slate-400 hover:shadow-md transition-all duration-200 active:scale-[0.98]
-              disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            <div className="w-10 h-10 rounded-xl border border-slate-100 flex items-center justify-center shrink-0 shadow-xs bg-white">
-              <GoogleLogo />
-            </div>
-            <div className="flex-1 text-left">
-              <p className="font-semibold text-slate-800 text-sm">Continuar con Google</p>
-              <p className="text-xs text-slate-400">Rápido y seguro</p>
-            </div>
-            {googleLoading
-              ? <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />
-              : <ArrowRight className="w-4 h-4 text-slate-300" />}
+            <ChevronRight className="w-5 h-5 text-slate-300 flex-shrink-0" />
           </button>
 
-          {/* Divider */}
-          <div className="flex items-center gap-3">
-            <div className="flex-1 h-px bg-slate-100" />
-            <span className="text-xs text-slate-400 font-medium">o ingresa con celular</span>
-            <div className="flex-1 h-px bg-slate-100" />
-          </div>
-
-          {/* Phone */}
-          <button
-            id="auth-btn-phone"
-            onClick={() => setStep(3)}
-            className={`w-full py-4 px-5 bg-white border-2 border-slate-200 rounded-2xl
-              flex items-center gap-4 shadow-sm
-              hover:${accent.border} hover:shadow-md transition-all duration-200 active:scale-[0.98]`}
-          >
-            <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center shrink-0">
-              <Phone className="w-5 h-5 text-green-600" />
-            </div>
-            <div className="flex-1 text-left">
-              <p className="font-semibold text-slate-800 text-sm">Continuar con Celular</p>
-              <p className="text-xs text-slate-400">Te enviamos un código SMS gratis</p>
-            </div>
-            <ArrowRight className="w-4 h-4 text-slate-300" />
-          </button>
-
-          {/* Guest */}
+          {/* Acceso de invitado */}
           {onGuestLogin && (
             <button
+              id="guest-login"
               onClick={onGuestLogin}
-              className="w-full text-center text-sm text-slate-400 font-medium hover:text-ferry-600 transition-colors py-2"
+              className="w-full py-3 text-slate-400 text-sm font-medium hover:text-slate-600 transition-colors"
             >
-              Continuar sin cuenta →
+              Explorar sin cuenta →
             </button>
           )}
         </div>
@@ -538,165 +319,174 @@ export const LoginScreen: React.FC<Props> = ({ onLogin, onGuestLogin, preselecte
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // PASO 3: Autenticación por teléfono
-  // ─────────────────────────────────────────────────────────────────────────────
-  return (
-    <div className="min-h-screen bg-white flex flex-col animate-in slide-in-from-right duration-400">
+  // ═══════════════════════════════════════════════════════════════════════════
+  // RENDER: Paso 2 — Formulario email + contraseña
+  // ═══════════════════════════════════════════════════════════════════════════
+  const roleLabel = selectedRole === 'ferreteria' ? 'Ferretería' : 'Constructor';
 
-      {/* Hero */}
-      <div className={`bg-gradient-to-br ${accent.hero} px-6 pb-8 flex flex-col items-center text-center`}
-        style={{ paddingTop: 'max(env(safe-area-inset-top), 48px)' }}
-      >
-        <div className="w-16 h-16 bg-white/20 backdrop-blur rounded-2xl flex items-center justify-center mb-4 ring-4 ring-white/20">
-          <Phone className="w-8 h-8 text-white" />
-        </div>
-        <h1 className="text-xl font-bold text-white">
-          {otpSent ? 'Ingresa el código' : 'Tu número de celular'}
+  return (
+    <div className="h-screen flex flex-col bg-slate-50">
+      {/* Header */}
+      <div className={`relative bg-gradient-to-br ${accent.hero} px-6 pt-12 pb-14 text-white overflow-hidden`}>
+        <div className="absolute -bottom-8 -right-8 w-40 h-40 bg-white/10 rounded-full" />
+        <button
+          onClick={goBack}
+          className="absolute top-4 left-4 w-9 h-9 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30 transition-colors"
+        >
+          <ArrowLeft className="w-5 h-5 text-white" />
+        </button>
+
+        <img src={ferryLogoBlanco} alt="Ferry" className="h-8 object-contain mb-3" />
+        <h1 className="text-xl font-black leading-tight">
+          {isLogin ? 'Bienvenido de vuelta' : `Registrarme como ${roleLabel}`}
         </h1>
-        <p className="text-white/75 text-sm mt-1">
-          {otpSent
-            ? `Enviamos un SMS a +57 ${phone}`
-            : 'Te enviaremos un código de 6 dígitos'}
+        <p className="text-white/75 text-sm mt-0.5">
+          {isLogin ? `Accede a tu cuenta de ${roleLabel}` : 'Crea tu cuenta gratis en segundos'}
         </p>
       </div>
 
-      {/* Body */}
-      <div className="flex-1 px-6 py-8 max-w-sm mx-auto w-full space-y-6">
+      <StepDots current={1} total={2} />
 
-        {/* Back + step dots */}
-        <div className="flex items-center justify-between">
-          <button
-            onClick={() => { setOtpSent(false); setOtp(''); setError(null); setStep(2); }}
-            className="flex items-center gap-1 text-sm text-slate-400 hover:text-slate-700 transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            {otpSent ? 'Cambiar número' : 'Volver'}
-          </button>
-          <StepDots current={2} total={3} />
-        </div>
+      {/* Formulario */}
+      <div className="flex-1 overflow-y-auto px-5 py-4 no-scrollbar">
+        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
 
-        {/* Error */}
-        {error && (
-          <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3 flex items-start gap-2 animate-in slide-in-from-top-2 duration-300">
-            <X className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-            <p className="text-xs text-red-600 font-medium">{error}</p>
-          </div>
-        )}
+          {/* Nombre (solo registro) */}
+          {!isLogin && (
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                {selectedRole === 'ferreteria' ? 'Nombre de la ferretería' : 'Tu nombre'}
+              </label>
+              <div className="relative mt-1.5">
+                <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  id="input-name"
+                  type="text"
+                  value={displayName}
+                  onChange={e => setDisplayName(e.target.value)}
+                  placeholder={selectedRole === 'ferreteria' ? 'Ferretería El Tornillo' : 'Juan Pérez'}
+                  className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-ferry-300 focus:border-ferry-400 transition"
+                />
+              </div>
+            </div>
+          )}
 
-        {/* RBAC error */}
-        {rbacError && (
-          <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 flex items-start gap-3">
-            <ShieldAlert className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-            <p className="text-sm text-red-700 flex-1">Cuenta no autorizada para este panel.</p>
-            <button onClick={() => setRbacError(false)}>
-              <X className="w-4 h-4 text-red-400" />
-            </button>
-          </div>
-        )}
-
-        {/* ── Ingreso del número ── */}
-        {!otpSent ? (
-          <div className="space-y-4 animate-in fade-in duration-300">
-
-            {/* Phone input */}
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-600
-                bg-slate-100 px-2 py-1 rounded-lg pointer-events-none select-none">
-                +57
-              </span>
+          {/* Email */}
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+              Correo electrónico
+            </label>
+            <div className="relative mt-1.5">
+              <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
-                id="phone-input"
-                type="tel"
-                inputMode="numeric"
-                placeholder="300 123 4567"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value.replace(/[^0-9\s]/g, ''))}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleSendOtp(); }}
-                maxLength={13}
-                autoFocus
-                className="w-full pl-20 pr-4 py-4 bg-slate-50 border-2 border-slate-200 rounded-2xl
-                  text-lg font-semibold tracking-widest text-slate-800 placeholder:text-slate-300
-                  focus:border-ferry-500 focus:ring-2 focus:ring-ferry-100 focus:bg-white
-                  outline-none transition-all duration-200"
+                id="input-email"
+                type="email"
+                value={email}
+                onChange={e => { setEmail(e.target.value); setEmailErr(null); setError(null); }}
+                onBlur={() => setEmailErr(validateEmail(email))}
+                placeholder="correo@ejemplo.com"
+                autoComplete="email"
+                className={`w-full pl-10 pr-4 py-3 bg-white border rounded-2xl text-sm outline-none focus:ring-2 transition ${
+                  emailErr
+                    ? 'border-red-300 focus:ring-red-200'
+                    : 'border-slate-200 focus:ring-ferry-300 focus:border-ferry-400'
+                }`}
               />
             </div>
-
-            {/* Recaptcha — en dev muestra checkbox, en producción es invisible */}
-            <div id="recaptcha-container" className="flex justify-center" />
-
-            {/* CTA */}
-            <button
-              id="btn-send-otp"
-              onClick={handleSendOtp}
-              disabled={otpLoading || phone.replace(/\D/g, '').length < 10}
-              className={`w-full py-4 rounded-2xl font-bold text-white text-sm
-                bg-gradient-to-r ${accent.hero} shadow-lg
-                transition-all duration-200 active:scale-[0.98]
-                disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100`}
-            >
-              {otpLoading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin" /> Enviando SMS...
-                </span>
-              ) : (
-                <span className="flex items-center justify-center gap-2">
-                  <Phone className="w-4 h-4" /> Enviar código por SMS
-                </span>
-              )}
-            </button>
-
-            <p className="text-center text-xs text-slate-400 leading-relaxed">
-              Al continuar aceptas los{' '}
-              <button className="text-ferry-600 font-medium underline-offset-2 hover:underline">
-                Términos y Condiciones
-              </button>
-            </p>
+            {emailErr && <p className="text-xs text-red-500 mt-1 ml-1">{emailErr}</p>}
           </div>
 
-        ) : (
+          {/* Contraseña */}
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+              Contraseña
+            </label>
+            <div className="relative mt-1.5">
+              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                id="input-password"
+                type={showPass ? 'text' : 'password'}
+                value={password}
+                onChange={e => { setPassword(e.target.value); setPasswordErr(null); setError(null); }}
+                onBlur={() => setPasswordErr(validatePassword(password, !isLogin))}
+                placeholder={isLogin ? 'Tu contraseña' : 'Mínimo 8 caracteres'}
+                autoComplete={isLogin ? 'current-password' : 'new-password'}
+                className={`w-full pl-10 pr-12 py-3 bg-white border rounded-2xl text-sm outline-none focus:ring-2 transition ${
+                  passwordErr
+                    ? 'border-red-300 focus:ring-red-200'
+                    : 'border-slate-200 focus:ring-ferry-300 focus:border-ferry-400'
+                }`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPass(v => !v)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            {passwordErr && <p className="text-xs text-red-500 mt-1 ml-1">{passwordErr}</p>}
+            {!isLogin && <PasswordStrength password={password} />}
+          </div>
 
-          /* ── Ingreso del código OTP ── */
-          <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-400">
+          {/* Error global del backend */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 flex items-start gap-2">
+              <span className="text-red-500 text-lg leading-none mt-0.5">⚠</span>
+              <p className="text-sm text-red-700 leading-snug">{error}</p>
+            </div>
+          )}
 
-            <OtpInput
-              value={otp}
-              onChange={setOtp}
-              disabled={otpLoading}
-            />
+          {/* Botón principal */}
+          <button
+            id="btn-submit"
+            type="submit"
+            disabled={loading}
+            className={`w-full py-4 rounded-2xl text-white font-bold text-base transition-all shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${accent.btn}`}
+          >
+            {loading ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                {isLogin ? 'Iniciando sesión…' : 'Creando cuenta…'}
+              </>
+            ) : isLogin ? (
+              '🔐 Iniciar sesión'
+            ) : (
+              '🚀 Crear cuenta gratis'
+            )}
+          </button>
 
-            {/* Verificar */}
+          {/* Toggle login/registro */}
+          <div className="text-center pt-1">
             <button
-              id="btn-verify-otp"
-              onClick={handleVerifyOtp}
-              disabled={otpLoading || otp.replace(/[^0-9]/g, '').length < 6}
-              className={`w-full py-4 rounded-2xl font-bold text-white text-sm
-                bg-gradient-to-r ${accent.hero} shadow-lg
-                transition-all duration-200 active:scale-[0.98]
-                disabled:opacity-50 disabled:cursor-not-allowed`}
+              id="btn-toggle-mode"
+              type="button"
+              onClick={toggleMode}
+              className={`text-sm font-semibold underline underline-offset-2 ${accent.text} hover:opacity-80 transition-opacity`}
             >
-              {otpLoading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin" /> Verificando...
-                </span>
-              ) : (
-                <span className="flex items-center justify-center gap-2">
-                  <CheckCircle2 className="w-4 h-4" /> Verificar código
-                </span>
-              )}
+              {isLogin
+                ? '¿No tienes cuenta? Regístrate gratis'
+                : '¿Ya tienes cuenta? Inicia sesión'}
             </button>
+          </div>
+        </form>
 
-            {/* Reenviar */}
-            <button
-              onClick={resetOtp}
-              disabled={otpLoading}
-              className="w-full text-center text-sm font-semibold text-ferry-600 hover:text-ferry-700 transition-colors disabled:opacity-50"
-            >
-              Reenviar código
-            </button>
-
+        {/* Hint de requisitos para registro */}
+        {!isLogin && (
+          <div className="mt-4 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3">
+            <p className="text-xs text-slate-500 font-semibold uppercase tracking-wide mb-1">
+              Requisitos de contraseña
+            </p>
+            <ul className="text-xs text-slate-500 space-y-0.5 list-disc list-inside">
+              <li>Mínimo 8 caracteres</li>
+              <li>Al menos una letra mayúscula (A–Z)</li>
+              <li>Al menos un número (0–9)</li>
+            </ul>
           </div>
         )}
+
+        {/* Espaciado inferior */}
+        <div className="h-8" />
       </div>
     </div>
   );
