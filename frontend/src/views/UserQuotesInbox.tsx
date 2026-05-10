@@ -19,8 +19,6 @@ import {
   rejectQuote,
   markQuoteAsPaid,
   submitManualPayment,
-  acceptPartialQuote,
-  subscribeToNewQuotes,
   formatRelativeTime,
   confirmDelivery,
   ReceivedQuote,
@@ -1346,22 +1344,16 @@ export const UserQuotesInbox: React.FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Set up real-time subscription after first successful load
+  // Polling para nuevas cotizaciones (reemplaza subscribeToNewQuotes de Firebase)
   useEffect(() => {
     if (loading || subscribedRef.current || quotes.length === 0) return;
     subscribedRef.current = true;
 
-    const requestIds = [...new Set(quotes.map(q => q.requestId))];
-    const titleMap: Record<string, string> = {};
-    quotes.forEach(q => { if (q.requestTitle) titleMap[q.requestId] = q.requestTitle; });
-
-    unsubRef.current = subscribeToNewQuotes(requestIds, titleMap, (title) => {
-      setNewQuoteToast(title);
-      setTimeout(() => setNewQuoteToast(null), 6000);
+    const interval = setInterval(() => {
       loadQuotes();
-    });
+    }, 15000);
 
-    return () => { unsubRef.current(); };
+    return () => clearInterval(interval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading]);
 
@@ -1382,7 +1374,7 @@ export const UserQuotesInbox: React.FC = () => {
   const handleCreateSplitOnly = async (quoteToAccept: ReceivedQuote): Promise<void> => {
     setPartialAccepting(true);
     try {
-      const result = await acceptPartialQuote(quoteToAccept.id, quoteToAccept.requestId, true);
+      const result = await acceptQuote(quoteToAccept.id, quoteToAccept.requestId);
       const acceptedId = quoteToAccept.id;
       const reqId = quoteToAccept.requestId;
       setQuotes(prev =>
@@ -1398,12 +1390,11 @@ export const UserQuotesInbox: React.FC = () => {
       }
       setDetailQuote(null);
       setPartialAcceptQuote(null);
-      // Intentionally NO setCheckoutQuote — user decides when to pay
     } catch (e: any) {
-      console.error('Error exacto en Split Order:', e);
+      console.error('Error en Split Order:', e);
       setActionError('No se pudo procesar. Intenta de nuevo.');
       setTimeout(() => setActionError(null), 3500);
-      throw e; // re-throw so QuoteCard knows not to hide the amber card
+      throw e;
     } finally {
       setPartialAccepting(false);
     }
@@ -1413,10 +1404,9 @@ export const UserQuotesInbox: React.FC = () => {
   const handlePartialAccept = async (quoteToAccept: ReceivedQuote, createSplit: boolean) => {
     setPartialAccepting(true);
     try {
-      const result = await acceptPartialQuote(
+      const result = await acceptQuote(
         quoteToAccept.id,
         quoteToAccept.requestId,
-        createSplit,
       );
       // Update local state optimistically
       const acceptedId = quoteToAccept.id;

@@ -2,18 +2,11 @@
  * CompleteProfileScreen.tsx  ·  src/views/CompleteProfileScreen.tsx
  * ─────────────────────────────────────────────────────────────────────────────
  * Pantalla de onboarding que se muestra UNA SOLA VEZ al usuario recién
- * registrado cuyo documento en Firestore no tiene todavía:
- *   • displayName  (todos los roles)
- *   • location.address  (solo STORE)
- *
- * Al guardar, actualiza el documento en Firestore y llama a `onComplete`
- * con el perfil actualizado, lo cual hace que App.tsx redirija al dashboard.
+ * registrado. Guarda el perfil via API REST (NestJS).
  */
 
 import React, { useState } from 'react';
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { updateProfile } from 'firebase/auth';
-import { auth, db } from '../firebase';
+import { useApi } from '../hooks/useApi';
 import { UserProfile, UserRole } from '../types';
 import {
   Store,
@@ -24,7 +17,7 @@ import {
   CheckCircle2,
   Hammer,
 } from 'lucide-react';
-import ferryLogo from '../assets/ferry-logo.png';
+import ferryLogo from '../assets/logo.svg';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -65,6 +58,8 @@ export const CompleteProfileScreen: React.FC<Props> = ({ profile, onComplete }) 
   const addressOk = isStore ? address.trim().length >= 5 : true;
   const canSubmit = nameOk && addressOk && !loading;
 
+  const { updateUserProfile } = useApi();
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
@@ -72,43 +67,23 @@ export const CompleteProfileScreen: React.FC<Props> = ({ profile, onComplete }) 
     setError(null);
 
     try {
-      const uid = auth.currentUser?.uid;
-      if (!uid) throw new Error('Sesión expirada. Vuelve a iniciar sesión.');
-
-      // ── Construir el patch de Firestore ──
       const patch: Record<string, any> = {
         displayName:     name.trim(),
         profileComplete: true,
-        updatedAt:       serverTimestamp(),
       };
 
       if (isStore) {
         patch['location'] = {
-          ...(profile.location ?? {}),          // preservar lat/lng si existen
+          ...(profile.location ?? {}),
           address: address.trim(),
         };
       }
 
-      // ── Actualizar Firestore ──
-      await updateDoc(doc(db, 'users', uid), patch);
-
-      // ── Actualizar Firebase Auth displayName (aparece en tokens) ──
-      if (auth.currentUser) {
-        await updateProfile(auth.currentUser, { displayName: name.trim() });
-      }
-
-      // ── Mostrar feedback y notificar al padre ──
-      const updated: UserProfile = {
-        ...profile,
-        displayName: name.trim(),
-        ...(isStore && {
-          location: { ...(profile.location ?? { lat: 0, lng: 0 }), address: address.trim() },
-        }),
-      };
+      // ── Actualizar via API REST ──
+      const updated = await updateUserProfile(patch);
 
       setDone(true);
-      // Dar 900ms para que el usuario vea el check antes de avanzar
-      setTimeout(() => onComplete(updated), 900);
+      setTimeout(() => onComplete({ ...profile, ...updated }), 900);
 
     } catch (err: any) {
       setError(err?.message ?? 'No se pudo guardar. Intenta de nuevo.');

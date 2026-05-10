@@ -11,7 +11,7 @@ import { LoginScreen } from './views/LoginScreen';
 import { CompleteProfileScreen, isProfileIncomplete } from './views/CompleteProfileScreen';
 import { UserRole, MaterialRequest, RequestStatus, Quote, Product, QuoteLineItem, UserProfile } from './types';
 import { Home, ShoppingBag, Briefcase, User, CheckCircle2, Inbox, Package, ShieldAlert, X, Store } from 'lucide-react';
-import ferryLogo from './assets/ferry-logo.png';
+import ferryLogo from './assets/logo.svg';
 import { getCurrentUser, signOut as logoutUser } from './services/authService';
 import { loadGuestCart, GuestCart } from './hooks/useGuestCart';
 
@@ -182,7 +182,7 @@ const App: React.FC = () => {
       preselectedRole={preselectedRole}
       onLogin={(role) => {
         setPreselectedRole(null);
-        const firebaseUser = auth.currentUser;
+        const apiUser = getCurrentUser();
         // Recuperar carrito de invitado si existía
         const savedCart = loadGuestCart();
         if (savedCart && role !== 'ferreteria') {
@@ -193,9 +193,9 @@ const App: React.FC = () => {
         setIsLoggedIn(true);
         setIsGuest(false);
         setCurrentUserProfile({
-          uid: firebaseUser?.uid || 'mock-user',
-          email: firebaseUser?.email || undefined,
-          displayName: firebaseUser?.displayName || (role === 'ferreteria' ? 'Mi Ferretería' : 'Usuario'),
+          uid: apiUser?.uid || 'user-' + Date.now(),
+          email: apiUser?.email,
+          displayName: apiUser?.displayName || (role === 'ferreteria' ? 'Mi Ferretera' : 'Usuario'),
           role: role === 'ferreteria' ? UserRole.STORE : UserRole.USER,
           createdAt: new Date(),
         });

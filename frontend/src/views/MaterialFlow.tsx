@@ -5,8 +5,6 @@ import { MaterialRequest, MaterialItem, RequestStatus, Quote } from '../types';
 import { analyzeMaterialImage, extractMaterialsFromText } from '../services/geminiService';
 import { sendQuoteRequest } from '../services/quoteService';
 import { saveGuestCart, clearGuestCart, GuestCart } from '../hooks/useGuestCart';
-import { db } from '../firebase';
-import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { Button, Card, Badge, StarRating } from '../components/UIComponents';
 import { MessageSquareText, FileText } from 'lucide-react';
 import { UserProfile } from '../types';
@@ -223,24 +221,44 @@ const WaitingForQuotes: React.FC<WaitingProps> = ({ activeRequest, onBack, onNav
     return () => clearTimeout(t);
   }, []);
 
-  // Real-time listener: count quotes with status 'sent'
+  // Polling cada 10s para contar cotizaciones recibidas (reemplaza onSnapshot)
   useEffect(() => {
     if (!activeRequest.id) return;
-    const q = query(
-      collection(db, 'quotes'),
-      where('requestId', '==', activeRequest.id),
-      where('status', '==', 'sent'),
-    );
-    const unsub = onSnapshot(q, snap => setArrivedCount(snap.size));
-    return () => unsub();
+
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+    const token = localStorage.getItem('access_token');
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`${API_URL}/quotes/requests/${activeRequest.id}/quote-count`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setArrivedCount(data.count ?? 0);
+        }
+      } catch { /* silently ignore */ }
+    };
+
+    poll(); // llamada inmediata
+    const interval = setInterval(poll, 10000); // polling cada 10s
+    return () => clearInterval(interval);
   }, [activeRequest.id]);
 
-  // Cancelar solicitud en Firestore y volver al inicio
+  // Cancelar solicitud via API y volver al inicio
   const handleCancel = async () => {
     setIsCancelling(true);
     try {
-      await updateDoc(doc(db, 'quoteRequests', activeRequest.id), { status: 'cancelled' });
-    } catch (_) { /* si falla el update igual volvemos */ }
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+      const token = localStorage.getItem('access_token');
+      await fetch(`${API_URL}/quotes/requests/${activeRequest.id}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+    } catch { /* si falla el update igual volvemos */ }
     onBack();
   };
 

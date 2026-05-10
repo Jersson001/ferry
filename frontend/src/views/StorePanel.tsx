@@ -4,8 +4,7 @@ import { MaterialRequest, RequestStatus, UserProfile } from '../types';
 import { Package, Clock, Truck, CheckCircle2, Store, AlertCircle, X, Inbox, RefreshCw, FileText, MapPin, Send, Trash2, RotateCcw, Eye } from 'lucide-react';
 import { getPendingRequestsForStore, formatRelativeTime, IncomingQuoteRequest, submitQuoteResponse, getStorePriceCatalog, saveStorePriceCatalog, StoreCatalogEntry, rejectQuoteRequest, updateQuoteLogisticStatus, getStoreSentQuotes, StoreSentQuote, FERRY_MARKUP } from '../services/quoteService';
 import { getStoreCatalogProducts } from '../services/catalogService';
-import { db, auth } from '../firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { useApi } from '../hooks/useApi';
 
 interface Props {
   requests: MaterialRequest[];
@@ -548,28 +547,21 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
   const [proofModalUrl, setProofModalUrl]                 = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId]             = useState<string | null>(null);
 
+  const { getCurrentUser } = useApi();
+
   const loadPendingPayments = async () => {
-    const uid = auth.currentUser?.uid;
-    if (!uid) return;
+    const currentUser = getCurrentUser();
+    if (!currentUser) return;
     setLoadingPayments(true);
     try {
-      // Fetch quotes in pending_validation OR preparing for this store
-      const [pendingSnap, preparingSnap] = await Promise.all([
-        getDocs(query(collection(db, 'quotes'), where('storeId', '==', uid), where('status', '==', 'pending_validation'))),
-        getDocs(query(collection(db, 'quotes'), where('storeId', '==', uid), where('status', '==', 'preparing'))),
-      ]);
-
-      const toQuote = async (d: any): Promise<PendingPaymentQuote> => {
-        const data = d.data();
-        const pmSnap = await getDocs(query(collection(db, 'payments'), where('quoteId', '==', d.id)));
-        const proof  = pmSnap.docs[0]?.data()?.proofImageUrl as string | undefined;
-        return { id: d.id, requestId: data.requestId, storeName: data.storeName, total: data.total, proofImageUrl: proof, status: data.status, createdAt: data.createdAt };
-      };
-
-      const [pending, preparing] = await Promise.all([
-        Promise.all(pendingSnap.docs.map(toQuote)),
-        Promise.all(preparingSnap.docs.map(toQuote)),
-      ]);
+      // El backend retorna las cotizaciones pendientes de validación de esta tienda
+      const sentQuotes = await getStoreSentQuotes();
+      const pending = sentQuotes
+        .filter(q => q.status === 'pending_validation')
+        .map(q => ({ id: q.id, requestId: q.requestId, storeName: q.storeName, total: q.total, status: q.status, createdAt: q.createdAt }));
+      const preparing = sentQuotes
+        .filter(q => q.status === 'preparing')
+        .map(q => ({ id: q.id, requestId: q.requestId, storeName: q.storeName, total: q.total, status: q.status, createdAt: q.createdAt }));
       setPendingPaymentQuotes(pending);
       setPreparingQuotes(preparing);
     } catch (e) {
@@ -719,7 +711,7 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
         <QuoteResponseModal
           req={quotingInboxRequest}
           storeName={MY_STORE_NAME}
-          storeId={auth.currentUser?.uid || ''}
+          storeId={getCurrentUser()?.uid || ''}
           onClose={() => setQuotingInboxRequest(null)}
           onSuccess={handleQuoteSuccess}
         />
@@ -1119,7 +1111,7 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
                       </div>
                       <div className="text-right">
                         <p className="text-[10px] text-slate-400">Total a recibir</p>
-                        <p className="font-black text-ferry-600 text-base">${q.storeTotal.toLocaleString('es-CO')}</p>
+                        <p className="font-black text-ferry-600 text-base">${(q.storeTotal ?? q.total).toLocaleString('es-CO')}</p>
                         <p className="text-[10px] text-slate-400">Total cobrado al cliente: ${q.total.toLocaleString('es-CO')}</p>
                       </div>
                     </div>

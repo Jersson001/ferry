@@ -11,7 +11,6 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { RecaptchaVerifier, ConfirmationResult } from 'firebase/auth';
 import {
   ArrowLeft,
   ArrowRight,
@@ -24,13 +23,11 @@ import {
   X,
   ChevronRight,
 } from 'lucide-react';
-import ferryLogo     from '../assets/ferry-logo.png';
+import ferryLogo     from '../assets/logo.svg';
 import ferryLogoBlanco from '../assets/Logo Ferry3 - Blanco.png';
 import {
-  signInWithGoogle,
-  sendOtp,
-  verifyOtp,
-  getOrCreateRecaptcha,
+  signInWithEmail,
+  registerWithEmail,
   friendlyAuthError,
   RbacError,
   type FerryRole,
@@ -186,9 +183,9 @@ export const LoginScreen: React.FC<Props> = ({ onLogin, onGuestLogin, preselecte
   const [error,     setError]     = useState<string | null>(null);
   const [rbacError, setRbacError] = useState(false);
 
-  // ── Refs Firebase ──
-  const recaptchaRef    = useRef<RecaptchaVerifier | null>(null);
-  const confirmationRef = useRef<ConfirmationResult | null>(null);
+  // ── Refs para auth OTP ──
+  const recaptchaRef    = useRef<any>(null);
+  const confirmationRef = useRef<any>(null);
 
   // ── Destruir el RecaptchaVerifier al desmontar LoginScreen ──
   // Evita widgets zombie en el DOM si el usuario navega atrás o cambia de rol.
@@ -232,51 +229,40 @@ export const LoginScreen: React.FC<Props> = ({ onLogin, onGuestLogin, preselecte
     else if (step === 1) setStep(0);
   }, [step]);
 
-  // Google
+  // Auth con Google — simplificado a email temporal (Google OAuth requiere backend)
   const handleGoogle = async () => {
     if (!selectedRole) return;
     setGoogleLoading(true);
     setError(null);
     setRbacError(false);
     try {
-      const { role } = await signInWithGoogle(selectedRole);
-      onLogin(role);
-    } catch (err: any) {
-      if (err instanceof RbacError) { setRbacError(true); }
-      else {
-        const msg = friendlyAuthError(err);
-        if (msg) setError(msg);
-      }
+      // TODO: implementar OAuth con el backend
+      setError('Google Sign-In estará disponible próximamente. Usa el acceso por celular.');
     } finally {
       setGoogleLoading(false);
     }
   };
 
-  // Enviar OTP
+  // Enviar OTP — envia el código via el backend
   const handleSendOtp = async () => {
     const phoneDigits = phone.replace(/\D/g, '');
     if (phoneDigits.length < 10) { setError('Ingresa un número de 10 dígitos'); return; }
     setOtpLoading(true);
     setError(null);
     try {
-      const verifier = getOrCreateRecaptcha('recaptcha-container', recaptchaRef);
-      // signInWithPhoneNumber renderiza el widget internamente — no llamar render() aquí,
-      // genera "reCAPTCHA has already been rendered in this element" en reintentos.
-      confirmationRef.current = await sendOtp(`+57${phoneDigits}`, verifier);
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+      const res = await fetch(`${API_URL}/auth/send-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: `+57${phoneDigits}`, role: selectedRole }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Error al enviar OTP');
+      confirmationRef.current = data.sessionId;
       setOtpSent(true);
-      // Limpiar verifier + DOM: Firebase invalida el verifier tras enviar el SMS.
-      recaptchaRef.current?.clear();
-      recaptchaRef.current = null;
-      const sent = document.getElementById('recaptcha-container');
-      if (sent) sent.innerHTML = '';
-    } catch (err) {
+    } catch (err: any) {
       const msg = friendlyAuthError(err);
       if (msg) setError(msg);
-      // Limpiar verifier + DOM para que el reintento pueda renderizar un widget fresco.
-      recaptchaRef.current?.clear();
-      recaptchaRef.current = null;
-      const failed = document.getElementById('recaptcha-container');
-      if (failed) failed.innerHTML = '';
     } finally {
       setOtpLoading(false);
     }
@@ -284,13 +270,11 @@ export const LoginScreen: React.FC<Props> = ({ onLogin, onGuestLogin, preselecte
 
   // Verificar OTP
   const handleVerifyOtp = async () => {
-    // Validar código: otp es ahora una cadena de dígitos puros (sin espacios)
     const clean = otp.replace(/[^0-9]/g, '');
     if (clean.length !== 6) {
       setError('Ingresa los 6 dígitos del código');
       return;
     }
-    // Guardia explícita con mensaje amigable — nunca debe ocurrir en flujo normal
     if (!confirmationRef.current) {
       setError('La sesión de verificación expiró. Por favor solicita un nuevo código.');
       setOtpSent(false);
@@ -303,9 +287,18 @@ export const LoginScreen: React.FC<Props> = ({ onLogin, onGuestLogin, preselecte
     setError(null);
     setRbacError(false);
     try {
-      const { role } = await verifyOtp(clean, confirmationRef.current, selectedRole);
-      onLogin(role);
-    } catch (err) {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+      const res = await fetch(`${API_URL}/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: confirmationRef.current, code: clean, role: selectedRole }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Código incorrecto');
+      localStorage.setItem('access_token', data.access_token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      onLogin(data.user.role === 'STORE' ? 'ferreteria' : 'constructor');
+    } catch (err: any) {
       if (err instanceof RbacError) { setRbacError(true); }
       else setError(friendlyAuthError(err));
     } finally {
@@ -314,16 +307,11 @@ export const LoginScreen: React.FC<Props> = ({ onLogin, onGuestLogin, preselecte
   };
 
   const resetOtp = async () => {
-    // Limpiar estado OTP antes de reenviar
     setOtp('');
     setOtpSent(false);
     setError(null);
-    // confirmationRef y recaptchaRef ya fueron limpiados al enviar el primer SMS;
-    // solo garantizamos null antes del reenvío
-    recaptchaRef.current?.clear();
     recaptchaRef.current = null;
     confirmationRef.current = null;
-    // handleSendOtp registrará el nuevo confirmationRef al completarse
     await handleSendOtp();
   };
 

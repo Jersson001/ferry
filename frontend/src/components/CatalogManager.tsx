@@ -7,10 +7,6 @@ import {
   Image as ImageIcon, Percent, Tag, Copy, ClipboardPaste, Pencil,
   Layers, FolderPlus, Search, SlidersHorizontal,
 } from 'lucide-react';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage, db } from '../firebase';
-import { auth } from '../firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import {
   CatalogProduct, CatalogProductStored,
   upsertProducts, getStoreCatalogProducts, deleteCatalogProduct,
@@ -221,11 +217,21 @@ export const CatalogManager: React.FC<Props> = ({ storeId, storeName, onClose })
   useEffect(() => { loadCatalog(); }, [loadCatalog]);
 
   // ── Load families from stores/{storeId} ────────────────────────────────────
+  // ── Load families from stores API ─────────────────────────────────────────────────────────────────────────
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+  const getToken = () => localStorage.getItem('access_token');
+
   useEffect(() => {
     const load = async () => {
       try {
-        const snap = await getDoc(doc(db, 'stores', storeId));
-        if (snap.exists()) setFamilies(snap.data().families || []);
+        const token = getToken();
+        const res = await fetch(`${API_URL}/stores/${storeId}/families`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setFamilies(data.families || []);
+        }
       } catch { /* silent */ }
     };
     load();
@@ -233,7 +239,15 @@ export const CatalogManager: React.FC<Props> = ({ storeId, storeName, onClose })
 
   const saveFamilies = async (updated: string[]) => {
     try {
-      await updateDoc(doc(db, 'stores', storeId), { families: updated });
+      const token = getToken();
+      await fetch(`${API_URL}/stores/${storeId}/families`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ families: updated }),
+      });
     } catch { /* silent */ }
   };
 
@@ -266,17 +280,33 @@ export const CatalogManager: React.FC<Props> = ({ storeId, storeName, onClose })
     } catch { await loadCatalog(); } // revert on error
   };
 
-  // ── Image file upload to Firebase Storage ──────────────────────────────────
+  // ── Image upload via API (base64) ────────────────────────────────────────────
   const handleImageUpload = async (file: File) => {
     if (!file.type.startsWith('image/')) { setManualError('Solo se aceptan imágenes.'); return; }
     if (file.size > 5 * 1024 * 1024) { setManualError('La imagen no puede superar 5 MB.'); return; }
     setImageUploading(true); setManualError(null);
     try {
-      const uid = auth.currentUser?.uid || storeId;
-      const path = `catalog/${uid}/${Date.now()}_${file.name}`;
-      const snap = await uploadBytes(storageRef(storage, path), file);
-      const url = await getDownloadURL(snap.ref);
-      setForm(f => ({ ...f, image: url }));
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const token = getToken();
+      const res = await fetch(`${API_URL}/catalog/upload-image`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ base64, filename: file.name }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setForm(f => ({ ...f, image: data.url }));
+      } else {
+        setManualError('Error al subir la imagen.');
+      }
     } catch {
       setManualError('Error al subir la imagen. Intenta de nuevo.');
     } finally { setImageUploading(false); }

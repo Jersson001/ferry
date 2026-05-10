@@ -1,8 +1,31 @@
-import { db } from '../firebase';
-import {
-  collection, doc, writeBatch, getDocs, query, where,
-  serverTimestamp, deleteDoc,
-} from 'firebase/firestore';
+/**
+ * catalogService.ts
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Gestión del catálogo de productos — 100% via REST API (NestJS).
+ * No usa Firebase. El token JWT se lee directamente de localStorage.
+ */
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+const apiRequest = async <T>(endpoint: string, options: RequestInit = {}): Promise<T> => {
+  const token = localStorage.getItem('access_token');
+  const response = await fetch(`${API_URL}${endpoint}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  });
+  if (response.status === 401) {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('user');
+    throw new Error('Sesión expirada');
+  }
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Error en la petición');
+  return data;
+};
 
 export interface CatalogProduct {
   sku: string;
@@ -13,47 +36,32 @@ export interface CatalogProduct {
   description: string;
   image: string;
   isOnOffer?: boolean;
-  discountPercent?: number; // 0-100
-  family?: string; // familia / grupo de productos (ej: 'Herrajes Cocina', 'Closets')
+  discountPercent?: number;
+  family?: string;
 }
 
 export interface CatalogProductStored extends CatalogProduct {
   storeId: string;
-  updatedAt: any;
+  updatedAt?: any;
+  id?: string;
 }
 
 // ─── Upsert (insert or update) by storeId + sku ───────────────────────────────
-// Accepts a single product or an array. Uses Firestore batch (max 500 per batch).
 export const upsertProducts = async (
   storeId: string,
   products: CatalogProduct[],
 ): Promise<void> => {
-  const BATCH_SIZE = 400;
-  for (let i = 0; i < products.length; i += BATCH_SIZE) {
-    const chunk = products.slice(i, i + BATCH_SIZE);
-    const batch = writeBatch(db);
-    for (const product of chunk) {
-      const docId = `${storeId}_${product.sku.trim().toUpperCase()}`;
-      const ref = doc(db, 'catalog', docId);
-      batch.set(ref, {
-        ...product,
-        sku: product.sku.trim().toUpperCase(),
-        storeId,
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
-    }
-    await batch.commit();
-  }
+  await apiRequest(`/stores/${storeId}/catalog`, {
+    method: 'POST',
+    body: JSON.stringify({ products }),
+  });
 };
 
 // ─── Fetch all products for a store ──────────────────────────────────────────
 export const getStoreCatalogProducts = async (
   storeId: string,
 ): Promise<CatalogProductStored[]> => {
-  const snap = await getDocs(
-    query(collection(db, 'catalog'), where('storeId', '==', storeId)),
-  );
-  return snap.docs.map(d => d.data() as CatalogProductStored);
+  return apiRequest<CatalogProductStored[]>(`/stores/${storeId}/catalog`);
 };
 
 // ─── Delete a single product ──────────────────────────────────────────────────
@@ -61,8 +69,9 @@ export const deleteCatalogProduct = async (
   storeId: string,
   sku: string,
 ): Promise<void> => {
-  const docId = `${storeId}_${sku.trim().toUpperCase()}`;
-  await deleteDoc(doc(db, 'catalog', docId));
+  await apiRequest(`/stores/${storeId}/catalog/${encodeURIComponent(sku)}`, {
+    method: 'DELETE',
+  });
 };
 
 // ─── Validate and normalize a raw row from CSV/Excel ─────────────────────────
@@ -102,7 +111,6 @@ export const fetchGoogleSheetCsv = async (url: string): Promise<string> => {
   const spreadsheetId = idMatch[1];
   const gid = gidMatch?.[1] ?? '0';
 
-  // Primary: gviz/tq endpoint — works for publicly shared sheets without requiring "Publish to web"
   const gvizUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&gid=${gid}`;
   try {
     const res = await fetch(gvizUrl);
@@ -112,27 +120,17 @@ export const fetchGoogleSheetCsv = async (url: string): Promise<string> => {
     }
   } catch { /* fall through */ }
 
-  // Fallback: export endpoint — requires "Publish to web"
   const exportUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=${gid}`;
   const res2 = await fetch(exportUrl);
   if (!res2.ok) {
     throw new Error(
-      'No se pudo acceder a la hoja. Asegúrate de que esté compartida como "Cualquiera con el enlace puede ver" (botón Compartir → General access).',
+      'No se pudo acceder a la hoja. Asegúrate de que esté compartida como "Cualquiera con el enlace puede ver".',
     );
   }
   return res2.text();
 };
 
 // ─── Format image URL: converts Google Drive viewer links to direct embed ─────
-/**
- * Detects Google Drive viewer URLs (/file/d/{id}/view) and rewrites them
- * to the direct-view format so <img src> can load the file.
- *
- * Input:  https://drive.google.com/file/d/1fBv-hBF.../view?usp=drive_link
- * Output: https://drive.google.com/uc?export=view&id=1fBv-hBF...
- *
- * Any non-Drive URL is returned unchanged.
- */
 export const formatImageUrl = (url: string): string => {
   if (!url) return '';
   const match = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);

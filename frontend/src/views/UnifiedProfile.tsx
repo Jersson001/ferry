@@ -2,13 +2,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Card, Button, Badge } from '../components/UIComponents';
 import { User, MapPin, Shield, LogOut, Edit2, Camera, Briefcase, Star, CheckCircle2, Plus, ChevronRight, Building2, FileText, Save, ExternalLink, PlayCircle, TrendingUp, ChevronDown } from 'lucide-react';
-import { auth } from '../firebase';
-import { signOut, updateProfile } from 'firebase/auth';
 
 import { UserProfile, UserRole, PortfolioItem } from '../types';
-import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '../firebase';
-import { saveStoreProfile, profileToStoreData } from '../services/storeService';
+import { useApi } from '../hooks/useApi';
 import { AddPortfolioItemModal } from '../components/AddPortfolioItemModal';
 import { PortfolioLightbox } from '../components/PortfolioLightbox';
 
@@ -61,7 +57,8 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
   const profileRef = useRef(profile);
   const addressAutocompleteRef = useRef<HTMLInputElement>(null);
   const [addressInput, setAddressInput] = useState(profile?.location?.address || '');
-  const user = auth.currentUser;
+  const { updateUserProfile, saveStoreProfile: apiSaveStoreProfile, logoutUser } = useApi();
+  const user = JSON.parse(localStorage.getItem('user') || 'null');
 
   // Keep profileRef current to avoid stale closures in map callbacks
   useEffect(() => { profileRef.current = profile; }, [profile]);
@@ -98,13 +95,10 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
           if (!cur) return;
           const newLocation = { lat: newLat, lng: newLng, address: cur.location?.address || 'Ubicación actual' };
           onUpdateProfile({ ...cur, location: newLocation });
-          const currentUser = auth.currentUser;
-          if (currentUser) {
-            try {
-              await updateDoc(doc(db, 'users', currentUser.uid), { location: newLocation });
-            } catch (err) {
-              console.error('Error updating location after drag:', err);
-            }
+          try {
+            await updateUserProfile({ location: newLocation });
+          } catch (err) {
+            console.error('Error updating location after drag:', err);
           }
         });
       } else {
@@ -160,9 +154,7 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
     if (!profile) return;
     setIsSaving(true);
     try {
-      if (user) {
-        await updateDoc(doc(db, 'users', user.uid), { description });
-      }
+      await updateUserProfile({ description });
       onUpdateProfile({ ...profile, description });
       setIsEditingBio(false);
     } catch (error) {
@@ -180,9 +172,7 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
       : [...currentSpecs, spec];
 
     try {
-      if (user) {
-        await updateDoc(doc(db, 'users', user.uid), { specialties: newSpecs });
-      }
+      await updateUserProfile({ specialties: newSpecs });
       onUpdateProfile({ ...profile, specialties: newSpecs });
     } catch (error) {
       console.error("Error updating specialties:", error);
@@ -197,12 +187,7 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
         displayName: editName,
         rut: editRut
       };
-
-      if (user) {
-        await updateDoc(doc(db, 'users', user.uid), updates);
-        await updateProfile(user, { displayName: editName });
-      }
-
+      await updateUserProfile(updates);
       onUpdateProfile({ ...profile, ...updates });
       setIsEditingBasic(false);
     } catch (error) {
@@ -215,13 +200,13 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !profile || !user) return;
+    if (!file || !profile) return;
 
     const reader = new FileReader();
     reader.onloadend = async () => {
       const base64String = reader.result as string;
       try {
-        await updateDoc(doc(db, 'users', user.uid), { photoURL: base64String });
+        await updateUserProfile({ photoURL: base64String });
         onUpdateProfile({ ...profile, photoURL: base64String });
       } catch (error) {
         console.error("Error uploading logo:", error);
@@ -247,13 +232,11 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
           const updatedProfile = { ...profile, location: newLocation };
           onUpdateProfile(updatedProfile);
 
-          // Persist to Firestore if logged in
-          if (user) {
-            try {
-              await updateDoc(doc(db, 'users', user.uid), { location: newLocation });
-            } catch (error) {
-              console.error("Error updating location in Firestore:", error);
-            }
+          // Persist via API
+          try {
+            await updateUserProfile({ location: newLocation });
+          } catch (error) {
+            console.error("Error updating location:", error);
           }
         }
         setIsUpdatingLocation(false);
@@ -277,7 +260,14 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
     setIsSavingProfile(true);
     setProfileSaveStatus('idle');
     try {
-      await saveStoreProfile(profileToStoreData(profile));
+      await apiSaveStoreProfile({
+        displayName: profile.displayName || '',
+        description: profile.description || '',
+        specialties: profile.specialties || [],
+        rut: profile.rut,
+        photoURL: profile.photoURL,
+        location: profile.location,
+      });
       setProfileSaveStatus('success');
       setTimeout(() => setProfileSaveStatus('idle'), 3500);
     } catch (error) {
@@ -291,11 +281,10 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
 
   const handleSignOut = async () => {
     try {
-      await signOut(auth);
+      logoutUser();
     } catch (error) {
       console.error("Error signing out:", error);
     }
-    // Also reset local state (needed for mock auth)
     onSignOut?.();
   };
 
@@ -312,7 +301,7 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
           <div className="relative">
             <div className="w-28 h-28 bg-white p-1 rounded-full shadow-xl overflow-hidden">
               <img
-                src={profile?.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.uid || 'guest'}`}
+                src={profile?.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.id || 'guest'}`}
                 className="w-full h-full rounded-full bg-slate-100 object-cover"
                 alt="Avatar"
               />
@@ -541,7 +530,7 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
                 {profileSaveStatus === 'success' && (
                   <div className="mb-3 flex items-center gap-2 px-4 py-2.5 bg-green-50 border border-green-200 rounded-xl text-green-700 text-sm font-semibold animate-in fade-in">
                     <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-                    ¡Perfil guardado en Firebase con éxito!
+                    ¡Perfil guardado con éxito!
                   </div>
                 )}
                 {profileSaveStatus === 'error' && (
@@ -556,10 +545,10 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
                   className="w-full h-12 text-sm font-bold shadow-lg shadow-ferry-200"
                 >
                   <Save className="w-4 h-4" />
-                  {isSavingProfile ? 'Guardando en Firebase...' : 'Guardar Perfil de Tienda'}
+                  {isSavingProfile ? 'Guardando...' : 'Guardar Perfil de Tienda'}
                 </Button>
                 <p className="text-center text-[10px] text-slate-400 mt-2">
-                  Guarda nombre, descripción, especialidades y ubicación en Firestore
+                  Guarda nombre, descripción, especialidades y ubicación
                 </p>
               </div>
             </div>

@@ -1,6 +1,33 @@
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { db, auth } from '../firebase';
+/**
+ * storeService.ts
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Gestión del perfil de tienda — 100% via REST API (NestJS).
+ * No usa Firebase. El token JWT se lee de localStorage.
+ */
+
 import { UserProfile } from '../types';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+const apiRequest = async <T>(endpoint: string, options: RequestInit = {}): Promise<T> => {
+  const token = localStorage.getItem('access_token');
+  const response = await fetch(`${API_URL}${endpoint}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  });
+  if (response.status === 401) {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('user');
+    throw new Error('Sesión expirada');
+  }
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Error en la petición');
+  return data;
+};
 
 export interface StoreProfileData {
   displayName: string;
@@ -12,41 +39,18 @@ export interface StoreProfileData {
 }
 
 /**
- * Saves (or updates) a store's public profile in the `stores` collection.
- * Always uses auth.currentUser.uid as the document ID so Firestore rules pass.
+ * Guarda (o actualiza) el perfil público de la tienda.
+ * Llama a PUT /stores/profile en el backend.
  */
 export const saveStoreProfile = async (data: StoreProfileData): Promise<void> => {
-  const uid = auth.currentUser?.uid;
-
-  if (!uid) {
-    throw new Error('El usuario no está autenticado. Inicia sesión e inténtalo de nuevo.');
-  }
-
-  const ref = doc(db, 'stores', uid);
-
-  try {
-    await setDoc(
-      ref,
-      {
-        uid,
-        displayName: data.displayName || '',
-        description: data.description || '',
-        specialties: data.specialties || [],
-        rut: data.rut || '',
-        photoURL: data.photoURL || '',
-        location: data.location ?? null,
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
-  } catch (error: any) {
-    console.error('Error exacto de Firebase:', error?.code, error?.message, error);
-    throw error;
-  }
+  await apiRequest('/stores/profile', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
 };
 
 /**
- * Builds a StoreProfileData payload from a UserProfile object.
+ * Construye un StoreProfileData desde un UserProfile.
  */
 export const profileToStoreData = (profile: UserProfile): StoreProfileData => ({
   displayName: profile.displayName || '',
