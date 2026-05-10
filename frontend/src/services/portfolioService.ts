@@ -8,7 +8,7 @@
 
 import { PortfolioItem } from '../types';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3000';
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;   // 5 MB
 const MAX_VIDEO_BYTES = 30 * 1024 * 1024;  // 30 MB

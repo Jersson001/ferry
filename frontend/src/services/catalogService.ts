@@ -5,7 +5,7 @@
  * No usa Firebase. El token JWT se lee directamente de localStorage.
  */
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3000';
 
 const apiRequest = async <T>(endpoint: string, options: RequestInit = {}): Promise<T> => {
   const token = localStorage.getItem('access_token');

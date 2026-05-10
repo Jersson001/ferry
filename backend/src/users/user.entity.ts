@@ -20,6 +20,21 @@ export class User {
   @Column({ default: 'USER' })
   role: string;
 
+  @Column({ nullable: true })
+  photoURL?: string;
+
+  @Column({ type: 'jsonb', nullable: true })
+  location?: { lat: number; lng: number; address?: string };
+
+  @Column({ type: 'text', nullable: true })
+  description?: string;
+
+  @Column({ type: 'simple-array', nullable: true })
+  specialties?: string[];
+
+  @Column({ default: false })
+  isProfileComplete: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 }

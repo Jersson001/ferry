@@ -218,7 +218,7 @@ export const CatalogManager: React.FC<Props> = ({ storeId, storeName, onClose })
 
   // ── Load families from stores/{storeId} ────────────────────────────────────
   // ── Load families from stores API ─────────────────────────────────────────────────────────────────────────
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+  const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3000';
   const getToken = () => localStorage.getItem('access_token');
 
   useEffect(() => {
