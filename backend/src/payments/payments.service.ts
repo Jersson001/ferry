@@ -135,31 +135,75 @@ export class PaymentsService {
     if (!tx) {
       // Si el webhook aún no llega, preguntamos directamente a la API de Wompi
       try {
-        // En producción deberíamos elegir el env de Wompi basado en configuración
-        const url = `https://sandbox.wompi.co/v1/transactions/${transactionId}`;
+        const useProduction = this.configService.get<string>('WOMPI_ENV') === 'production';
+        const baseUrl = useProduction
+          ? 'https://production.wompi.co/v1'
+          : 'https://sandbox.wompi.co/v1';
+        const url = `${baseUrl}/transactions/${transactionId}`;
         const response = await fetch(url);
         const json = await response.json();
         
-        if (json.data && json.data.status === 'APPROVED') {
-          // Guardar el registro para idempotencia
-          tx = this.transactionRepository.create({
-            transactionId: json.data.id,
-            reference: json.data.reference,
-            amountInCents: json.data.amount_in_cents,
-            currency: json.data.currency,
-            status: PaymentStatus.APPROVED,
-            paymentMethodType: json.data.payment_method_type,
-            quoteId,
-          });
-          await this.transactionRepository.save(tx);
+        if (!json.data || json.data.status !== 'APPROVED') {
+          throw new BadRequestException('El pago no ha sido aprobado por Wompi aún.');
         }
+
+        const wompiData = json.data;
+
+        // ================================================================
+        // PARCHE DE SEGURIDAD #1: Anti-reutilización de transacción.
+        // Extraemos el quoteId de la REFERENCIA que devolvió Wompi,
+        // NO del quoteId enviado por el frontend.
+        // ================================================================
+        const referenceQuoteId = this.extractQuoteIdFromReference(wompiData.reference);
+        if (!referenceQuoteId || referenceQuoteId !== quoteId) {
+          this.logger.error(
+            `INTENTO DE FRAUDE: transacción ${transactionId} tiene referencia para quote ` +
+            `'${referenceQuoteId}' pero el frontend solicita pagar quote '${quoteId}'`
+          );
+          throw new BadRequestException('La transacción no corresponde a esta cotización.');
+        }
+
+        // ================================================================
+        // PARCHE DE SEGURIDAD #2: Validación de monto.
+        // Verificamos que lo que Wompi cobró coincida exactamente con
+        // el total que le correspondía a esta cotización.
+        // ================================================================
+        const quote = await this.quotesService.findOneById(quoteId);
+        if (!quote) throw new BadRequestException('Cotización no encontrada.');
+
+        // clientFinalTotal está en COP; Wompi usa centavos (x100)
+        const expectedAmountInCents = quote.clientFinalTotal * 100;
+        if (wompiData.amount_in_cents !== expectedAmountInCents) {
+          this.logger.error(
+            `INTENTO DE FRAUDE: transacción ${transactionId} tiene monto ` +
+            `${wompiData.amount_in_cents} pero se esperaban ${expectedAmountInCents} centavos ` +
+            `para el quote ${quoteId}`
+          );
+          throw new BadRequestException('El monto de la transacción no coincide con el valor de la cotización.');
+        }
+
+        // Guardar el registro para idempotencia
+        tx = this.transactionRepository.create({
+          transactionId: wompiData.id,
+          reference: wompiData.reference,
+          amountInCents: wompiData.amount_in_cents,
+          currency: wompiData.currency,
+          status: PaymentStatus.APPROVED,
+          paymentMethodType: wompiData.payment_method_type,
+          quoteId,
+        });
+        await this.transactionRepository.save(tx);
+
       } catch (err) {
+        // Re-lanzamos errores de seguridad directamente
+        if (err instanceof BadRequestException) throw err;
         this.logger.error(`Error verificando Wompi API para tx ${transactionId}: ${err.message}`);
+        throw new BadRequestException('No se pudo verificar el pago con Wompi.');
       }
     }
 
     if (tx && tx.status === PaymentStatus.APPROVED) {
-      // Usamos el userId proveído para que valide que el quote pertenece a este usuario
+      // Usamos el userId proveído para que payQuote valide que el quote pertenece a este usuario
       await this.quotesService.payQuote(quoteId, userId);
       return { success: true };
     }

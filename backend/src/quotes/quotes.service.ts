@@ -34,6 +34,13 @@ export class QuotesService {
     return this.requestRepository.save(request);
   }
 
+  async findOneById(quoteId: string): Promise<Quote | null> {
+    return this.quoteRepository.findOne({
+      where: { id: quoteId },
+      relations: ['request'],
+    });
+  }
+
   async getOwnRequests(userId: string): Promise<MaterialRequest[]> {
     return this.requestRepository.find({
       where: { userId },
@@ -221,7 +228,7 @@ export class QuotesService {
     await queryRunner.startTransaction();
 
     try {
-      // Bloquear
+      // Bloquear fila con write lock para evitar race conditions
       const quote = await queryRunner.manager.findOne(Quote, {
         where: { id: quoteId },
         relations: ['request'],
@@ -230,7 +237,15 @@ export class QuotesService {
 
       if (!quote) throw new NotFoundException('Cotización no encontrada');
       if (quote.status === QuoteStatus.PAID) return quote; // Idempotencia
-      if (quote.status !== QuoteStatus.ACCEPTED) throw new ForbiddenException('Solo se pueden pagar cotizaciones aceptadas');
+      if (quote.status !== QuoteStatus.ACCEPTED) {
+        throw new ForbiddenException('Solo se pueden pagar cotizaciones aceptadas');
+      }
+
+      // PARCHE DE SEGURIDAD: Validar que la cotización pertenece al usuario que paga.
+      // Excepción: SYSTEM_WEBHOOK cuando viene del procesador de webhooks de Wompi.
+      if (userId !== 'SYSTEM_WEBHOOK' && quote.request.userId !== userId) {
+        throw new ForbiddenException('No tienes permiso para pagar esta cotización');
+      }
 
       // 1. Marcar como pagada
       quote.status = QuoteStatus.PAID;
