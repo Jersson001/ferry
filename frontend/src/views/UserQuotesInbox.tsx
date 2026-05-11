@@ -17,9 +17,10 @@ import {
   getUserOwnRequests,
   acceptQuote,
   rejectQuote,
-  markQuoteAsPaid,
-  submitManualPayment,
+  verifyWompiPayment,
+  updateQuoteLogisticStatus,
   formatRelativeTime,
+  submitManualPayment,
   confirmDelivery,
   ReceivedQuote,
   QuoteResponseItem,
@@ -1328,13 +1329,13 @@ export const UserQuotesInbox: React.FC = () => {
       if (result.status === 'APPROVED') {
         // Update Firestore if we have the context
         if (result.ctx) {
-          markQuoteAsPaid(result.ctx.quoteId, result.ctx.requestId)
+          verifyWompiPayment(result.ctx.quoteId, result.transactionId!)
             .then(() => {
               setQuotes(prev => prev.map(q =>
                 q.id === result.ctx!.quoteId ? { ...q, status: 'paid' } : q
               ));
             })
-            .catch(err => console.error('[Ferry/Wompi] markQuoteAsPaid falló:', err));
+            .catch(err => console.error('[Ferry/Wompi] verifyWompiPayment falló:', err));
         }
         // Show success toast
         setWompiPaidToast(true);
@@ -1443,7 +1444,8 @@ export const UserQuotesInbox: React.FC = () => {
     if (quote.status !== 'accepted' && quote.status !== 'accepted_partial') {
       result = await acceptQuote(quote.id, quote.requestId);
     }
-    await markQuoteAsPaid(quote.id, quote.requestId);
+    // No llamamos a verifyWompiPayment aquí porque onPaymentSuccess de Wompi 
+    // usa un redirect. Si esto es para Manual, ya cambió de estado.
     setQuotes(prev =>
       prev.map(q => {
         if (q.id === quote.id) return { ...q, status: 'paid' };
@@ -1485,16 +1487,16 @@ export const UserQuotesInbox: React.FC = () => {
     setTimeout(() => setWompiPaidToast(false), 6000);
   }, []);
 
-  const handleWompiApproved = useCallback((_transactionId: string) => {
+  const handleWompiApproved = useCallback((transactionId: string) => {
     const q = checkoutQuote;
     if (q) {
-      markQuoteAsPaid(q.id, q.requestId)
+      verifyWompiPayment(q.id, transactionId)
         .then(() =>
           setQuotes(prev => prev.map(item =>
             item.id === q.id ? { ...item, status: 'paid' } : item
           ))
         )
-        .catch((err: unknown) => console.error('[Ferry/Wompi] markQuoteAsPaid falló:', err));
+        .catch((err: unknown) => console.error('[Ferry/Wompi] verifyWompiPayment falló:', err));
     }
     setWompiPaidToast(true);
     setTimeout(() => setWompiPaidToast(false), 6000);

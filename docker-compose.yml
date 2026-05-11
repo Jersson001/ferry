@@ -28,6 +28,18 @@ services:
       DATABASE_USER: root
       DATABASE_PASSWORD: rootpassword
       DATABASE_NAME: ferry_db
+      JWT_SECRET: ${JWT_SECRET:-ferry_super_secret_jwt_key_change_in_production}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      WOMPI_INTEGRITY_SECRET: ${WOMPI_INTEGRITY_SECRET:-}
+      WOMPI_PRIVATE_KEY: ${WOMPI_PRIVATE_KEY:-}
+      WOMPI_EVENTS_SECRET: ${WOMPI_EVENTS_SECRET:-}
+      UPLOADS_PATH: /var/lib/ferry/uploads
+      UPLOADS_BASE_URL: ${UPLOADS_BASE_URL:-http://localhost:3000/uploads}
+      PORT: 3000
+    volumes:
+      # Mapeamos los uploads al disco del host Hostinger
+      # Los archivos sobreviven reinicios del contenedor
+      - ./uploads:/var/lib/ferry/uploads
     depends_on:
       - db
 

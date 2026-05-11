@@ -47,9 +47,10 @@ export function isProfileIncomplete(profile: UserProfile): boolean {
 export const CompleteProfileScreen: React.FC<Props> = ({ profile, onComplete }) => {
   const isStore = profile.role === UserRole.STORE;
 
-  const [name,    setName]    = useState('');
-  const [address, setAddress] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [name,        setName]        = useState('');
+  const [address,     setAddress]     = useState('');
+  const [description, setDescription] = useState('');
+  const [loading,     setLoading]     = useState(false);
   const [error,   setError]   = useState<string | null>(null);
   const [done,    setDone]    = useState(false);
 
@@ -69,6 +70,7 @@ export const CompleteProfileScreen: React.FC<Props> = ({ profile, onComplete }) 
     try {
       const patch: Record<string, any> = {
         displayName:     name.trim(),
+        description:     description.trim(),
         profileComplete: true,
       };
 
@@ -255,6 +257,33 @@ export const CompleteProfileScreen: React.FC<Props> = ({ profile, onComplete }) 
               </p>
             </div>
           )}
+
+          {/* ── Descripción (Bio) ── */}
+          <div className="space-y-2">
+            <label
+              htmlFor="profile-bio"
+              className="block text-xs font-bold text-slate-500 uppercase tracking-wide"
+            >
+              Breve descripción o especialidad
+            </label>
+            <div className="relative">
+              <textarea
+                id="profile-bio"
+                placeholder={isStore 
+                  ? "Ej. Distribuidor autorizado de herramientas Bosch con 20 años de trayectoria."
+                  : "Ej. Arquitecto especializado en acabados y remodelaciones de lujo."
+                }
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                maxLength={200}
+                rows={3}
+                className="w-full px-4 py-3 rounded-2xl border-2 border-slate-200 bg-slate-50 text-slate-800 font-medium outline-none focus:border-slate-400 focus:bg-white transition-all duration-200 resize-none text-sm placeholder:text-slate-300"
+              />
+            </div>
+            <p className="text-[10px] text-slate-400 text-right">
+              {description.length}/200
+            </p>
+          </div>
 
           {/* ── Error ── */}
           {error && (

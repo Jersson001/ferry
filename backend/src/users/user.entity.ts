@@ -20,8 +20,14 @@ export class User {
   @Column({ default: 'USER' })
   role: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
   photoURL?: string;
+
+  @Column({ type: 'jsonb', nullable: true })
+  portfolio?: any[];
+
+  @Column({ type: 'jsonb', nullable: true })
+  priceMemory?: Record<string, any>;
 
   @Column({ type: 'jsonb', nullable: true })
   location?: { lat: number; lng: number; address?: string };
@@ -31,6 +37,9 @@ export class User {
 
   @Column({ type: 'simple-array', nullable: true })
   specialties?: string[];
+
+  @Column({ nullable: true })
+  rut?: string;
 
   @Column({ default: false })
   isProfileComplete: boolean;

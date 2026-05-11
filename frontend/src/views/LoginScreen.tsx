@@ -143,6 +143,7 @@ export const LoginScreen: React.FC<Props> = ({ onLogin, onGuestLogin, preselecte
   const [isLogin,      setIsLogin]    = useState(true);   // true=login, false=registro
   const [email,        setEmail]      = useState('');
   const [password,     setPassword]   = useState('');
+  const [confirmPass,  setConfirmPass] = useState('');
   const [displayName,  setDisplayName]= useState('');
   const [showPass,     setShowPass]   = useState(false);
 
@@ -151,8 +152,9 @@ export const LoginScreen: React.FC<Props> = ({ onLogin, onGuestLogin, preselecte
   const [error,   setError]   = useState<string | null>(null);
 
   // Errores de campo
-  const [emailErr,    setEmailErr]   = useState<string | null>(null);
-  const [passwordErr, setPasswordErr]= useState<string | null>(null);
+  const [emailErr,        setEmailErr]       = useState<string | null>(null);
+  const [passwordErr,     setPasswordErr]    = useState<string | null>(null);
+  const [confirmPassErr,  setConfirmPassErr] = useState<string | null>(null);
 
   // ── Splash automático ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -191,7 +193,9 @@ export const LoginScreen: React.FC<Props> = ({ onLogin, onGuestLogin, preselecte
     setError(null);
     setEmailErr(null);
     setPasswordErr(null);
+    setConfirmPassErr(null);
     setPassword('');
+    setConfirmPass('');
   };
 
   // ── Submit ────────────────────────────────────────────────────────────────
@@ -202,9 +206,13 @@ export const LoginScreen: React.FC<Props> = ({ onLogin, onGuestLogin, preselecte
     // Validar campos
     const eErr = validateEmail(email);
     const pErr = validatePassword(password, !isLogin);
+    const cErr = !isLogin && password !== confirmPass ? 'Las contraseñas no coinciden' : null;
+    
     setEmailErr(eErr);
     setPasswordErr(pErr);
-    if (eErr || pErr) return;
+    setConfirmPassErr(cErr);
+    
+    if (eErr || pErr || cErr) return;
 
     setError(null);
     setLoading(true);
@@ -428,6 +436,31 @@ export const LoginScreen: React.FC<Props> = ({ onLogin, onGuestLogin, preselecte
             {passwordErr && <p className="text-xs text-red-500 mt-1 ml-1">{passwordErr}</p>}
             {!isLogin && <PasswordStrength password={password} />}
           </div>
+
+          {/* Confirmar Contraseña (solo registro) */}
+          {!isLogin && (
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                Confirmar Contraseña
+              </label>
+              <div className="relative mt-1.5">
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  id="input-confirm-password"
+                  type={showPass ? 'text' : 'password'}
+                  value={confirmPass}
+                  onChange={e => { setConfirmPass(e.target.value); setConfirmPassErr(null); setError(null); }}
+                  placeholder="Repite tu contraseña"
+                  className={`w-full pl-10 pr-4 py-3 bg-white border rounded-2xl text-sm outline-none focus:ring-2 transition ${
+                    confirmPassErr
+                      ? 'border-red-300 focus:ring-red-200'
+                      : 'border-slate-200 focus:ring-ferry-300 focus:border-ferry-400'
+                  }`}
+                />
+              </div>
+              {confirmPassErr && <p className="text-xs text-red-500 mt-1 ml-1">{confirmPassErr}</p>}
+            </div>
+          )}
 
           {/* Error global del backend */}
           {error && (

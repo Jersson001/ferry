@@ -1,99 +1,44 @@
-import { GoogleGenAI, Type } from "@google/genai";
 import { MaterialItem } from "../types";
 
-const getApiKey = () => {
-  const key = (import.meta as any).env?.VITE_GEMINI_API_KEY;
-  if (!key) {
-    console.error("No VITE_GEMINI_API_KEY found. Add it to your .env file.");
-  }
-  return key || "";
+const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3000';
+
+const apiRequest = async <T>(endpoint: string, options: RequestInit = {}): Promise<T> => {
+  const token = localStorage.getItem('access_token');
+  const response = await fetch(`${API_URL}${endpoint}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Error en la petición de IA');
+  return data;
 };
 
 export const analyzeMaterialImage = async (base64Image: string): Promise<MaterialItem[]> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: getApiKey() });
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: [
-        {
-          parts: [
-            {
-              inlineData: {
-                mimeType: "image/png",
-                data: base64Image,
-              },
-            },
-            {
-              text: "Extract the list of construction materials from this image. Return an array of objects with 'name', 'quantity', and 'unit'. If the unit is not clear, use 'und'.",
-            },
-          ],
-        },
-      ],
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              name: { type: Type.STRING, description: "Name of the material" },
-              quantity: { type: Type.STRING, description: "Quantity needed" },
-              unit: { type: Type.STRING, description: "Unit of measurement (e.g., bultos, metros, und)" },
-            },
-            required: ["name", "quantity", "unit"],
-          },
-        },
-      },
+    const result = await apiRequest<{ items: MaterialItem[] }>('/ai/analyze-image', {
+      method: 'POST',
+      body: JSON.stringify({ base64Image }),
     });
-
-    const text = response.text;
-    if (!text) return [];
-
-    return JSON.parse(text) as MaterialItem[];
+    return result.items || [];
   } catch (error) {
-    console.error("Error analyzing material image:", error);
-    // Fallback to empty list or basic error handling
+    console.error("Error analyzing material image from backend:", error);
     return [];
   }
 };
 
 export const extractMaterialsFromText = async (textInput: string): Promise<MaterialItem[]> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: getApiKey() });
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: [
-        {
-          parts: [
-            {
-              text: `Extract the list of construction materials from the following text: "${textInput}". Return an array of objects with 'name', 'quantity', and 'unit'. If the unit is not clear, use 'und'.`,
-            },
-          ],
-        },
-      ],
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              name: { type: Type.STRING },
-              quantity: { type: Type.STRING },
-              unit: { type: Type.STRING },
-            },
-            required: ["name", "quantity", "unit"],
-          },
-        },
-      },
+    const result = await apiRequest<{ items: MaterialItem[] }>('/ai/parse-materials', {
+      method: 'POST',
+      body: JSON.stringify({ text: textInput }),
     });
-
-    const text = response.text;
-    if (!text) return [];
-
-    return JSON.parse(text) as MaterialItem[];
+    return result.items || [];
   } catch (error) {
-    console.error("Error extracting materials from text:", error);
+    console.error("Error extracting materials from text via backend:", error);
     return [];
   }
 };

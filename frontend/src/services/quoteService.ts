@@ -253,10 +253,10 @@ export const rejectQuote = async (quoteId: string, requestId: string): Promise<v
   });
 };
 
-export const markQuoteAsPaid = async (quoteId: string, requestId: string): Promise<void> => {
-  await apiRequest(`/quotes/${quoteId}/pay`, {
+export const verifyWompiPayment = async (quoteId: string, transactionId: string): Promise<void> => {
+  await apiRequest(`/payments/verify`, {
     method: 'POST',
-    body: JSON.stringify({ requestId }),
+    body: JSON.stringify({ quoteId, transactionId }),
   });
 };
 

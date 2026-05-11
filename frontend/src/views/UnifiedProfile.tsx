@@ -61,7 +61,12 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
   const user = JSON.parse(localStorage.getItem('user') || 'null');
 
   // Keep profileRef current to avoid stale closures in map callbacks
-  useEffect(() => { profileRef.current = profile; }, [profile]);
+  useEffect(() => { 
+    profileRef.current = profile; 
+    if (profile?.description) {
+      setDescription(profile.description);
+    }
+  }, [profile]);
 
   // Initialize / update Google Maps when showStoreMap is true and we have coords
   useEffect(() => {
@@ -608,9 +613,15 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
           {showAddModal && (
             <AddPortfolioItemModal
               onClose={() => setShowAddModal(false)}
-              onAdded={(item) => {
-                setPortfolio(prev => [...prev, item]);
-                onUpdateProfile({ ...profile!, portfolio: [...portfolio, item] });
+              onAdded={async (item) => {
+                const newPortfolio = [...portfolio, item];
+                setPortfolio(newPortfolio);
+                onUpdateProfile({ ...profile!, portfolio: newPortfolio });
+                try {
+                  await updateUserProfile({ portfolio: newPortfolio });
+                } catch (e) {
+                  console.error("Error al guardar portafolio:", e);
+                }
               }}
             />
           )}
@@ -620,10 +631,15 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
             <PortfolioLightbox
               item={lightboxItem}
               onClose={() => setLightboxItem(null)}
-              onDeleted={(deleted) => {
+              onDeleted={async (deleted) => {
                 const updated = portfolio.filter(p => p.id !== deleted.id);
                 setPortfolio(updated);
                 onUpdateProfile({ ...profile!, portfolio: updated });
+                try {
+                  await updateUserProfile({ portfolio: updated });
+                } catch (e) {
+                  console.error("Error al guardar portafolio tras borrado:", e);
+                }
                 setLightboxItem(null);
               }}
             />

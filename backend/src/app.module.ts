@@ -7,6 +7,12 @@ import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { QuotesModule } from './quotes/quotes.module';
 import { StoresModule } from './stores/stores.module';
+import { StorageModule } from './storage/storage.module';
+import { PortfolioModule } from './portfolio/portfolio.module';
+import { PaymentsModule } from './payments/payments.module';
+import { AiModule } from './ai/ai.module';
+import { SubscriptionsModule } from './subscriptions/subscriptions.module';
+import { ProjectsModule } from './projects/projects.module';
 
 @Module({
   imports: [
@@ -19,12 +25,18 @@ import { StoresModule } from './stores/stores.module';
       password: process.env.DATABASE_PASSWORD || 'rootpassword',
       database: process.env.DATABASE_NAME || 'ferry_db',
       autoLoadEntities: true,
-      synchronize: true, // Only for development
+      synchronize: true, // Solo desarrollo — en producción usar migraciones
     }),
     UsersModule,
     AuthModule,
     QuotesModule,
     StoresModule,
+    StorageModule,
+    PortfolioModule,
+    PaymentsModule,
+    AiModule,
+    SubscriptionsModule,
+    ProjectsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
