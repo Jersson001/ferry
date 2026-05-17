@@ -1,7 +1,7 @@
 /**
  * authService.ts
  * ─────────────────────────────────────────────────────────────────────────────
- * Lógica de autenticación que ahora se conecta al backend de NestJS en vez de Firebase.
+ * Lógica de autenticación que se conecta al backend de NestJS.
  */
 
 import { UserRole, UserProfile } from '../types';
@@ -22,7 +22,7 @@ export class RbacError extends Error {
   }
 }
 
-const mapRole = (role: string): FerryRole => 
+const mapRole = (role: string): FerryRole =>
   role === 'STORE' ? 'ferreteria' : 'constructor';
 
 export async function signInWithEmail(email: string, password: string): Promise<AuthResult> {
@@ -31,7 +31,7 @@ export async function signInWithEmail(email: string, password: string): Promise<
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
   });
-  
+
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.message || 'Error de autenticación.');
@@ -48,14 +48,14 @@ export async function registerWithEmail(email: string, password: string, role: s
   const response = await fetch(`${API_URL}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ 
-      email, 
-      password, 
+    body: JSON.stringify({
+      email,
+      password,
       role,
       displayName: displayName || (role === 'STORE' ? 'Mi Ferretería' : 'Usuario')
     }),
   });
-  
+
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.message || 'Error de registro.');
@@ -66,6 +66,66 @@ export async function registerWithEmail(email: string, password: string, role: s
   localStorage.setItem('user', JSON.stringify(data.user));
 
   return { role: mapRole(data.user.role), isNew: true };
+}
+
+export async function forgotPassword(email: string): Promise<{ message: string }> {
+  const response = await fetch(`${API_URL}/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Error al procesar la solicitud.');
+  }
+
+  return response.json();
+}
+
+export async function resetPassword(token: string, password: string): Promise<{ message: string }> {
+  const response = await fetch(`${API_URL}/auth/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, password }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Error al restablecer la contraseña.');
+  }
+
+  return response.json();
+}
+
+export async function verifyEmailToken(token: string): Promise<{ message: string }> {
+  const response = await fetch(`${API_URL}/auth/verify-email`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Error al verificar el correo.');
+  }
+
+  return response.json();
+}
+
+export async function resendVerification(email: string): Promise<{ message: string }> {
+  const response = await fetch(`${API_URL}/auth/resend-verification`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Error al reenviar el correo.');
+  }
+
+  return response.json();
 }
 
 export function getCurrentUser(): UserProfile | null {
@@ -86,5 +146,10 @@ export function signOut(): void {
 
 export function friendlyAuthError(err: any): string {
   if (err instanceof RbacError) return err.message;
-  return err?.message ?? 'Error de autenticación.';
+  const msg: string = err?.message ?? '';
+  if (msg.includes('ya está registrado')) return msg;
+  if (msg.includes('contraseña incorrectos')) return 'Correo o contraseña incorrectos.';
+  if (msg.includes('expirado')) return msg;
+  if (msg.includes('válido o ya fue usado')) return msg;
+  return msg || 'Error de autenticación.';
 }

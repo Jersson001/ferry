@@ -44,6 +44,20 @@ export class User {
   @Column({ default: false })
   isProfileComplete: boolean;
 
+  // ── Verificación de email ─────────────────────────────────────────────────
+  @Column({ default: false })
+  isEmailVerified: boolean;
+
+  @Column({ type: 'text', nullable: true })
+  emailVerificationToken?: string | null;
+
+  // ── Recuperación de contraseña ────────────────────────────────────────────
+  @Column({ type: 'text', nullable: true })
+  resetPasswordToken?: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  resetPasswordExpiry?: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }

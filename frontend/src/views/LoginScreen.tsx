@@ -35,6 +35,7 @@ interface Props {
   onLogin: (role: FerryRole) => void;
   onGuestLogin?: () => void;
   preselectedRole?: FerryRole | null;
+  onForgotPassword?: () => void;
 }
 
 // ─── Constantes de diseño ─────────────────────────────────────────────────────
@@ -131,7 +132,7 @@ const PasswordStrength: React.FC<{ password: string }> = ({ password }) => {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export const LoginScreen: React.FC<Props> = ({ onLogin, onGuestLogin, preselectedRole }) => {
+export const LoginScreen: React.FC<Props> = ({ onLogin, onGuestLogin, preselectedRole, onForgotPassword }) => {
   // Pasos: 0=splash, 1=rol, 2=formulario
   const [step,         setStep]         = useState<0 | 1 | 2>(0);
   const [selectedRole, setSelectedRole] = useState<FerryRole | null>(null);
@@ -488,6 +489,20 @@ export const LoginScreen: React.FC<Props> = ({ onLogin, onGuestLogin, preselecte
               '🚀 Crear cuenta gratis'
             )}
           </button>
+
+          {/* Link de recuperación de contraseña (solo en modo login) */}
+          {isLogin && onForgotPassword && (
+            <div className="text-center -mt-1">
+              <button
+                id="btn-forgot-password"
+                type="button"
+                onClick={onForgotPassword}
+                className="text-sm text-slate-400 hover:text-slate-600 transition-colors underline underline-offset-2"
+              >
+                ¿Olvidaste tu contraseña?
+              </button>
+            </div>
+          )}
 
           {/* Toggle login/registro */}
           <div className="text-center pt-1">

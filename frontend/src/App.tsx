@@ -8,11 +8,14 @@ import { HomeView } from './views/HomeView';
 import { UnifiedProfile } from './views/UnifiedProfile';
 import { UserQuotesInbox } from './views/UserQuotesInbox';
 import { LoginScreen } from './views/LoginScreen';
+import { ForgotPasswordScreen } from './views/ForgotPasswordScreen';
+import { ResetPasswordScreen } from './views/ResetPasswordScreen';
 import { CompleteProfileScreen, isProfileIncomplete } from './views/CompleteProfileScreen';
+import { VerifyEmailBanner } from './components/VerifyEmailBanner';
 import { UserRole, MaterialRequest, RequestStatus, Quote, Product, QuoteLineItem, UserProfile } from './types';
 import { Home, ShoppingBag, Briefcase, User, CheckCircle2, Inbox, Package, ShieldAlert, X, Store, LogOut } from 'lucide-react';
 import ferryLogo from './assets/logo.svg';
-import { getCurrentUser, signOut as logoutUser } from './services/authService';
+import { getCurrentUser, signOut as logoutUser, verifyEmailToken } from './services/authService';
 import { loadGuestCart, GuestCart } from './hooks/useGuestCart';
 
 
@@ -30,6 +33,17 @@ const App: React.FC = () => {
   const [isAuthReady, setIsAuthReady] = useState(false);
   // Controla si ya se hizo la primera verificación de sesión al cargar la app
   const authFirstCheckRef = useRef(false);
+
+  // ── Flujos de auth extra ───────────────────────────────────────────────────
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [showVerifyEmailBanner, setShowVerifyEmailBanner] = useState(false);
+
+  // ── Reset password desde URL (?token=xxx) ─────────────────────────────────
+  const urlParams = new URLSearchParams(window.location.search);
+  const resetToken = urlParams.get('token');
+  const isResetPasswordPage = window.location.pathname.includes('reset-password') && Boolean(resetToken);
+  const isVerifyEmailPage   = window.location.pathname.includes('verify-email');
+  const verifyToken         = isVerifyEmailPage ? urlParams.get('token') : null;
 
   // Estado para geolocalización del usuario
   const [userLocation, setUserLocation] = useState<{ lat: number, lng: number } | null>(null);
@@ -53,6 +67,10 @@ const App: React.FC = () => {
       if (!authFirstCheckRef.current) {
         setIsLoggedIn(true);
         setIsGuest(false);
+        // Mostrar banner de verificación si el email no está verificado
+        if (user.isEmailVerified === false) {
+          setShowVerifyEmailBanner(true);
+        }
       }
       setPreselectedRole(null);
       setCurrentUserProfile(prev => {
@@ -81,6 +99,40 @@ const App: React.FC = () => {
     setIsAuthReady(true);
     authFirstCheckRef.current = true;
   }, []);
+
+  // ── Procesamiento de Verificación de Correo ───────────────────────────────
+  useEffect(() => {
+    if (isVerifyEmailPage && verifyToken) {
+      const runVerification = async () => {
+        try {
+          const res = await verifyEmailToken(verifyToken);
+          
+          // 1. Actualizar usuario en localStorage
+          const localUser = localStorage.getItem('user');
+          if (localUser) {
+            const parsed = JSON.parse(localUser);
+            parsed.isEmailVerified = true;
+            localStorage.setItem('user', JSON.stringify(parsed));
+          }
+
+          // 2. Actualizar estado reactivo
+          setShowVerifyEmailBanner(false);
+          setCurrentUserProfile(prev => {
+            if (!prev) return null;
+            return { ...prev, isEmailVerified: true };
+          });
+
+          alert(`🎉 ${res.message || '¡Correo verificado con éxito!'}`);
+        } catch (err: any) {
+          alert(`⚠ Error al verificar correo: ${err.message || 'El enlace no es válido.'}`);
+        } finally {
+          // Limpiar la URL para no re-procesar al recargar
+          window.history.replaceState({}, '', '/');
+        }
+      };
+      runVerification();
+    }
+  }, [isVerifyEmailPage, verifyToken]);
 
   // Estados de Datos
   const [requests, setRequests] = useState<MaterialRequest[]>([]);
@@ -177,9 +229,33 @@ const App: React.FC = () => {
     );
   }
 
+  // ── Pantalla: restablecer contraseña (desde link del email) ─────────────
+  if (isResetPasswordPage && resetToken) {
+    return (
+      <ResetPasswordScreen
+        token={resetToken}
+        onSuccess={() => {
+          // Limpiar la URL y volver al login
+          window.history.replaceState({}, '', '/');
+          window.location.reload();
+        }}
+      />
+    );
+  }
+
+  // ── Pantalla: olvidé mi contraseña ──────────────────────────────────────
+  if (showForgotPassword) {
+    return (
+      <ForgotPasswordScreen
+        onBack={() => setShowForgotPassword(false)}
+      />
+    );
+  }
+
   if (!isLoggedIn && !isGuest) {
     return <LoginScreen
       preselectedRole={preselectedRole}
+      onForgotPassword={() => setShowForgotPassword(true)}
       onLogin={(role) => {
         setPreselectedRole(null);
         const apiUser = getCurrentUser();
@@ -192,10 +268,18 @@ const App: React.FC = () => {
         }
         setIsLoggedIn(true);
         setIsGuest(false);
-        setCurrentUserProfile({
-          uid: apiUser?.uid || 'user-' + Date.now(),
-          email: apiUser?.email,
-          displayName: apiUser?.displayName || (role === 'ferreteria' ? 'Mi Ferretera' : 'Usuario'),
+        // Mostrar banner si el email no está verificado
+        if (apiUser?.isEmailVerified === false) {
+          setShowVerifyEmailBanner(true);
+        }
+        // Usar el perfil completo que viene del backend (incluye location, isProfileComplete, etc.)
+        setCurrentUserProfile(apiUser ? {
+          ...apiUser,
+          role: role === 'ferreteria' ? UserRole.STORE : UserRole.USER,
+          createdAt: new Date(),
+        } : {
+          uid: 'user-' + Date.now(),
+          displayName: role === 'ferreteria' ? 'Mi Ferretería' : 'Usuario',
           role: role === 'ferreteria' ? UserRole.STORE : UserRole.USER,
           createdAt: new Date(),
         });
@@ -283,6 +367,14 @@ const App: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Banner de verificación de email */}
+      {showVerifyEmailBanner && currentUserProfile?.email && !isGuest && (
+        <VerifyEmailBanner
+          email={currentUserProfile.email}
+          onDismiss={() => setShowVerifyEmailBanner(false)}
+        />
       )}
 
       {/* Banner invitado */}

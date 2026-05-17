@@ -19,12 +19,15 @@ export interface UserProfile {
   specialties?: string[];
   portfolio?: PortfolioItem[];
   createdAt: any; // Firestore Timestamp
+  isEmailVerified?: boolean;
+  isProfileComplete?: boolean;
   location?: {
     lat: number;
     lng: number;
     address?: string;
   };
 }
+
 
 export enum UserRole {
   USER = 'USER', // Merged Client + Contractor

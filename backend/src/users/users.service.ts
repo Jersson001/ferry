@@ -22,6 +22,14 @@ export class UsersService {
     return this.usersRepository.findOneBy({ uid });
   }
 
+  async findOneByVerificationToken(token: string): Promise<User | null> {
+    return this.usersRepository.findOneBy({ emailVerificationToken: token });
+  }
+
+  async findOneByResetToken(token: string): Promise<User | null> {
+    return this.usersRepository.findOneBy({ resetPasswordToken: token });
+  }
+
   async create(userData: Partial<User>): Promise<User> {
     const user = this.usersRepository.create(userData);
     return this.usersRepository.save(user);

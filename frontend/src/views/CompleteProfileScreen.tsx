@@ -31,9 +31,13 @@ interface Props {
 // ─── Helper: determina si el perfil está incompleto ───────────────────────────
 
 export function isProfileIncomplete(profile: UserProfile): boolean {
+  // Si el backend ya marcó el perfil como completo, respetarlo
+  if ((profile as any).isProfileComplete === true) return false;
+
   const noName = !profile.displayName?.trim() ||
     profile.displayName === 'Usuario' ||
-    profile.displayName === 'Mi Ferretería';
+    profile.displayName === 'Mi Ferretería' ||
+    profile.displayName === 'Mi Ferretera';
 
   if (profile.role === UserRole.STORE) {
     const noAddress = !profile.location?.address?.trim();
@@ -47,9 +51,9 @@ export function isProfileIncomplete(profile: UserProfile): boolean {
 export const CompleteProfileScreen: React.FC<Props> = ({ profile, onComplete }) => {
   const isStore = profile.role === UserRole.STORE;
 
-  const [name,        setName]        = useState('');
-  const [address,     setAddress]     = useState('');
-  const [description, setDescription] = useState('');
+  const [name,        setName]        = useState(profile.displayName && profile.displayName !== 'Usuario' && profile.displayName !== 'Mi Ferretería' && profile.displayName !== 'Mi Ferretera' ? profile.displayName : '');
+  const [address,     setAddress]     = useState(profile.location?.address ?? '');
+  const [description, setDescription] = useState(profile.description ?? '');
   const [loading,     setLoading]     = useState(false);
   const [error,   setError]   = useState<string | null>(null);
   const [done,    setDone]    = useState(false);
@@ -59,7 +63,7 @@ export const CompleteProfileScreen: React.FC<Props> = ({ profile, onComplete }) 
   const addressOk = isStore ? address.trim().length >= 5 : true;
   const canSubmit = nameOk && addressOk && !loading;
 
-  const { updateUserProfile } = useApi();
+  const { updateUserProfile, logoutUser } = useApi();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -331,6 +335,20 @@ export const CompleteProfileScreen: React.FC<Props> = ({ profile, onComplete }) 
               </span>
             )}
           </button>
+
+          {/* Cerrar Sesión */}
+          <div className="text-center mt-3">
+            <button
+              type="button"
+              onClick={() => {
+                logoutUser();
+                window.location.reload();
+              }}
+              className="text-xs font-semibold text-slate-400 hover:text-slate-600 transition-colors underline underline-offset-2"
+            >
+              Cerrar Sesión (Usar otra cuenta)
+            </button>
+          </div>
 
         </form>
 
