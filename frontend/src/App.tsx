@@ -38,6 +38,14 @@ const App: React.FC = () => {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [showVerifyEmailBanner, setShowVerifyEmailBanner] = useState(false);
 
+  // ── Toast Notification System ─────────────────────────────────────────────
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ message, type });
+    const timer = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(timer);
+  };
+
   // ── Reset password desde URL (?token=xxx) ─────────────────────────────────
   const urlParams = new URLSearchParams(window.location.search);
   const resetToken = urlParams.get('token');
@@ -122,9 +130,9 @@ const App: React.FC = () => {
             return { ...prev, isEmailVerified: true };
           });
 
-          alert(`🎉 ${res.message || '¡Correo verificado con éxito!'}`);
+          showToast(res.message || '¡Correo verificado con éxito!', 'success');
         } catch (err: any) {
-          alert(`⚠ Error al verificar correo: ${err.message || 'El enlace no es válido.'}`);
+          showToast(err.message || 'El enlace de verificación no es válido o ya expiró.', 'error');
         } finally {
           // Limpiar la URL para no re-procesar al recargar
           window.history.replaceState({}, '', '/');
@@ -516,6 +524,29 @@ const App: React.FC = () => {
             </>
           )}
         </nav>
+      )}
+
+      {/* ── Toast Overlay (Notificaciones Premium) ───────────────────────────── */}
+      {toast && (
+        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-xl animate-in fade-in slide-in-from-top-4 duration-300 max-w-sm w-[90%] border ${
+          toast.type === 'success'
+            ? 'bg-emerald-500 text-white border-emerald-400 shadow-emerald-200/30'
+            : toast.type === 'error'
+              ? 'bg-red-500 text-white border-red-400 shadow-red-200/30'
+              : 'bg-blue-500 text-white border-blue-400 shadow-blue-200/30'
+        }`}>
+          <div className="flex-shrink-0 bg-white/20 p-1.5 rounded-lg">
+            {toast.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5" />
+            ) : (
+              <ShieldAlert className="w-5 h-5" />
+            )}
+          </div>
+          <p className="font-bold text-xs leading-tight flex-1">{toast.message}</p>
+          <button onClick={() => setToast(null)} className="hover:bg-white/20 p-1 rounded-lg transition-colors">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
       )}
     </div>
   );

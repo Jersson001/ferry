@@ -220,13 +220,13 @@ export const LoginScreen: React.FC<Props> = ({ onLogin, onGuestLogin, preselecte
 
     try {
       if (isLogin) {
-        await signInWithEmail(email, password);
-        onLogin(selectedRole);
+        const result = await signInWithEmail(email, password);
+        onLogin(result.role);
       } else {
         const name = displayName.trim() || (selectedRole === 'ferreteria' ? 'Mi Ferretería' : 'Usuario');
         const apiRole = selectedRole === 'ferreteria' ? 'STORE' : 'USER';
-        await registerWithEmail(email, password, apiRole, name);
-        onLogin(selectedRole);
+        const result = await registerWithEmail(email, password, apiRole, name);
+        onLogin(result.role);
       }
     } catch (err: any) {
       setError(friendlyAuthError(err));
