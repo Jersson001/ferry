@@ -293,9 +293,34 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
     onSignOut?.();
   };
 
-  const [portfolio, setPortfolio] = useState<PortfolioItem[]>(profile?.portfolio || []);
+  const [portfolio, setPortfolio] = useState<PortfolioItem[]>([]);
+  const [portfolioLoading, setPortfolioLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [lightboxItem, setLightboxItem] = useState<PortfolioItem | null>(null);
+
+  // Cargar portafolio real desde la base de datos al montar
+  useEffect(() => {
+    const fetchPortfolio = async () => {
+      const token = localStorage.getItem('access_token');
+      if (!token) return;
+      setPortfolioLoading(true);
+      try {
+        const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3000';
+        const res = await fetch(`${API_URL}/portfolio/items`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const items = await res.json();
+          setPortfolio(items);
+        }
+      } catch (e) {
+        console.error('Error al cargar portafolio:', e);
+      } finally {
+        setPortfolioLoading(false);
+      }
+    };
+    fetchPortfolio();
+  }, []);
 
   return (
     <div className="space-y-6 pb-24">
@@ -613,15 +638,8 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
           {showAddModal && (
             <AddPortfolioItemModal
               onClose={() => setShowAddModal(false)}
-              onAdded={async (item) => {
-                const newPortfolio = [...portfolio, item];
-                setPortfolio(newPortfolio);
-                onUpdateProfile({ ...profile!, portfolio: newPortfolio });
-                try {
-                  await updateUserProfile({ portfolio: newPortfolio });
-                } catch (e) {
-                  console.error("Error al guardar portafolio:", e);
-                }
+              onAdded={(item) => {
+                setPortfolio(prev => [...prev, item]);
               }}
             />
           )}
@@ -631,32 +649,39 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
             <PortfolioLightbox
               item={lightboxItem}
               onClose={() => setLightboxItem(null)}
-              onDeleted={async (deleted) => {
-                const updated = portfolio.filter(p => p.id !== deleted.id);
-                setPortfolio(updated);
-                onUpdateProfile({ ...profile!, portfolio: updated });
-                try {
-                  await updateUserProfile({ portfolio: updated });
-                } catch (e) {
-                  console.error("Error al guardar portafolio tras borrado:", e);
-                }
+              onDeleted={(deleted) => {
+                setPortfolio(prev => prev.filter(p => p.id !== deleted.id));
                 setLightboxItem(null);
               }}
             />
           )}
 
           {/* Verification Status */}
-          <Card className="bg-blue-50 border-blue-100">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white">
-                <CheckCircle2 className="w-6 h-6" />
+          {profile?.isEmailVerified ? (
+            <Card className="bg-blue-50 border-blue-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white">
+                  <CheckCircle2 className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-blue-900 text-sm">Identidad Verificada</h4>
+                  <p className="text-xs text-blue-700">Tu cuenta cumple con los estándares de seguridad.</p>
+                </div>
               </div>
-              <div>
-                <h4 className="font-bold text-blue-900 text-sm">Identidad Verificada</h4>
-                <p className="text-xs text-blue-700">Tu cuenta cumple con los estándares de seguridad.</p>
+            </Card>
+          ) : (
+            <Card className="bg-amber-50 border-amber-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-amber-400 rounded-full flex items-center justify-center text-white">
+                  <Shield className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-amber-900 text-sm">Correo no verificado</h4>
+                  <p className="text-xs text-amber-700">Verifica tu correo para completar tu identidad.</p>
+                </div>
               </div>
-            </div>
-          </Card>
+            </Card>
+          )}
         </div>
       )}
 

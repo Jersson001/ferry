@@ -40,31 +40,43 @@ export function validatePortfolioFile(file: File, type: 'image' | 'video'): stri
 }
 
 /**
- * Convierte el archivo a base64 y lo sube al backend.
- * El backend se encarga de almacenarlo (disco local, S3, etc.).
+ * Sube un archivo de imagen o video usando multipart/form-data.
+ * El backend se encarga de almacenarlo, comprimirlo a WebP, y guardar el registro.
  */
-export async function uploadPortfolioFile(file: File, type: 'image' | 'video'): Promise<string> {
-  const base64 = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+export async function uploadPortfolioFile(file: File, description?: string): Promise<PortfolioItem> {
+  const token = localStorage.getItem('access_token');
+  const formData = new FormData();
+  formData.append('file', file);
+  if (description) {
+    formData.append('description', description);
+  }
+
+  const response = await fetch(`${API_URL}/portfolio/upload`, {
+    method: 'POST',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
   });
 
-  const result = await apiRequest<{ url: string }>('/portfolio/upload', {
-    method: 'POST',
-    body: JSON.stringify({ base64, type, filename: file.name }),
-  });
-  return result.url;
+  if (response.status === 401) {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('user');
+    throw new Error('Sesión expirada');
+  }
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Error al subir el archivo');
+  return data;
 }
 
 /**
- * Agrega un ítem al portafolio del usuario autenticado.
+ * Agrega un enlace al portafolio.
  */
-export async function addPortfolioItem(item: PortfolioItem): Promise<void> {
-  await apiRequest('/portfolio/items', {
+export async function addPortfolioLink(url: string, description?: string): Promise<PortfolioItem> {
+  return apiRequest<PortfolioItem>('/portfolio/items/link', {
     method: 'POST',
-    body: JSON.stringify(item),
+    body: JSON.stringify({ url, description }),
   });
 }
 
@@ -72,8 +84,7 @@ export async function addPortfolioItem(item: PortfolioItem): Promise<void> {
  * Elimina un ítem del portafolio.
  */
 export async function removePortfolioItem(item: PortfolioItem): Promise<void> {
-  await apiRequest('/portfolio/items', {
+  await apiRequest(`/portfolio/items/${item.id}`, {
     method: 'DELETE',
-    body: JSON.stringify({ id: item.id }),
   });
 }

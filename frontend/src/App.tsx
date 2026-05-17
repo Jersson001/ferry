@@ -108,6 +108,55 @@ const App: React.FC = () => {
     authFirstCheckRef.current = true;
   }, []);
 
+
+  // ── Sincronización y Refresco de Sesión en Tiempo Real ─────────────────────
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'user' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          setCurrentUserProfile(parsed);
+          if (parsed.isEmailVerified) {
+            setShowVerifyEmailBanner(false);
+          }
+        } catch (err) {
+          console.error('Error al sincronizar localStorage:', err);
+        }
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+
+    const syncSession = async () => {
+      const token = localStorage.getItem('access_token');
+      if (!token) return;
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:3000'}/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const freshUser = await response.json();
+          const mappedUser: UserProfile = {
+            ...freshUser,
+            role: freshUser.role === 'STORE' ? UserRole.STORE : UserRole.USER,
+            createdAt: new Date(freshUser.createdAt),
+          };
+          localStorage.setItem('user', JSON.stringify(mappedUser));
+          setCurrentUserProfile(mappedUser);
+          if (mappedUser.isEmailVerified) {
+            setShowVerifyEmailBanner(false);
+          }
+        }
+      } catch (err) {
+        console.error('Error al sincronizar sesión:', err);
+      }
+    };
+    syncSession();
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
+
   // ── Procesamiento de Verificación de Correo ───────────────────────────────
   useEffect(() => {
     if (isVerifyEmailPage && verifyToken) {

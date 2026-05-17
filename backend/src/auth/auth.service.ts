@@ -114,9 +114,13 @@ export class AuthService {
   async resendVerification(dto: ResendVerificationDto) {
     const user = await this.usersService.findOneByEmail(dto.email.toLowerCase().trim());
 
-    // Por seguridad, no revelamos si el email existe o no
-    if (!user || user.isEmailVerified) {
+    // Por seguridad, no revelamos si el email existe o no en caso de que no esté registrado
+    if (!user) {
       return { message: 'Si tu correo está registrado y sin verificar, recibirás un nuevo enlace.' };
+    }
+
+    if (user.isEmailVerified) {
+      return { message: 'Tu correo ya está verificado.' };
     }
 
     const emailVerificationToken = crypto.randomUUID();

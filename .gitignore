@@ -2,3 +2,4 @@ node_modules/
 dist/
 .env
 GUIA_PRODUCCION.md
+uploads/

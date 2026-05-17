@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { X, Image, Video, Link, Upload, Loader2 } from 'lucide-react';
 import { PortfolioItem } from '../types';
-import { validatePortfolioFile, uploadPortfolioFile, addPortfolioItem } from '../services/portfolioService';
+import { validatePortfolioFile, uploadPortfolioFile, addPortfolioLink } from '../services/portfolioService';
 
 interface Props {
   onClose: () => void;
@@ -63,20 +63,14 @@ export const AddPortfolioItemModal: React.FC<Props> = ({ onClose, onAdded }) => 
 
     setUploading(true);
     try {
-      let url = linkUrl.trim();
-      if (selectedType !== 'link' && file) {
-        url = await uploadPortfolioFile(file, selectedType);
+      let newItem: PortfolioItem;
+
+      if (selectedType === 'link') {
+        newItem = await addPortfolioLink(linkUrl.trim(), description.trim());
+      } else {
+        newItem = await uploadPortfolioFile(file!, description.trim());
       }
 
-      const newItem: PortfolioItem = {
-        id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
-        type: selectedType,
-        url,
-        description: description.trim(),
-        createdAt: new Date().toISOString(),
-      };
-
-      await addPortfolioItem(newItem);
       onAdded(newItem);
       onClose();
     } catch (e: any) {
