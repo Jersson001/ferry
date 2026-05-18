@@ -331,7 +331,7 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
           <div className="relative">
             <div className="w-28 h-28 bg-white p-1 rounded-full shadow-xl overflow-hidden">
               <img
-                src={profile?.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.id || 'guest'}`}
+                src={profile?.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.id || 'guest'}&mood=happy`}
                 className="w-full h-full rounded-full bg-slate-100 object-cover"
                 alt="Avatar"
               />
