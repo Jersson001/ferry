@@ -936,7 +936,7 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
               </>
             )}
 
-            {/* Seguridad */}
+            {/* Seguridad / Cambio de Contraseña */}
             <button 
               onClick={() => setShowSecurityModal(true)}
               className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
@@ -946,8 +946,8 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
                   <Shield className="w-5 h-5" />
                 </div>
                 <div className="text-left">
-                  <p className="font-bold text-sm text-slate-800">Seguridad</p>
-                  <p className="text-xs text-slate-500">Contraseña, 2FA</p>
+                  <p className="font-bold text-sm text-slate-800">Cambiar Contraseña</p>
+                  <p className="text-xs text-slate-500">Actualizar tu clave de acceso</p>
                 </div>
               </div>
               <ChevronRight className="w-5 h-5 text-slate-300" />
