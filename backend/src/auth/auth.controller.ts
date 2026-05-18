@@ -54,4 +54,11 @@ export class AuthController {
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
   }
+
+  // ── PUT /auth/change-password ──────────────────────────────────────────────
+  @UseGuards(JwtAuthGuard)
+  @Post('change-password')
+  async changePassword(@Request() req: any, @Body() dto: import('./dto/change-password.dto').ChangePasswordDto) {
+    return this.authService.changePassword(req.user.uid, dto);
+  }
 }

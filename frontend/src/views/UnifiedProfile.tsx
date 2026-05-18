@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Card, Button, Badge } from '../components/UIComponents';
-import { User, MapPin, Shield, LogOut, Edit2, Camera, Briefcase, Star, CheckCircle2, Plus, ChevronRight, Building2, FileText, Save, ExternalLink, PlayCircle, TrendingUp, ChevronDown } from 'lucide-react';
+import { User, MapPin, Shield, LogOut, Edit2, Camera, Briefcase, Star, CheckCircle2, Plus, ChevronRight, Building2, FileText, Save, ExternalLink, PlayCircle, TrendingUp, ChevronDown, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
 
 import { UserProfile, UserRole, PortfolioItem } from '../types';
 import { useApi } from '../hooks/useApi';
@@ -58,6 +58,15 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
   const [showPlansModal, setShowPlansModal] = useState(false);
 
+  // Security Modal States
+  const [showSecurityModal, setShowSecurityModal] = useState(false);
+  const [securityForm, setSecurityForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [securityLoading, setSecurityLoading] = useState(false);
+  const [securityError, setSecurityError] = useState<string | null>(null);
+  const [securitySuccess, setSecuritySuccess] = useState<string | null>(null);
+  const [showPwd1, setShowPwd1] = useState(false);
+  const [showPwd2, setShowPwd2] = useState(false);
+
   // Editing states
   const [isEditingBasic, setIsEditingBasic] = useState(false);
   const [editName, setEditName] = useState(profile?.displayName || '');
@@ -87,6 +96,48 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
       .then(sub => setSubscription(sub))
       .catch(() => {});
   }, []);
+
+  const handleSecuritySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSecurityError(null);
+    setSecuritySuccess(null);
+    
+    if (securityForm.newPassword !== securityForm.confirmPassword) {
+      setSecurityError('Las contraseñas nuevas no coinciden');
+      return;
+    }
+    if (securityForm.newPassword.length < 6) {
+      setSecurityError('La contraseña debe tener al menos 6 caracteres');
+      return;
+    }
+
+    setSecurityLoading(true);
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3000';
+      const token = localStorage.getItem('access_token');
+      const res = await fetch(`${API_URL}/auth/change-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          currentPassword: securityForm.currentPassword,
+          newPassword: securityForm.newPassword,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Error al cambiar la contraseña');
+      
+      setSecuritySuccess('Contraseña actualizada correctamente.');
+      setSecurityForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setTimeout(() => setShowSecurityModal(false), 2000);
+    } catch (err: any) {
+      setSecurityError(err.message);
+    } finally {
+      setSecurityLoading(false);
+    }
+  };
 
   // Initialize / update Google Maps when showStoreMap is true and we have coords
   useEffect(() => {
@@ -886,7 +937,10 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
             )}
 
             {/* Seguridad */}
-            <button className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
+            <button 
+              onClick={() => setShowSecurityModal(true)}
+              className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
+            >
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-slate-100 rounded-lg text-slate-600">
                   <Shield className="w-5 h-5" />
@@ -921,6 +975,87 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
           currentSubscription={subscription}
           onPlanUpdated={(newSub) => setSubscription(newSub)}
         />
+      )}
+
+      {showSecurityModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={() => setShowSecurityModal(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600">
+                <Shield className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-800">Seguridad</h3>
+                <p className="text-xs text-slate-500">Cambiar tu contraseña</p>
+              </div>
+            </div>
+
+            {securityError && (
+              <div className="mb-4 p-3 bg-red-50 text-red-600 text-xs rounded-xl flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <p>{securityError}</p>
+              </div>
+            )}
+            {securitySuccess && (
+              <div className="mb-4 p-3 bg-green-50 text-green-600 text-xs font-medium rounded-xl flex items-center justify-center gap-2">
+                <CheckCircle2 className="w-4 h-4" />
+                <p>{securitySuccess}</p>
+              </div>
+            )}
+
+            <form onSubmit={handleSecuritySubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Contraseña Actual</label>
+                <input
+                  type="password"
+                  value={securityForm.currentPassword}
+                  onChange={e => setSecurityForm({...securityForm, currentPassword: e.target.value})}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-ferry-400 transition-shadow"
+                  required
+                />
+              </div>
+              <div className="relative">
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Nueva Contraseña</label>
+                <div className="relative">
+                  <input
+                    type={showPwd1 ? 'text' : 'password'}
+                    value={securityForm.newPassword}
+                    onChange={e => setSecurityForm({...securityForm, newPassword: e.target.value})}
+                    className="w-full pl-3 pr-10 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-ferry-400 transition-shadow"
+                    required
+                  />
+                  <button type="button" onClick={() => setShowPwd1(!showPwd1)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                    {showPwd1 ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              <div className="relative">
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Confirmar Nueva Contraseña</label>
+                <div className="relative">
+                  <input
+                    type={showPwd2 ? 'text' : 'password'}
+                    value={securityForm.confirmPassword}
+                    onChange={e => setSecurityForm({...securityForm, confirmPassword: e.target.value})}
+                    className="w-full pl-3 pr-10 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-ferry-400 transition-shadow"
+                    required
+                  />
+                  <button type="button" onClick={() => setShowPwd2(!showPwd2)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                    {showPwd2 ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-2 flex gap-2">
+                <Button type="button" variant="outline" className="flex-1" onClick={() => setShowSecurityModal(false)}>
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={securityLoading || securitySuccess !== null} className="flex-1 bg-slate-800 hover:bg-slate-900">
+                  {securityLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Actualizar'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

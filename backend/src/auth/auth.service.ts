@@ -189,6 +189,28 @@ export class AuthService {
     return this.safeUser(user);
   }
 
+  // ── Change Password ──────────────────────────────────────────────────────────
+  async changePassword(uid: string, dto: import('./dto/change-password.dto').ChangePasswordDto) {
+    const user = await this.usersService.findOne(uid);
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    if (!user.password) {
+      throw new BadRequestException('Esta cuenta usa un proveedor externo (ej. Google)');
+    }
+
+    const isValid = await bcrypt.compare(dto.currentPassword, user.password);
+    if (!isValid) {
+      throw new BadRequestException('La contraseña actual es incorrecta');
+    }
+
+    const newHashedPassword = await bcrypt.hash(dto.newPassword, 12);
+    await this.usersService.update(uid, { password: newHashedPassword });
+
+    return { message: 'Contraseña actualizada exitosamente' };
+  }
+
   // ── Helpers ───────────────────────────────────────────────────────────────────
   private signToken(uid: string, email: string, role: string): string {
     return this.jwtService.sign({ sub: uid, email, role });
