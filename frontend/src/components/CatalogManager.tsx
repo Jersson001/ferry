@@ -5,7 +5,7 @@ import {
   Plus, Upload, Link2, Download, X, Check, AlertCircle, Loader2,
   ChevronLeft, Package, FileSpreadsheet, Trash2, Eye, RefreshCw,
   Image as ImageIcon, Percent, Tag, Copy, ClipboardPaste, Pencil,
-  Layers, FolderPlus, Search, SlidersHorizontal,
+  Layers, FolderPlus, Search, SlidersHorizontal, Info,
 } from 'lucide-react';
 import {
   CatalogProduct, CatalogProductStored,
@@ -344,6 +344,19 @@ export const CatalogManager: React.FC<Props> = ({ storeId, storeName, onClose })
     } finally { setManualLoading(false); }
   };
 
+  // Hack for CSV data that was saved as an Excel file with everything in one column
+  const processRawData = (raw: Record<string, any>[]) => {
+    if (raw.length > 0) {
+      const keys = Object.keys(raw[0]);
+      if (keys.length === 1 && (keys[0].includes(',') || keys[0].includes(';'))) {
+        const csvStr = [keys[0], ...raw.map(r => r[keys[0]])].join('\n');
+        const parsed = Papa.parse(csvStr, { header: true, skipEmptyLines: true });
+        return parsed.data as Record<string, any>[];
+      }
+    }
+    return raw;
+  };
+
   // ── Parse file (CSV or XLSX) ────────────────────────────────────────────────
   const parseFile = (file: File) => {
     setBulkError(null); setBulkRows([]); setBulkErrors([]);
@@ -353,7 +366,9 @@ export const CatalogManager: React.FC<Props> = ({ storeId, storeName, onClose })
       Papa.parse(file, {
         header: true, skipEmptyLines: true,
         complete: (results) => {
-          const normalized = (results.data as Record<string, any>[]).map(normalizeRow);
+          let raw = results.data as Record<string, any>[];
+          raw = processRawData(raw);
+          const normalized = raw.map(normalizeRow);
           const valid = normalized.filter(Boolean) as CatalogProduct[];
           const errIdx = normalized.reduce<number[]>((acc, r, i) => { if (!r) acc.push(i); return acc; }, []);
           setBulkRows(valid); setBulkErrors(errIdx);
@@ -367,7 +382,8 @@ export const CatalogManager: React.FC<Props> = ({ storeId, storeName, onClose })
         try {
           const wb = XLSX.read(e.target?.result, { type: 'array' });
           const ws = wb.Sheets[wb.SheetNames[0]];
-          const raw = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: '' });
+          let raw = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: '' });
+          raw = processRawData(raw);
           const normalized = raw.map(normalizeRow);
           const valid = normalized.filter(Boolean) as CatalogProduct[];
           const errIdx = normalized.reduce<number[]>((acc, r, i) => { if (!r) acc.push(i); return acc; }, []);
@@ -387,17 +403,42 @@ export const CatalogManager: React.FC<Props> = ({ storeId, storeName, onClose })
     if (file) parseFile(file);
   }, []);
 
-  const handleBulkUpload = async () => {
-    if (bulkRows.length === 0) return;
+  // ── Duplicate confirmation modal state ──────────────────────────────────────
+  const [duplicateConfirm, setDuplicateConfirm] = useState<{
+    isOpen: boolean;
+    duplicates: CatalogProduct[];
+    onConfirm: () => void;
+    onCancel: () => void;
+  } | null>(null);
+
+  // ── Handle Uploads with Duplicate Checks ────────────────────────────────────
+  const executeBulkUpload = async (rows: CatalogProduct[]) => {
     setBulkLoading(true); setBulkError(null);
     try {
-      await upsertProducts(storeId, bulkRows);
+      await upsertProducts(storeId, rows);
       setBulkSuccess(true); setBulkRows([]);
       await loadCatalog();
       setTimeout(() => { setBulkSuccess(false); setTab('list'); }, 2500);
     } catch (err: any) {
       setBulkError(err.message || 'Error al guardar productos.');
     } finally { setBulkLoading(false); }
+  };
+
+  const handleBulkUpload = async () => {
+    if (bulkRows.length === 0) return;
+    
+    const existingSkus = new Set(catalogItems.map(item => item.sku));
+    const duplicates = bulkRows.filter(row => existingSkus.has(row.sku));
+    if (duplicates.length > 0) {
+      setDuplicateConfirm({
+        isOpen: true,
+        duplicates,
+        onConfirm: () => { setDuplicateConfirm(null); executeBulkUpload(bulkRows); },
+        onCancel: () => setDuplicateConfirm(null)
+      });
+      return;
+    }
+    executeBulkUpload(bulkRows);
   };
 
   // ── Google Sheets fetch ─────────────────────────────────────────────────────
@@ -408,7 +449,9 @@ export const CatalogManager: React.FC<Props> = ({ storeId, storeName, onClose })
     try {
       const csvText = await fetchGoogleSheetCsv(url);
       const results = Papa.parse<Record<string, any>>(csvText, { header: true, skipEmptyLines: true });
-      const valid = results.data.map(normalizeRow).filter(Boolean) as CatalogProduct[];
+      let raw = results.data as Record<string, any>[];
+      raw = processRawData(raw);
+      const valid = raw.map(normalizeRow).filter(Boolean) as CatalogProduct[];
       if (valid.length === 0) throw new Error('No se encontraron productos válidos en la hoja.');
       setSheetsPreview(valid);
       // Persist the linked URL
@@ -419,17 +462,33 @@ export const CatalogManager: React.FC<Props> = ({ storeId, storeName, onClose })
     } finally { setSheetsLoading(false); }
   };
 
-  const handleSheetsImport = async () => {
-    if (sheetsPreview.length === 0) return;
+  const executeSheetsImport = async (rows: CatalogProduct[]) => {
     setSheetsLoading(true);
     try {
-      await upsertProducts(storeId, sheetsPreview);
+      await upsertProducts(storeId, rows);
       setSheetsSuccess(true); setSheetsPreview([]); setSheetsUrl(''); setSheetsPasteText(''); setSheetsError(null);
       await loadCatalog();
       setTimeout(() => { setSheetsSuccess(false); setTab('list'); }, 2500);
     } catch (err: any) {
       setSheetsError(err.message || 'Error al importar.');
     } finally { setSheetsLoading(false); }
+  };
+
+  const handleSheetsImport = async () => {
+    if (sheetsPreview.length === 0) return;
+
+    const existingSkus = new Set(catalogItems.map(item => item.sku));
+    const duplicates = sheetsPreview.filter(row => existingSkus.has(row.sku));
+    if (duplicates.length > 0) {
+      setDuplicateConfirm({
+        isOpen: true,
+        duplicates,
+        onConfirm: () => { setDuplicateConfirm(null); executeSheetsImport(sheetsPreview); },
+        onCancel: () => setDuplicateConfirm(null)
+      });
+      return;
+    }
+    executeSheetsImport(sheetsPreview);
   };
 
   // ── Copy headers to clipboard ───────────────────────────────────────────────
@@ -449,11 +508,12 @@ export const CatalogManager: React.FC<Props> = ({ storeId, storeName, onClose })
     setSheetsPreview([]);
     if (!text.trim()) return;
     const results = Papa.parse<Record<string, any>>(text.trim(), {
-      delimiter: '\t',
       header: true,
       skipEmptyLines: true,
     });
-    const valid = results.data.map(normalizeRow).filter(Boolean) as CatalogProduct[];
+    let raw = results.data as Record<string, any>[];
+    raw = processRawData(raw);
+    const valid = raw.map(normalizeRow).filter(Boolean) as CatalogProduct[];
     if (valid.length === 0) {
       setSheetsError('No se encontraron productos válidos. Verifica que la primera fila tenga los encabezados.');
     } else {
@@ -493,7 +553,7 @@ export const CatalogManager: React.FC<Props> = ({ storeId, storeName, onClose })
       </div>
 
       {/* Tab Bar */}
-      <div className="flex gap-1 px-3 py-2 bg-white border-b border-slate-100 overflow-x-auto no-scrollbar">
+      <div className="flex flex-wrap gap-1 px-3 py-2 bg-white border-b border-slate-100">
         <button className={tabCls('list')} onClick={() => setTab('list')}>
           <Package className="w-3.5 h-3.5" /> Catálogo
         </button>
@@ -1047,6 +1107,26 @@ export const CatalogManager: React.FC<Props> = ({ storeId, storeName, onClose })
               />
             </div>
 
+            {/* Especificaciones requeridas */}
+            <div className="bg-slate-50 border border-slate-100 rounded-xl p-3">
+              <p className="text-xs font-semibold text-slate-600 mb-1.5 flex items-center gap-1.5">
+                <Info className="w-3.5 h-3.5 text-blue-500" /> Especificaciones del Archivo
+              </p>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Tu archivo debe tener los siguientes nombres en la primera fila (encabezados):<br/>
+                <span className="font-mono text-[10px] bg-white border px-1 py-0.5 rounded mr-1">sku</span>
+                <span className="font-mono text-[10px] bg-white border px-1 py-0.5 rounded mr-1">nombre</span>
+                <span className="font-mono text-[10px] bg-white border px-1 py-0.5 rounded mr-1">precio</span>
+                <span className="font-mono text-[10px] bg-white border px-1 py-0.5 rounded mr-1">stock</span>
+                <span className="font-mono text-[10px] bg-white border px-1 py-0.5 rounded mr-1">categoria</span>
+                <span className="font-mono text-[10px] bg-white border px-1 py-0.5 rounded mr-1">descripcion</span>
+                <span className="font-mono text-[10px] bg-white border px-1 py-0.5 rounded">imagen</span>
+              </p>
+              <p className="text-[10px] text-slate-400 mt-2 font-medium">
+                * Si usas Excel, simplemente arma tus columnas de forma normal y guarda el archivo. No necesitas preocuparte por separar los datos con comas manualmente.
+              </p>
+            </div>
+
             {bulkError && (
               <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5">
                 <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
@@ -1383,6 +1463,45 @@ export const CatalogManager: React.FC<Props> = ({ storeId, storeName, onClose })
           </div>
         </div>
       )}
+
+      {/* ── DUPLICATE CONFIRM MODAL ───────────────────────────────────────────── */}
+      {duplicateConfirm && duplicateConfirm.isOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-4"
+          onClick={duplicateConfirm.onCancel}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden p-6 text-center space-y-4"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <h3 className="font-bold text-slate-800 text-lg">Productos repetidos</h3>
+            <p className="text-sm text-slate-500 leading-relaxed">
+              Tienes <span className="font-bold text-amber-600">{duplicateConfirm.duplicates.length}</span> producto(s) en este archivo que ya existen en tu catálogo (Ej. SKU: <span className="font-mono bg-slate-100 px-1 rounded">{duplicateConfirm.duplicates[0]?.sku}</span>).
+              <br/><br/>
+              ¿Quieres reemplazarlos y actualizar su información?
+            </p>
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={duplicateConfirm.onCancel}
+                className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold text-sm rounded-xl hover:bg-slate-200 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={duplicateConfirm.onConfirm}
+                className="flex-1 py-3 bg-amber-500 text-white font-bold text-sm rounded-xl hover:bg-amber-600 transition-colors"
+              >
+                Reemplazar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
+export default CatalogManager;

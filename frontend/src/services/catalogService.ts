@@ -61,7 +61,12 @@ export const upsertProducts = async (
 export const getStoreCatalogProducts = async (
   storeId: string,
 ): Promise<CatalogProductStored[]> => {
-  return apiRequest<CatalogProductStored[]>(`/stores/${storeId}/catalog`);
+  const raw = await apiRequest<any[]>(`/stores/${storeId}/catalog`);
+  // Normalise imageUrl → image so all downstream components use `image`
+  return raw.map((p) => ({
+    ...p,
+    image: p.image || p.imageUrl || '',
+  })) as CatalogProductStored[];
 };
 
 // ─── Delete a single product ──────────────────────────────────────────────────
@@ -111,23 +116,24 @@ export const fetchGoogleSheetCsv = async (url: string): Promise<string> => {
   const spreadsheetId = idMatch[1];
   const gid = gidMatch?.[1] ?? '0';
 
-  const gvizUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&gid=${gid}`;
-  try {
-    const res = await fetch(gvizUrl);
-    if (res.ok) {
-      const text = await res.text();
-      if (text.trim().length > 0) return text;
-    }
-  } catch { /* fall through */ }
-
   const exportUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=${gid}`;
-  const res2 = await fetch(exportUrl);
-  if (!res2.ok) {
-    throw new Error(
-      'No se pudo acceder a la hoja. Asegúrate de que esté compartida como "Cualquiera con el enlace puede ver".',
-    );
+  
+  // Usar el proxy del backend para evitar problemas de CORS
+  const token = localStorage.getItem('access_token');
+  const proxyUrl = `${API_URL}/catalog/proxy-sheets?url=${encodeURIComponent(exportUrl)}`;
+  
+  const response = await fetch(proxyUrl, {
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || 'No se pudo acceder a la hoja. Asegúrate de que esté compartida como "Cualquiera con el enlace puede ver".');
   }
-  return res2.text();
+
+  return response.text();
 };
 
 // ─── Format image URL: converts Google Drive viewer links to direct embed ─────

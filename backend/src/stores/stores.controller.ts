@@ -34,22 +34,36 @@ export class StoresController {
     return this.storesService.getFamilies(id);
   }
 
-  @Post(':id/catalog')
-  async addProduct(
-    @Param('id') storeId: string, 
+  @Put(':id/families')
+  async saveFamilies(
+    @Param('id') storeId: string,
     @Req() req: RequestWithUser,
-    @Body() productData: any
+    @Body('families') families: string[],
   ) {
-    // Seguridad: Solo la propia tienda o un ADMIN pueden modificar su catálogo
+    if (req.user.uid !== storeId && req.user.role !== 'ADMIN') {
+      throw new ForbiddenException('No tienes permiso para modificar las familias de esta tienda');
+    }
+    return this.storesService.saveFamilies(storeId, families || []);
+  }
+
+  @Post(':id/catalog')
+  async upsertProducts(
+    @Param('id') storeId: string,
+    @Req() req: RequestWithUser,
+    @Body('products') products: any[],
+  ) {
     if (req.user.uid !== storeId && req.user.role !== 'ADMIN') {
       throw new ForbiddenException('No tienes permiso para modificar el catálogo de esta tienda');
     }
-    return this.storesService.addProduct(storeId, productData);
+    if (!products || !Array.isArray(products) || products.length === 0) {
+      return { upserted: 0 };
+    }
+    return this.storesService.upsertProducts(storeId, products);
   }
 
   @Delete(':id/catalog/:sku')
   async deleteProduct(
-    @Param('id') storeId: string, 
+    @Param('id') storeId: string,
     @Param('sku') sku: string,
     @Req() req: RequestWithUser
   ) {
@@ -62,10 +76,10 @@ export class StoresController {
 
   @Put('profile')
   async updateProfile(@Req() req: RequestWithUser, @Body() profileData: any) {
-    // Si el usuario no es STORE, no debería actualizar el perfil de tienda
     if (req.user.role !== 'STORE') {
       throw new ForbiddenException('Solo las cuentas de tipo ferretería pueden actualizar este perfil');
     }
     return this.storesService.updateStoreProfile(req.user.uid, profileData);
   }
 }
+

@@ -41,6 +41,10 @@ export class User {
   @Column({ nullable: true })
   rut?: string;
 
+  @Column({ type: 'jsonb', nullable: true, default: [] })
+  families?: string[];
+
+
   @Column({ default: false })
   isProfileComplete: boolean;
 

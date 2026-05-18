@@ -52,6 +52,39 @@ export class StorageService {
   }
 
   /**
+   * Decodifica una imagen en formato Data URL base64, la comprime a WebP y la guarda.
+   * Retorna la URL pública del archivo guardado.
+   */
+  async saveBase64Image(
+    base64DataUrl: string,
+    userId: string,
+    subfolder: string = 'catalog',
+  ): Promise<string> {
+    // Extraer los bytes de la cadena Data URL (data:image/jpeg;base64,XXXX)
+    const matches = base64DataUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) {
+      throw new Error('Formato de imagen base64 inválido.');
+    }
+    const mimeType = matches[1];
+    if (!ALLOWED_IMAGE_TYPES.includes(mimeType)) {
+      throw new Error(`Tipo de archivo no permitido: ${mimeType}. Solo JPG, PNG o WebP.`);
+    }
+    const buffer = Buffer.from(matches[2], 'base64');
+    if (buffer.length > MAX_IMAGE_SIZE) {
+      throw new Error('La imagen no puede superar 15 MB.');
+    }
+
+    // Crear la carpeta de destino si no existe
+    const userDir = path.join(this.uploadsPath, subfolder, userId);
+    if (!fs.existsSync(userDir)) {
+      fs.mkdirSync(userDir, { recursive: true });
+    }
+
+    return this.saveAsWebP(buffer, userDir, userId, Date.now(), subfolder);
+  }
+
+
+  /**
    * Comprime la imagen a WebP (máx 1000px ancho) y la guarda de forma asíncrona.
    * Esto NO bloquea el Event Loop de Node.js porque sharp usa libuv internamente.
    */
