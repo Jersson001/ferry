@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PortfolioItem } from './portfolio-item.entity';
 import { StorageService } from '../storage/storage.service';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 
 @Injectable()
 export class PortfolioService {
@@ -10,6 +11,7 @@ export class PortfolioService {
     @InjectRepository(PortfolioItem)
     private readonly portfolioRepository: Repository<PortfolioItem>,
     private readonly storageService: StorageService,
+    private readonly subscriptionsService: SubscriptionsService,
   ) {}
 
   async findAllByUser(userId: string): Promise<PortfolioItem[]> {
@@ -19,18 +21,36 @@ export class PortfolioService {
     });
   }
 
+  /**
+   * Verifica que el usuario no haya superado el límite de ítems de su plan.
+   */
+  private async checkPortfolioLimit(userId: string): Promise<void> {
+    const limit = await this.subscriptionsService.getPortfolioLimit(userId);
+    if (limit === -1) return; // Ilimitado (plan premium)
+
+    const count = await this.portfolioRepository.count({ where: { userId } });
+    if (count >= limit) {
+      throw new ForbiddenException(
+        `Has alcanzado el límite de ${limit} elemento(s) en tu portafolio. Actualiza tu plan para agregar más.`,
+      );
+    }
+  }
+
   async uploadAndCreate(
     file: Express.Multer.File,
     userId: string,
     description?: string,
   ): Promise<PortfolioItem> {
-    // 1. Guardar y comprimir usando StorageModule
+    // 1. Verificar límite del plan antes de guardar el archivo
+    await this.checkPortfolioLimit(userId);
+
+    // 2. Guardar y comprimir usando StorageModule
     const fileUrl = await this.storageService.saveFile(file, userId, 'portfolio');
 
-    // 2. Determinar tipo
+    // 3. Determinar tipo
     const type = file.mimetype.startsWith('video') ? 'video' : 'image';
 
-    // 3. Crear registro en base de datos
+    // 4. Crear registro en base de datos
     const item = this.portfolioRepository.create({
       userId,
       type,
@@ -46,6 +66,9 @@ export class PortfolioService {
     url: string,
     description?: string,
   ): Promise<PortfolioItem> {
+    // Verificar límite del plan antes de guardar el enlace
+    await this.checkPortfolioLimit(userId);
+
     const item = this.portfolioRepository.create({
       userId,
       type: 'link',
@@ -57,7 +80,7 @@ export class PortfolioService {
 
   async deleteItem(id: string, userId: string): Promise<void> {
     const item = await this.portfolioRepository.findOne({ where: { id } });
-    
+
     if (!item) {
       throw new NotFoundException('Item no encontrado');
     }
@@ -66,10 +89,8 @@ export class PortfolioService {
       throw new ForbiddenException('No tienes permiso para eliminar este item');
     }
 
-    // Borrar de la base de datos
     await this.portfolioRepository.remove(item);
 
-    // Borrar del disco si es imagen/video local
     if (item.type !== 'link' && item.url.includes('/uploads/')) {
       this.storageService.deleteFile(item.url);
     }

@@ -4,6 +4,15 @@ import { Project, ContractorProfile } from '../types';
 import { Badge, Card, Button, StarRating } from '../components/UIComponents';
 import { MapPin, DollarSign, Briefcase, Plus, User, HardHat, Search, ChevronRight, CheckCircle2, ArrowLeft, ShieldCheck, Image as ImageIcon, MessageSquare, FileText, Phone } from 'lucide-react';
 
+const getInitials = (name?: string) => {
+  if (!name || name === 'guest') return 'U';
+  const clean = name.replace(/@.*/, '').replace(/[^a-zA-Z0-9\s]/g, '').trim();
+  const parts = clean.split(/\s+/);
+  if (parts.length === 0 || !parts[0]) return 'U';
+  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+};
+
 // --- MOCK DATA FOR CONTRACTORS ---
 const MOCK_CONTRACTORS: ContractorProfile[] = [
   {
@@ -214,8 +223,11 @@ export const ProjectHub: React.FC = () => {
           {MOCK_CONTRACTORS.map(contractor => (
             <Card key={contractor.id} onClick={() => handleViewProfile(contractor)} className="cursor-pointer hover:shadow-md transition-shadow">
                <div className="flex items-start gap-3">
-                  <div className="w-12 h-12 bg-slate-200 rounded-full flex items-center justify-center font-bold text-slate-500 text-lg overflow-hidden">
-                     <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${contractor.id}&mood=happy`} alt={contractor.name} />
+                  <div 
+                    className="w-12 h-12 bg-ferry-500 rounded-full flex items-center justify-center text-white text-lg font-bold shadow-inner tracking-wider"
+                    style={{ fontFamily: "'Caviar Dreams', sans-serif" }}
+                  >
+                    {getInitials(contractor.name)}
                   </div>
                   <div className="flex-1">
                      <div className="flex justify-between items-start">
@@ -254,8 +266,11 @@ export const ProjectHub: React.FC = () => {
            </button>
            <div className="h-32 bg-gradient-to-r from-ferry-500 to-ferry-700 rounded-b-3xl -mx-4"></div>
            <div className="flex flex-col items-center -mt-16">
-              <div className="w-24 h-24 bg-white p-1 rounded-full shadow-lg">
-                 <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedContractor.id}&mood=happy`} className="w-full h-full rounded-full bg-slate-100" alt="Profile" />
+              <div 
+                className="w-24 h-24 bg-ferry-500 rounded-full flex items-center justify-center text-white text-3xl font-bold shadow-xl border-4 border-white uppercase tracking-wider"
+                style={{ fontFamily: "'Caviar Dreams', sans-serif" }}
+              >
+                {getInitials(selectedContractor.name)}
               </div>
               <h2 className="text-2xl font-bold text-slate-800 mt-2 flex items-center gap-2">
                 {selectedContractor.name}

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Param, UseGuards, Req, Query } from '@nestjs/common';
 import { SubscriptionsService } from './subscriptions.service';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { Request } from 'express';
@@ -12,9 +12,9 @@ export class SubscriptionsController {
   constructor(private readonly subscriptionsService: SubscriptionsService) {}
 
   @Get('plans')
-  async getPlans() {
+  async getPlans(@Query('role') role?: string) {
     // Público: todos pueden ver los precios
-    return this.subscriptionsService.getPlans();
+    return this.subscriptionsService.getPlans(role);
   }
 
   @UseGuards(JwtAuthGuard)

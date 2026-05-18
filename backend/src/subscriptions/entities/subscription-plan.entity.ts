@@ -6,19 +6,31 @@ export class SubscriptionPlan {
   id: string;
 
   @Column({ type: 'varchar' })
-  name: string; // ej: 'Básico', 'Profesional', 'Premium'
+  name: string; // ej: 'Gratuito', 'Profesional', 'Constructor Pro'
+
+  @Column({ type: 'varchar', default: 'CONTRACTOR' })
+  targetRole: string; // 'STORE' | 'CONTRACTOR' | 'CLIENT'
 
   @Column({ type: 'integer' })
-  priceInCents: number;
+  priceInCents: number; // Precio en centavos de COP (ej: 6000000 = $60.000 COP)
 
   @Column({ type: 'integer' })
-  credits: number; // Cuántos tokens otorga el plan
+  credits: number; // Tokens / postulaciones / leads por mes
+
+  @Column({ type: 'integer', default: -1 })
+  maxLeadsOrApplications: number; // -1 = ilimitado
+
+  @Column({ type: 'integer', default: 6 })
+  maxPortfolioItems: number; // Máximo ítems en galería de portafolio
+
+  @Column({ type: 'boolean', default: false })
+  hasVerifiedBadge: boolean; // Sello "Verificado" (Constructor Pro)
 
   @Column({ type: 'boolean', default: false })
   isPopular: boolean;
 
   @Column({ type: 'jsonb', nullable: true })
-  features: string[]; // ['Aplica a 5 proyectos', 'Soporte prioritario']
+  features: string[]; // ['Sello Verificado', 'Estadísticas de éxito']
 
   @CreateDateColumn()
   createdAt: Date;

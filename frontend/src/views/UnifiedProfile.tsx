@@ -7,6 +7,9 @@ import { UserProfile, UserRole, PortfolioItem } from '../types';
 import { useApi } from '../hooks/useApi';
 import { AddPortfolioItemModal } from '../components/AddPortfolioItemModal';
 import { PortfolioLightbox } from '../components/PortfolioLightbox';
+import { Crown, Sparkles } from 'lucide-react';
+import { getMySubscription, UserSubscription } from '../services/subscriptionService';
+import { PlansModal } from '../components/PlansModal';
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string;
 const GMAPS_SCRIPT_ID = 'google-maps-script';
@@ -27,6 +30,15 @@ const ensureGoogleMapsScript = (onReady: () => void) => {
   }
 };
 
+const getInitials = (name?: string) => {
+  if (!name || name === 'guest') return 'U';
+  const clean = name.replace(/@.*/, '').replace(/[^a-zA-Z0-9\s]/g, '').trim();
+  const parts = clean.split(/\s+/);
+  if (parts.length === 0 || !parts[0]) return 'U';
+  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+};
+
 interface Props {
   profile: UserProfile | null;
   onUpdateProfile: (profile: UserProfile) => void;
@@ -43,6 +55,8 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileSaveStatus, setProfileSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [showBalance, setShowBalance] = useState(false);
+  const [subscription, setSubscription] = useState<UserSubscription | null>(null);
+  const [showPlansModal, setShowPlansModal] = useState(false);
 
   // Editing states
   const [isEditingBasic, setIsEditingBasic] = useState(false);
@@ -67,6 +81,12 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
       setDescription(profile.description);
     }
   }, [profile]);
+
+  useEffect(() => {
+    getMySubscription()
+      .then(sub => setSubscription(sub))
+      .catch(() => {});
+  }, []);
 
   // Initialize / update Google Maps when showStoreMap is true and we have coords
   useEffect(() => {
@@ -322,6 +342,31 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
     fetchPortfolio();
   }, []);
 
+  if (!profile || profile.uid === 'guest') {
+    return (
+      <div className="flex flex-col items-center justify-center p-8 text-center min-h-[70vh] bg-slate-50 rounded-3xl m-4 border border-slate-200 shadow-sm">
+        <div className="w-20 h-20 bg-ferry-100 rounded-full flex items-center justify-center mb-6 shadow-inner">
+          <User className="w-10 h-10 text-ferry-500" />
+        </div>
+        <h2 className="text-2xl font-black text-slate-800 mb-2">Ingresa a tu Cuenta</h2>
+        <p className="text-slate-500 text-sm mb-8 max-w-xs leading-relaxed font-medium">
+          Inicia sesión o regístrate gratis para gestionar tu perfil profesional, anclar tus catálogos, subir fotos a tu portafolio y activar suscripciones premium.
+        </p>
+        <div className="w-full max-w-xs">
+          <Button
+            variant="primary"
+            onClick={() => {
+              if (onSignOut) onSignOut();
+            }}
+            className="w-full justify-center py-4 font-black shadow-lg rounded-2xl tracking-wide uppercase text-xs"
+          >
+            Iniciar Sesión o Registrarse
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 pb-24">
       {/* Header / Hero */}
@@ -330,11 +375,20 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
         <div className="flex flex-col items-center -mt-16">
           <div className="relative">
             <div className="w-28 h-28 bg-white p-1 rounded-full shadow-xl overflow-hidden">
-              <img
-                src={profile?.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.id || 'guest'}&mood=happy`}
-                className="w-full h-full rounded-full bg-slate-100 object-cover"
-                alt="Avatar"
-              />
+              {profile?.photoURL ? (
+                <img
+                  src={profile.photoURL}
+                  className="w-full h-full rounded-full bg-slate-100 object-cover"
+                  alt="Avatar"
+                />
+              ) : (
+                <div 
+                  className="w-full h-full rounded-full bg-ferry-500 flex items-center justify-center text-white text-4xl font-bold shadow-inner tracking-wider"
+                  style={{ fontFamily: "'Caviar Dreams', sans-serif" }}
+                >
+                  {getInitials(profile?.displayName || user?.email || 'U')}
+                </div>
+              )}
             </div>
             <button
               onClick={() => fileInputRef.current?.click()}
@@ -585,54 +639,56 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
           )}
 
           {/* Portfolio Section */}
-          <div>
-            <div className="flex justify-between items-center mb-3 px-1">
-              <h3 className="font-bold text-slate-800">Portafolio de Proyectos</h3>
-              <button onClick={() => setShowAddModal(true)} className="p-1.5 bg-ferry-100 text-ferry-600 rounded-lg">
-                <Plus className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {portfolio.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => setLightboxItem(item)}
-                  className="aspect-square rounded-xl overflow-hidden relative group bg-slate-100"
-                >
-                  {item.type === 'image' && (
-                    <img
-                      src={item.url}
-                      className="w-full h-full object-cover"
-                      alt={item.description || 'Proyecto'}
-                      onError={e => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/200?text=Imagen'; }}
-                    />
-                  )}
-                  {item.type === 'video' && (
-                    <>
-                      <video src={item.url} className="w-full h-full object-cover" muted playsInline />
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                        <PlayCircle className="w-8 h-8 text-white drop-shadow" />
-                      </div>
-                    </>
-                  )}
-                  {item.type === 'link' && (
-                    <div className="w-full h-full bg-orange-50 flex flex-col items-center justify-center gap-1 px-2">
-                      <ExternalLink className="w-6 h-6 text-ferry-500" />
-                      <span className="text-[10px] text-slate-500 font-medium text-center truncate w-full">{item.url.replace(/^https?:\/\//, '')}</span>
-                    </div>
-                  )}
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors rounded-xl" />
+          {profile?.role !== UserRole.STORE && (
+            <div>
+              <div className="flex justify-between items-center mb-3 px-1">
+                <h3 className="font-bold text-slate-800">Portafolio de Proyectos</h3>
+                <button onClick={() => setShowAddModal(true)} className="p-1.5 bg-ferry-100 text-ferry-600 rounded-lg">
+                  <Plus className="w-4 h-4" />
                 </button>
-              ))}
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="aspect-square rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 hover:bg-slate-50 hover:border-ferry-300 transition-all"
-              >
-                <Plus className="w-6 h-6 mb-1" />
-                <span className="text-[10px] font-bold uppercase">Subir</span>
-              </button>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {portfolio.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => setLightboxItem(item)}
+                    className="aspect-square rounded-xl overflow-hidden relative group bg-slate-100"
+                  >
+                    {item.type === 'image' && (
+                      <img
+                        src={item.url}
+                        className="w-full h-full object-cover"
+                        alt={item.description || 'Proyecto'}
+                        onError={e => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/200?text=Imagen'; }}
+                      />
+                    )}
+                    {item.type === 'video' && (
+                      <>
+                        <video src={item.url} className="w-full h-full object-cover" muted playsInline />
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                          <PlayCircle className="w-8 h-8 text-white drop-shadow" />
+                        </div>
+                      </>
+                    )}
+                    {item.type === 'link' && (
+                      <div className="w-full h-full bg-orange-50 flex flex-col items-center justify-center gap-1 px-2">
+                        <ExternalLink className="w-6 h-6 text-ferry-500" />
+                        <span className="text-[10px] text-slate-500 font-medium text-center truncate w-full">{item.url.replace(/^https?:\/\//, '')}</span>
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors rounded-xl" />
+                  </button>
+                ))}
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  className="aspect-square rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 hover:bg-slate-50 hover:border-ferry-300 transition-all"
+                >
+                  <Plus className="w-6 h-6 mb-1" />
+                  <span className="text-[10px] font-bold uppercase">Subir</span>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Add Portfolio Modal */}
           {showAddModal && (
@@ -687,59 +743,146 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
 
       {/* --- ACCOUNT VIEW --- */}
       {activeTab === 'ACCOUNT' && (
-        <div className="space-y-3 animate-in fade-in slide-in-from-right-4 duration-300">
+        <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+          {/* Tarjeta de Suscripción / Mi Plan */}
+          <Card className="border-2 border-ferry-500/30 bg-gradient-to-br from-orange-50/50 via-white to-white shadow-xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 transform translate-x-4 -translate-y-4 w-28 h-28 bg-ferry-500/10 rounded-full blur-xl pointer-events-none" />
+            
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <div className="flex items-center gap-2 text-ferry-600 font-bold text-xs uppercase tracking-wider mb-1">
+                  <Crown className="w-4 h-4" /> Suscripción Activa
+                </div>
+                <h3 className="text-2xl font-black text-slate-900">
+                  {subscription?.plan?.name || (profile?.role === UserRole.STORE ? 'Ferretería Gratuita' : 'Contratista Gratuito')}
+                </h3>
+              </div>
+              <Badge type={subscription?.plan?.priceInCents && subscription.plan.priceInCents > 0 ? 'success' : 'info'}>
+                {subscription?.status === 'active' ? 'ACTIVO' : 'GRATUITO'}
+              </Badge>
+            </div>
+
+            <p className="text-sm text-slate-600 mb-6">
+              {subscription?.plan?.priceInCents ? 'Disfrutando de los beneficios profesionales avanzados.' : 'Estás usando el plan básico gratuito de la plataforma.'}
+            </p>
+
+            {/* Barras de uso */}
+            <div className="space-y-4 mb-6 pt-2 border-t border-slate-100">
+              {profile?.role !== UserRole.STORE ? (
+                <>
+                  <div>
+                    <div className="flex justify-between text-xs font-bold text-slate-700 mb-1">
+                      <span>📷 Portafolio de Proyectos</span>
+                      <span>{portfolio.length} / {subscription?.plan?.maxPortfolioItems === -1 ? 'Ilimitadas' : (subscription?.plan?.maxPortfolioItems || 6)} fotos</span>
+                    </div>
+                    {subscription?.plan?.maxPortfolioItems !== -1 && (
+                      <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-ferry-500 rounded-full transition-all duration-500"
+                          style={{ width: `${Math.min(100, (portfolio.length / Math.max(1, subscription?.plan?.maxPortfolioItems || 6)) * 100)}%` }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs font-bold text-slate-700 mb-1">
+                      <span>📝 Postulaciones a Proyectos</span>
+                      <span>{subscription?.creditsBalance || 0} / {subscription?.plan?.maxLeadsOrApplications === -1 ? 'Ilimitadas' : (subscription?.plan?.maxLeadsOrApplications || 0)} disponibles</span>
+                    </div>
+                    {subscription?.plan?.maxLeadsOrApplications !== -1 && (
+                      <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-blue-500 rounded-full transition-all duration-500"
+                          style={{ width: `${Math.min(100, ((subscription?.creditsBalance || 0) / Math.max(1, subscription?.plan?.maxLeadsOrApplications || 1)) * 100)}%` }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <div className="flex justify-between text-xs font-bold text-slate-700 mb-1">
+                    <span>🎯 Leads Calificados</span>
+                    <span>{subscription?.creditsBalance ?? 10} / {subscription?.plan?.maxLeadsOrApplications === -1 ? 'Ilimitados' : (subscription?.plan?.maxLeadsOrApplications ?? 10)} disponibles</span>
+                  </div>
+                  {subscription?.plan?.maxLeadsOrApplications !== -1 && (
+                    <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-green-500 rounded-full transition-all duration-500"
+                        style={{ width: `${Math.min(100, ((subscription?.creditsBalance ?? 10) / Math.max(1, subscription?.plan?.maxLeadsOrApplications ?? 10)) * 100)}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <Button
+              variant="primary"
+              onClick={() => setShowPlansModal(true)}
+              className="w-full justify-center shadow-lg font-bold py-3"
+            >
+              <Sparkles className="w-4 h-4 mr-2" />
+              {subscription?.plan?.priceInCents ? 'Cambiar Plan o Ver Opciones' : 'Mejorar Plan a Profesional'}
+            </Button>
+          </Card>
+
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
 
-            {/* Balance de Ventas */}
-            <button
-              onClick={() => setShowBalance(prev => !prev)}
-              className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors border-b border-slate-100"
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-50 rounded-lg text-green-600">
-                  <TrendingUp className="w-5 h-5" />
-                </div>
-                <div className="text-left">
-                  <p className="font-bold text-sm text-slate-800">Balance de Ventas</p>
-                  <p className="text-xs text-slate-500">Resumen de ingresos generados por la app</p>
-                </div>
-              </div>
-              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${showBalance ? 'rotate-180' : ''}`} />
-            </button>
-
-            {/* Panel de balance — acordeón */}
-            {showBalance && (
-              <div className="px-4 pb-4 pt-3 bg-gradient-to-b from-green-50/60 to-white border-b border-slate-100 animate-in fade-in slide-in-from-top-2 duration-200">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-white rounded-xl border border-green-100 p-3 shadow-sm">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Hoy</p>
-                    <p className="text-lg font-extrabold text-green-600">$450.000</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">COP</p>
-                  </div>
-                  <div className="bg-white rounded-xl border border-ferry-100 p-3 shadow-sm">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Este mes</p>
-                    <p className="text-lg font-extrabold text-ferry-600">$3.200.000</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">COP</p>
-                  </div>
-                </div>
-                <div className="mt-3 bg-white rounded-xl border border-slate-100 p-3 shadow-sm">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Últimas transacciones</p>
-                  {[
-                    { desc: 'Cotización #1042 — Cemento y varilla', monto: '$185.000', hora: 'Hace 2h' },
-                    { desc: 'Cotización #1038 — Pintura vinilo x4', monto: '$112.000', hora: 'Ayer' },
-                    { desc: 'Cotización #1031 — Tubería PVC', monto: '$153.000', hora: 'Hace 3 días' },
-                  ].map((t, i) => (
-                    <div key={i} className="flex items-center justify-between py-1.5 border-b border-slate-50 last:border-0">
-                      <div>
-                        <p className="text-xs font-semibold text-slate-700">{t.desc}</p>
-                        <p className="text-[10px] text-slate-400">{t.hora}</p>
-                      </div>
-                      <span className="text-xs font-bold text-green-600">{t.monto}</span>
+            {/* Balance de Ventas (Solo para Ferreterías) */}
+            {profile?.role === UserRole.STORE && (
+              <>
+                <button
+                  onClick={() => setShowBalance(prev => !prev)}
+                  className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors border-b border-slate-100"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-green-50 rounded-lg text-green-600">
+                      <TrendingUp className="w-5 h-5" />
                     </div>
-                  ))}
-                </div>
-                <p className="text-center text-[9px] text-slate-300 mt-2 uppercase tracking-widest">Datos de ejemplo — próximamente en tiempo real</p>
-              </div>
+                    <div className="text-left">
+                      <p className="font-bold text-sm text-slate-800">Balance de Ventas</p>
+                      <p className="text-xs text-slate-500">Resumen de ingresos generados por la app</p>
+                    </div>
+                  </div>
+                  <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${showBalance ? 'rotate-180' : ''}`} />
+                </button>
+
+                {/* Panel de balance — acordeón */}
+                {showBalance && (
+                  <div className="px-4 pb-4 pt-3 bg-gradient-to-b from-green-50/60 to-white border-b border-slate-100 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-white rounded-xl border border-green-100 p-3 shadow-sm">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Hoy</p>
+                        <p className="text-lg font-extrabold text-green-600">$450.000</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">COP</p>
+                      </div>
+                      <div className="bg-white rounded-xl border border-ferry-100 p-3 shadow-sm">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Este mes</p>
+                        <p className="text-lg font-extrabold text-ferry-600">$3.200.000</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">COP</p>
+                      </div>
+                    </div>
+                    <div className="mt-3 bg-white rounded-xl border border-slate-100 p-3 shadow-sm">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Últimas transacciones</p>
+                      {[
+                        { desc: 'Cotización #1042 — Cemento y varilla', monto: '$185.000', hora: 'Hace 2h' },
+                        { desc: 'Cotización #1038 — Pintura vinilo x4', monto: '$112.000', hora: 'Ayer' },
+                        { desc: 'Cotización #1031 — Tubería PVC', monto: '$153.000', hora: 'Hace 3 días' },
+                      ].map((t, i) => (
+                        <div key={i} className="flex items-center justify-between py-1.5 border-b border-slate-50 last:border-0">
+                          <div>
+                            <p className="text-xs font-semibold text-slate-700">{t.desc}</p>
+                            <p className="text-[10px] text-slate-400">{t.hora}</p>
+                          </div>
+                          <span className="text-xs font-bold text-green-600">{t.monto}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-center text-[9px] text-slate-300 mt-2 uppercase tracking-widest">Datos de ejemplo — próximamente en tiempo real</p>
+                  </div>
+                )}
+              </>
             )}
 
             {/* Seguridad */}
@@ -768,6 +911,16 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
             <p className="text-center text-[10px] text-slate-400 mt-4 uppercase tracking-widest">Ferry App v1.0.4</p>
           </div>
         </div>
+      )}
+
+      {showPlansModal && (
+        <PlansModal
+          isOpen={showPlansModal}
+          onClose={() => setShowPlansModal(false)}
+          userRole={profile?.role || UserRole.USER}
+          currentSubscription={subscription}
+          onPlanUpdated={(newSub) => setSubscription(newSub)}
+        />
       )}
     </div>
   );

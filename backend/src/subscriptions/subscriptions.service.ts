@@ -17,25 +17,43 @@ export class SubscriptionsService {
     private dataSource: DataSource,
   ) {}
 
-  async getPlans(): Promise<SubscriptionPlan[]> {
-    return this.planRepository.find({ order: { priceInCents: 'ASC' } });
+  async getPlans(role?: string): Promise<SubscriptionPlan[]> {
+    const where = role ? { targetRole: role } : {};
+    return this.planRepository.find({ where, order: { priceInCents: 'ASC' } });
   }
 
   async getUserSubscription(userId: string): Promise<UserSubscription> {
-    let sub = await this.userSubRepository.findOne({ 
+    let sub = await this.userSubRepository.findOne({
       where: { userId },
-      relations: ['plan'] 
+      relations: ['plan'],
     });
 
     if (!sub) {
-      sub = this.userSubRepository.create({
+      const newSub = this.userSubRepository.create({
         userId,
         status: SubscriptionStatus.INACTIVE,
         creditsBalance: 0,
       });
-      await this.userSubRepository.save(sub);
+      await this.userSubRepository.save(newSub);
+      // Recargar con relaciones
+      sub = await this.userSubRepository.findOne({
+        where: { userId },
+        relations: ['plan'],
+      });
     }
-    return sub;
+    return sub!;
+  }
+
+  /**
+   * Retorna el límite de ítems de portafolio para un usuario.
+   * Si no tiene plan activo, se usa el límite del plan Gratuito (6).
+   */
+  async getPortfolioLimit(userId: string): Promise<number> {
+    const sub = await this.getUserSubscription(userId);
+    if (sub?.plan?.maxPortfolioItems !== undefined) {
+      return sub.plan.maxPortfolioItems;
+    }
+    return 6; // Default plan Gratuito
   }
 
   async getLedger(userId: string): Promise<CreditLedger[]> {
@@ -45,7 +63,6 @@ export class SubscriptionsService {
     });
   }
 
-  // Simulación de compra para el MVP (En producción se engancha con el webhook de Wompi)
   async purchasePlan(userId: string, planId: string): Promise<UserSubscription> {
     const plan = await this.planRepository.findOne({ where: { id: planId } });
     if (!plan) throw new NotFoundException('Plan no encontrado');
@@ -55,7 +72,6 @@ export class SubscriptionsService {
     await queryRunner.startTransaction();
 
     try {
-      // 1. Bloquear o crear la suscripción
       let sub = await queryRunner.manager.findOne(UserSubscription, {
         where: { userId },
         lock: { mode: 'pessimistic_write' },
@@ -65,19 +81,16 @@ export class SubscriptionsService {
         sub = queryRunner.manager.create(UserSubscription, { userId, creditsBalance: 0 });
       }
 
-      // 2. Actualizar la suscripción
       sub.planId = plan.id;
       sub.status = SubscriptionStatus.ACTIVE;
-      sub.creditsBalance += plan.credits; // Acumular
-      
-      // Añadir 30 días al periodo
+      sub.creditsBalance += plan.credits;
+
       const nextMonth = new Date();
       nextMonth.setMonth(nextMonth.getMonth() + 1);
       sub.currentPeriodEnd = nextMonth;
 
       await queryRunner.manager.save(sub);
 
-      // 3. Crear el registro inmutable en el Ledger
       const ledgerEntry = queryRunner.manager.create(CreditLedger, {
         userId,
         type: LedgerType.EARNED,
@@ -96,7 +109,6 @@ export class SubscriptionsService {
     }
   }
 
-  // Método usado internamente cuando un contratista aplica a un proyecto (Módulo B-8)
   async deductCredits(userId: string, amount: number, reference: string): Promise<void> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -112,11 +124,9 @@ export class SubscriptionsService {
         throw new BadRequestException('Créditos insuficientes para realizar esta acción');
       }
 
-      // Descontar
       sub.creditsBalance -= amount;
       await queryRunner.manager.save(sub);
 
-      // Registrar
       const ledgerEntry = queryRunner.manager.create(CreditLedger, {
         userId,
         type: LedgerType.SPENT,
@@ -134,14 +144,106 @@ export class SubscriptionsService {
     }
   }
 
-  // Utilidad de seeding para crear planes por defecto si no existen
+  /**
+   * Pobla la base de datos con los planes oficiales del modelo de negocio Ferry.
+   * Solo se ejecuta si la tabla está vacía (auto-seeding al iniciar).
+   */
   async seedPlans() {
-    const count = await this.planRepository.count();
-    if (count === 0) {
-      await this.planRepository.save([
-        { name: 'Gratis', priceInCents: 0, credits: 3, isPopular: false, features: ['3 Aplicaciones/mes', 'Perfil Básico'] },
-        { name: 'Pro', priceInCents: 2990000, credits: 20, isPopular: true, features: ['20 Aplicaciones/mes', 'Destacado', 'Soporte'] },
-      ]);
-    }
+    // Forzar resiembra incondicional para asegurar textos de beneficios exactos del cliente
+    await this.planRepository.createQueryBuilder().delete().execute(); // Eliminar todos los registros con QueryBuilder para activar cascades
+
+    await this.planRepository.save([
+      // ─── SEGMENTO: FERRETERÍAS Y TIENDAS ───────────────────────────────
+      {
+        name: 'Gratuito',
+        targetRole: 'STORE',
+        priceInCents: 0,
+        credits: 10,
+        maxLeadsOrApplications: 10,
+        maxPortfolioItems: 6,
+        hasVerifiedBadge: false,
+        isPopular: false,
+        features: ['Edición perfil, subida de catálogo.'],
+      },
+      {
+        name: 'Profesional',
+        targetRole: 'STORE',
+        priceInCents: 6000000, // $60.000 COP en centavos
+        credits: 40,
+        maxLeadsOrApplications: 40,
+        maxPortfolioItems: 20,
+        hasVerifiedBadge: false,
+        isPopular: true,
+        features: ['Visibilidad en Home, productos destacados.'],
+      },
+      {
+        name: 'Empresarial',
+        targetRole: 'STORE',
+        priceInCents: 11000000, // $110.000 COP
+        credits: 100,
+        maxLeadsOrApplications: 100,
+        maxPortfolioItems: 50,
+        hasVerifiedBadge: false,
+        isPopular: false,
+        features: ['Push notifications (radio 5km).'],
+      },
+      {
+        name: 'Distribuidor Elite',
+        targetRole: 'STORE',
+        priceInCents: 20000000, // $200.000 COP
+        credits: 9999,
+        maxLeadsOrApplications: -1, // Ilimitado
+        maxPortfolioItems: -1, // Ilimitado
+        hasVerifiedBadge: true,
+        isPopular: false,
+        features: ['Analítica avanzada de precios y prioridad máxima.'],
+      },
+
+      // ─── SEGMENTO: CONTRATISTAS Y PROFESIONALES ────────────────────────
+      {
+        name: 'Gratuito',
+        targetRole: 'CONTRACTOR',
+        priceInCents: 0,
+        credits: 0,
+        maxLeadsOrApplications: 0,
+        maxPortfolioItems: 6,
+        hasVerifiedBadge: false,
+        isPopular: false,
+        features: ['10 transcripciones IA/mes.'],
+      },
+      {
+        name: 'Maestro Sub',
+        targetRole: 'CONTRACTOR',
+        priceInCents: 3000000, // $30.000 COP
+        credits: 6,
+        maxLeadsOrApplications: 6,
+        maxPortfolioItems: 15,
+        hasVerifiedBadge: false,
+        isPopular: false,
+        features: ['Acceso a contacto post-match.'],
+      },
+      {
+        name: 'Especialista',
+        targetRole: 'CONTRACTOR',
+        priceInCents: 5500000, // $55.000 COP
+        credits: 15,
+        maxLeadsOrApplications: 15,
+        maxPortfolioItems: 30,
+        hasVerifiedBadge: false,
+        isPopular: true,
+        features: ['Prioridad visual en proyectos nuevos.'],
+      },
+      {
+        name: 'Constructor Pro',
+        targetRole: 'CONTRACTOR',
+        priceInCents: 9000000, // $90.000 COP
+        credits: 35,
+        maxLeadsOrApplications: 35,
+        maxPortfolioItems: -1, // Ilimitado
+        hasVerifiedBadge: true,
+        isPopular: false,
+        features: ['Sello Verificado y estadísticas de éxito.'],
+      },
+    ]);
   }
 }

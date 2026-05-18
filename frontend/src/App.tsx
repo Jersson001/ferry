@@ -492,7 +492,7 @@ const App: React.FC = () => {
         {currentUserRole === UserRole.ADMIN && <AdminPanel requests={requests} onManualQuote={handleManualQuote} />}
 
         {currentView === 'PROFILE' ? (
-          <UnifiedProfile profile={currentUserProfile} onUpdateProfile={(p) => setCurrentUserProfile(p)} onSignOut={() => { setIsLoggedIn(false); setIsGuest(true); setCurrentUserProfile(null); }} />
+          <UnifiedProfile profile={currentUserProfile} onUpdateProfile={(p) => setCurrentUserProfile(p)} onSignOut={() => { setIsLoggedIn(false); setIsGuest(false); setCurrentUserProfile(null); }} />
         ) : (
           <>
             {currentUserRole === UserRole.STORE && currentView === 'HOME' && <StorePanel requests={requests} profile={currentUserProfile} />}
