@@ -28,15 +28,34 @@ export class Project {
   description: string;
 
   @Column({ type: 'varchar' })
-  category: string; // ej: 'Plomería', 'Obra Civil'
+  category: string;
 
-  @Column({ type: 'integer', nullable: true })
-  budgetInCents?: number; // Presupuesto estimado del cliente (opcional)
+  @Column({
+    type: 'bigint',
+    nullable: true,
+    transformer: {
+      to: (value?: number) => value,
+      from: (value?: string) => value ? parseInt(value, 10) : undefined,
+    },
+  })
+  budgetInCents?: number;
 
+  /** Ciudad / Zona pública — visible en el feed */
   @Column({ type: 'varchar' })
   location: string;
 
-  @Column({ type: 'text', nullable: true })
+  /** Dirección exacta confidencial — solo se revela al contratista aceptado */
+  @Column({ type: 'text', nullable: true, name: 'exact_address' })
+  exactAddress?: string;
+
+  /** Contacto directo del cliente (teléfono) — solo se revela al contratista aceptado */
+  @Column({ type: 'varchar', nullable: true, name: 'contact_phone' })
+  contactPhone?: string;
+
+  @Column({ type: 'boolean', default: false, name: 'is_urgent' })
+  isUrgent: boolean;
+
+  @Column({ type: 'text', nullable: true, name: 'image_url' })
   imageUrl?: string;
 
   @Column({ type: 'enum', enum: ProjectStatus, default: ProjectStatus.OPEN })

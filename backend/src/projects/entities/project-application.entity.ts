@@ -30,7 +30,13 @@ export class ProjectApplication {
   @Column({ type: 'text' })
   proposal: string; // Mensaje o justificación
 
-  @Column({ type: 'integer' })
+  @Column({
+    type: 'bigint',
+    transformer: {
+      to: (value: number) => value,
+      from: (value: string) => parseInt(value, 10),
+    },
+  })
   estimatedPriceInCents: number;
 
   @Column({ type: 'enum', enum: ApplicationStatus, default: ApplicationStatus.PENDING })
