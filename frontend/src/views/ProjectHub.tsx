@@ -2,8 +2,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Badge, Card, Button } from '../components/UIComponents';
 import { MapPin, DollarSign, Briefcase, Plus, User, HardHat, Search, ChevronRight, CheckCircle2, ArrowLeft, ShieldCheck, FileText, Phone, Loader2, X, AlertCircle } from 'lucide-react';
-import { createProject, getMyProjects, getProjectFeed, getProjectApplications, applyToProject, acceptApplication, cancelProject, ProjectFeedItem, ProjectApplication } from '../services/projectsService';
-import { generateIntegrityHash, WOMPI_PUBLIC_KEY } from '../utils/wompi';
+import { createProject, getMyProjects, getProjectFeed, getProjectApplications, applyToProject, acceptApplication, cancelProject, ProjectFeedItem, ProjectApplication, getProjectWompiSignature } from '../services/projectsService';
+import { openWompiCheckout } from '../utils/wompi';
 
 const getInitials = (name?: string) => {
   if (!name || name === 'guest') return 'U';
@@ -108,25 +108,25 @@ export const ProjectHub: React.FC = () => {
       };
 
       if (newProject.postType === 'MULTIMEDIA' || newProject.postType === 'VIP') {
-        const amount = newProject.postType === 'MULTIMEDIA' ? 990000 : 1990000;
-        const reference = `PROJECT-${Date.now()}`;
-        const hash = await generateIntegrityHash(reference, amount, 'COP');
+        const { reference, signature, amountInCents } = await getProjectWompiSignature(newProject.postType);
         
-        const checkout = new (window as any).WidgetCheckout({
-          currency: 'COP',
-          amountInCents: amount,
-          reference: reference,
-          publicKey: WOMPI_PUBLIC_KEY,
-          signature: { integrity: hash }
-        });
-        checkout.open((res: any) => {
-          if (res.transaction.status === 'APPROVED') {
-            doSubmit(res.transaction.id);
-          } else {
-            setError('El pago fue rechazado o cancelado.');
-            setPosting(false);
+        await openWompiCheckout(
+          {
+            quoteId: reference, // Identificador temporal, el reference rige.
+            requestId: '',
+            amountInCents,
+            reference,
+            signature
+          },
+          async (res) => {
+            if (res.transaction.status === 'APPROVED') {
+              doSubmit(res.transaction.id);
+            } else {
+              setError('El pago fue rechazado o cancelado.');
+              setPosting(false);
+            }
           }
-        });
+        );
       } else {
         await doSubmit();
       }

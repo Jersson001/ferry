@@ -1,10 +1,11 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { PaymentTransaction, PaymentStatus } from './entities/payment-transaction.entity';
 import { QuotesService } from '../quotes/quotes.service';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 
 @Injectable()
 export class PaymentsService {
@@ -15,6 +16,8 @@ export class PaymentsService {
     private transactionRepository: Repository<PaymentTransaction>,
     private quotesService: QuotesService,
     private configService: ConfigService,
+    @Inject(forwardRef(() => SubscriptionsService))
+    private subscriptionsService: SubscriptionsService,
   ) {}
 
   // 1. Generar Hash de Integridad para el Frontend (Widget)
@@ -77,14 +80,30 @@ export class PaymentsService {
 
     await this.transactionRepository.save(newTx);
 
-    // 3. Actuar sobre el Quote si fue aprobado
-    if (newTx.status === PaymentStatus.APPROVED && newTx.quoteId) {
-      this.logger.log(`Pago aprobado para cotización ${newTx.quoteId}. Actualizando estados...`);
-      // Llamamos a payQuote para hacer la transacción atómica (QuotesService)
-      // Como esto ocurre asíncronamente por webhook, pasamos un userId "SYSTEM" o el userId original no importa tanto
-      // Pero payQuote espera un userId para seguridad. 
-      // Por diseño, confiaremos en el webhook y saltamos la validación del usuario usando un bypass o actualizando directo
-      await this.confirmQuotePayment(newTx.quoteId);
+    // 3. Actuar sobre el Quote o Suscripción si fue aprobado
+    if (newTx.status === PaymentStatus.APPROVED) {
+      if (newTx.reference.startsWith('QUOTE-') && newTx.quoteId) {
+        this.logger.log(`Pago aprobado para cotización ${newTx.quoteId}. Actualizando estados...`);
+        await this.confirmQuotePayment(newTx.quoteId);
+      } else if (newTx.reference.startsWith('SUB_')) {
+        // Formato: SUB_{userId}_{planId}_{timestamp}
+        const parts = newTx.reference.split('_');
+        if (parts.length >= 4) {
+          const userId = parts[1];
+          const planId = parts[2];
+          
+          this.logger.log(`Pago aprobado para suscripción de usuario ${userId} (Plan ${planId}).`);
+          await this.confirmSubscriptionPayment(userId, planId);
+        }
+      }
+    }
+  }
+
+  private async confirmSubscriptionPayment(userId: string, planId: string) {
+    try {
+      await this.subscriptionsService.purchasePlan(userId, planId);
+    } catch (e: any) {
+      this.logger.error(`No se pudo actualizar la suscripción a PAID: ${e.message}`);
     }
   }
 
@@ -192,9 +211,21 @@ export class PaymentsService {
           paymentMethodType: wompiData.payment_method_type,
           quoteId,
         });
-        await this.transactionRepository.save(tx);
+        
+        try {
+          await this.transactionRepository.save(tx);
+        } catch (dbErr: any) {
+          // Si es una violación de restricción única (23505 en Postgres), significa que el webhook de Wompi 
+          // acaba de guardar esta misma transacción fracciones de segundo antes.
+          if (dbErr.code === '23505' || dbErr.code === 'SQLITE_CONSTRAINT') {
+            this.logger.log(`Condición de carrera resuelta: El webhook ya había guardado la tx ${transactionId}`);
+            tx = await this.transactionRepository.findOne({ where: { transactionId } });
+          } else {
+            throw dbErr;
+          }
+        }
 
-      } catch (err) {
+      } catch (err: any) {
         // Re-lanzamos errores de seguridad directamente
         if (err instanceof BadRequestException) throw err;
         this.logger.error(`Error verificando Wompi API para tx ${transactionId}: ${err.message}`);
@@ -205,6 +236,86 @@ export class PaymentsService {
     if (tx && tx.status === PaymentStatus.APPROVED) {
       // Usamos el userId proveído para que payQuote valide que el quote pertenece a este usuario
       await this.quotesService.payQuote(quoteId, userId);
+      return { success: true };
+    }
+
+    throw new BadRequestException('El pago no ha sido aprobado por Wompi aún.');
+  }
+
+  // Verificación explícita de Suscripciones (Frontend Redirect)
+  async verifyWompiSubscriptionTransaction(transactionId: string, userId: string): Promise<{ success: boolean }> {
+    let tx = await this.transactionRepository.findOne({ where: { transactionId } });
+    
+    if (!tx) {
+      try {
+        const useProduction = this.configService.get<string>('WOMPI_ENV') === 'production';
+        const baseUrl = useProduction
+          ? 'https://production.wompi.co/v1'
+          : 'https://sandbox.wompi.co/v1';
+        const url = `${baseUrl}/transactions/${transactionId}`;
+        const response = await fetch(url);
+        const json = await response.json();
+        
+        if (!json.data || json.data.status !== 'APPROVED') {
+          throw new BadRequestException('El pago no ha sido aprobado por Wompi aún.');
+        }
+
+        const wompiData = json.data;
+        const reference = wompiData.reference as string;
+        
+        if (!reference.startsWith('SUB_')) {
+           throw new BadRequestException('La transacción no corresponde a una suscripción.');
+        }
+
+        const parts = reference.split('_');
+        const refUserId = parts[1];
+        const planId = parts[2];
+
+        if (refUserId !== userId) {
+           throw new BadRequestException('Intento de fraude: la suscripción no pertenece a este usuario.');
+        }
+
+        const plans = await this.subscriptionsService.getPlans();
+        const plan = plans.find(p => p.id === planId);
+        if (!plan) throw new BadRequestException('Plan no encontrado.');
+
+        const expectedAmountInCents = plan.priceInCents;
+        if (wompiData.amount_in_cents !== expectedAmountInCents) {
+          throw new BadRequestException('El monto de la transacción no coincide con el valor de la suscripción.');
+        }
+
+        tx = this.transactionRepository.create({
+          transactionId: wompiData.id,
+          reference: wompiData.reference,
+          amountInCents: wompiData.amount_in_cents,
+          currency: wompiData.currency,
+          status: PaymentStatus.APPROVED,
+          paymentMethodType: wompiData.payment_method_type,
+        });
+        
+        try {
+          await this.transactionRepository.save(tx);
+        } catch (dbErr: any) {
+          if (dbErr.code === '23505' || dbErr.code === 'SQLITE_CONSTRAINT') {
+            tx = await this.transactionRepository.findOne({ where: { transactionId } });
+          } else {
+            throw dbErr;
+          }
+        }
+
+      } catch (err: any) {
+        if (err instanceof BadRequestException) throw err;
+        this.logger.error(`Error verificando Wompi API para suscripción tx ${transactionId}: ${err.message}`);
+        throw new BadRequestException('No se pudo verificar el pago con Wompi.');
+      }
+    }
+
+    if (tx && tx.status === PaymentStatus.APPROVED) {
+      const parts = tx.reference.split('_');
+      const refUserId = parts[1];
+      const planId = parts[2];
+      
+      await this.subscriptionsService.purchasePlan(refUserId, planId);
       return { success: true };
     }
 

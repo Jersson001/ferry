@@ -1,14 +1,16 @@
-import { Module, OnModuleInit } from '@nestjs/common';
+import { Module, OnModuleInit, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SubscriptionsController } from './subscriptions.controller';
 import { SubscriptionsService } from './subscriptions.service';
 import { SubscriptionPlan } from './entities/subscription-plan.entity';
 import { UserSubscription } from './entities/user-subscription.entity';
 import { CreditLedger } from './entities/credit-ledger.entity';
+import { PaymentsModule } from '../payments/payments.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([SubscriptionPlan, UserSubscription, CreditLedger]),
+    forwardRef(() => PaymentsModule),
   ],
   controllers: [SubscriptionsController],
   providers: [SubscriptionsService],

@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Card, Button, Badge } from './UIComponents';
 import { Check, Star, Zap, Shield, Crown, X, ArrowRight, Loader2 } from 'lucide-react';
-import { getSubscriptionPlans, purchasePlan, SubscriptionPlan, UserSubscription } from '../services/subscriptionService';
+import { getSubscriptionPlans, purchasePlan, getSubscriptionWompiSignature, verifySubscriptionWompiPayment, getMySubscription, SubscriptionPlan, UserSubscription } from '../services/subscriptionService';
 import { UserRole } from '../types';
+import { openWompiCheckout } from '../utils/wompi';
 
 interface Props {
   isOpen: boolean;
@@ -37,12 +38,44 @@ export const PlansModal: React.FC<Props> = ({ isOpen, onClose, userRole, current
     setPurchasingId(plan.id);
     setError(null);
     try {
-      const updated = await purchasePlan(plan.id);
-      onPlanUpdated(updated);
-      onClose();
+      if (plan.priceInCents === 0) {
+        // Plan Gratis
+        const updated = await purchasePlan(plan.id);
+        onPlanUpdated(updated);
+        onClose();
+        setPurchasingId(null);
+      } else {
+        // Plan de Pago con Wompi
+        const { reference, signature, amountInCents } = await getSubscriptionWompiSignature(plan.id);
+        
+        await openWompiCheckout(
+          {
+             quoteId: plan.id, // Reutilizado, Wompi no se quejará mientras reference y signature sean válidos
+             requestId: '',
+             amountInCents,
+             reference,
+             signature
+          },
+          async (result) => {
+            if (result.transaction.status === 'APPROVED') {
+               setPurchasingId(plan.id); // Mostrar loader mientras verifica
+               try {
+                 await verifySubscriptionWompiPayment(result.transaction.id);
+                 const updated = await getMySubscription();
+                 onPlanUpdated(updated);
+                 onClose();
+               } catch (err: any) {
+                 setError(err.message || 'Error verificando el pago con el servidor.');
+                 setPurchasingId(null);
+               }
+            } else {
+               setPurchasingId(null);
+            }
+          }
+        );
+      }
     } catch (err: any) {
       setError(err.message || 'Error al procesar la mejora');
-    } finally {
       setPurchasingId(null);
     }
   };
@@ -165,7 +198,9 @@ export const PlansModal: React.FC<Props> = ({ isOpen, onClose, userRole, current
                           </>
                         )}
                       </Button>
-                      <p className="text-[10px] text-center text-slate-400 mt-2 font-bold uppercase tracking-wider">Activación simulada instantánea</p>
+                      <p className="text-[10px] text-center text-slate-400 mt-2 font-bold uppercase tracking-wider">
+                        {plan.priceInCents === 0 ? 'Activación instantánea' : 'Pago seguro con Wompi'}
+                      </p>
                     </div>
                   </div>
                 );

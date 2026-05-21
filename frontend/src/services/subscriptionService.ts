@@ -64,6 +64,22 @@ export async function purchasePlan(planId: string): Promise<UserSubscription> {
   });
 }
 
+export async function getSubscriptionWompiSignature(planId: string): Promise<{
+  reference: string;
+  amountInCents: number;
+  currency: string;
+  signature: string;
+}> {
+  return apiRequest(`/subscriptions/wompi/signature/${planId}`);
+}
+
+export async function verifySubscriptionWompiPayment(transactionId: string): Promise<void> {
+  await apiRequest(`/subscriptions/wompi/verify`, {
+    method: 'POST',
+    body: JSON.stringify({ transactionId }),
+  });
+}
+
 // Endpoint de Modo Dios (ADMIN)
 export async function getAdminUsersWithSubscriptions(): Promise<any[]> {
   return apiRequest<any[]>('/admin/users-with-subscriptions');

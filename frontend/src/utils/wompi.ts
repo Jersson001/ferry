@@ -37,28 +37,8 @@ interface WompiWidgetInstance {
 }
 
 // ─── Claves ───────────────────────────────────────────────────────────────────
-export const WOMPI_PUBLIC_KEY    = import.meta.env.VITE_WOMPI_PUBLIC_KEY    as string;
-const        WOMPI_INTEGRITY_SECRET = import.meta.env.VITE_WOMPI_INTEGRITY_SECRET as string;
-
+export const WOMPI_PUBLIC_KEY    = import.meta.env.VITE_WOMPI_PUBLIC_KEY || '';
 const LS_KEY = 'ferry_wompi_ctx';
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-export const buildReference = (quoteId: string): string =>
-  `FY-${quoteId.slice(-6).toUpperCase()}-${Date.now()}`;
-
-const sha256hex = async (raw: string): Promise<string> => {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-};
-
-// ─── Integrity hash ───────────────────────────────────────────────────────────
-export const generateIntegrityHash = (
-  reference:     string,
-  amountInCents: number,
-  currency = 'COP',
-): Promise<string> =>
-  sha256hex(`${reference}${amountInCents}${currency}${WOMPI_INTEGRITY_SECRET}`);
 
 // ─── Contexto persistente (respaldo por si el callback no llega) ─────────────
 export interface WompiCtx {
@@ -90,13 +70,13 @@ export const openWompiCheckout = async (
     quoteId:       string;
     requestId:     string;
     amountInCents: number;
+    reference:     string;
+    signature:     string;
     currency?:     string;
   },
   onResult: (result: WompiWidgetResult) => void,
 ): Promise<void> => {
-  const { quoteId, requestId, amountInCents, currency = 'COP' } = params;
-  const reference = buildReference(quoteId);
-  const hash      = await generateIntegrityHash(reference, amountInCents, currency);
+  const { quoteId, requestId, amountInCents, reference, signature, currency = 'COP' } = params;
 
   // Guardar contexto como respaldo en caso de refresco o cierre inesperado
   saveWompiCtx({ quoteId, requestId, amount: amountInCents / 100 });
@@ -106,7 +86,7 @@ export const openWompiCheckout = async (
     amountInCents,
     reference,
     publicKey: WOMPI_PUBLIC_KEY,
-    signature: { integrity: hash },
+    signature: { integrity: signature },
   });
 
   checkout.open(onResult);
@@ -133,18 +113,8 @@ export const checkWompiRedirect = async (): Promise<WompiRedirectResult | null> 
 
   const reference     = p.get('reference')              ?? '';
   const amountInCents = parseInt(p.get('amount_in_cents') ?? '0', 10);
-  const checksum      = p.get('signing.checksum')       ?? '';
-  const properties    = (p.get('signing.properties') ?? '').split(',').map(s => s.trim());
-
-  const propValues: Record<string, string> = {
-    id:              transactionId,
-    status,
-    amount_in_cents: String(amountInCents),
-    reference,
-  };
-  const raw      = properties.map(k => propValues[k] ?? '').join('') + WOMPI_INTEGRITY_SECRET;
-  const computed = await sha256hex(raw);
-  const valid    = computed === checksum;
+  // La validación real ocurre en el backend, no necesitamos el secreto aquí
+  const valid = true;
 
   const ctx = loadWompiCtx();
   clearWompiCtx();

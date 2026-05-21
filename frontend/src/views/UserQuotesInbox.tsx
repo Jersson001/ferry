@@ -22,6 +22,7 @@ import {
   formatRelativeTime,
   submitManualPayment,
   confirmDelivery,
+  getWompiSignature,
   ReceivedQuote,
   QuoteResponseItem,
   AcceptQuoteResult,
@@ -262,18 +263,37 @@ const PaymentCheckoutModal: React.FC<{
 
   const isManual = selectedMethod === 'nequi';
 
-  const handleWompiRedirect = () => {
-    openWompiCheckout(
-      { quoteId: quote.id, requestId: quote.requestId, amountInCents },
-      (result) => {
-        if (result.transaction.status === 'APPROVED') {
-          onClose();
-          onWompiApproved(result.transaction.id);
-        }
-        // DECLINED / ERROR / VOIDED: el overlay de Wompi ya muestra el mensaje;
-        // el modal de Ferry se deja abierto para que el usuario elija otro método.
-      },
-    ).catch((err: unknown) => console.error('[Ferry/Wompi] error al abrir checkout:', err));
+  const handleWompiRedirect = async () => {
+    setPayError(null);
+    setProcessing(true);
+    try {
+      // 1. Obtener firma segura desde el backend
+      const { reference, signature, amountInCents: backendAmountInCents } = await getWompiSignature(quote.id);
+      
+      // 2. Abrir checkout con la información provista por el backend
+      await openWompiCheckout(
+        { 
+          quoteId: quote.id, 
+          requestId: quote.requestId, 
+          amountInCents: backendAmountInCents,
+          reference,
+          signature
+        },
+        (result) => {
+          if (result.transaction.status === 'APPROVED') {
+            onClose();
+            onWompiApproved(result.transaction.id);
+          }
+          // DECLINED / ERROR / VOIDED: el overlay de Wompi ya muestra el mensaje;
+          // el modal de Ferry se deja abierto para que el usuario elija otro método.
+        },
+      );
+    } catch (err: any) {
+      console.error('[Ferry/Wompi] error al abrir checkout:', err);
+      setPayError(err.message || 'Error al iniciar pago seguro con Wompi');
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const handleFileChange = (file: File | null) => {

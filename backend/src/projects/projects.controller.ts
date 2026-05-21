@@ -1,7 +1,8 @@
-import { Controller, Get, Post, Delete, Body, Param, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, UseGuards, Req, Inject, forwardRef } from '@nestjs/common';
 import { ProjectsService } from './projects.service';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { Request } from 'express';
+import { PaymentsService } from '../payments/payments.service';
 
 interface RequestWithUser extends Request {
   user: { uid: string; email: string; role: string };
@@ -10,7 +11,11 @@ interface RequestWithUser extends Request {
 @Controller('projects')
 @UseGuards(JwtAuthGuard)
 export class ProjectsController {
-  constructor(private readonly projectsService: ProjectsService) {}
+  constructor(
+    private readonly projectsService: ProjectsService,
+    @Inject(forwardRef(() => PaymentsService))
+    private readonly paymentsService: PaymentsService
+  ) {}
 
   // ==========================================
   // CLIENTES
@@ -20,6 +25,14 @@ export class ProjectsController {
   @Post()
   async createProject(@Req() req: RequestWithUser, @Body() data: any) {
     return this.projectsService.createProject(req.user.uid, data);
+  }
+
+  @Get('wompi/signature/:type')
+  async getSignature(@Param('type') type: string, @Req() req: RequestWithUser) {
+    const amountInCents = type === 'MULTIMEDIA' ? 990000 : 1990000;
+    const reference = `PROJECT-${req.user.uid}-${Date.now()}`;
+    const signature = this.paymentsService.generateWidgetSignature(reference, amountInCents, 'COP');
+    return { reference, amountInCents, currency: 'COP', signature };
   }
 
   /** GET /projects/own — Mis proyectos publicados */

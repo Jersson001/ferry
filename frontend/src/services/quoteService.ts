@@ -253,6 +253,15 @@ export const rejectQuote = async (quoteId: string, requestId: string): Promise<v
   });
 };
 
+export const getWompiSignature = async (quoteId: string): Promise<{
+  reference: string;
+  amountInCents: number;
+  currency: string;
+  signature: string;
+}> => {
+  return apiRequest(`/payments/wompi/signature/${quoteId}`);
+};
+
 export const verifyWompiPayment = async (quoteId: string, transactionId: string): Promise<void> => {
   await apiRequest(`/payments/verify`, {
     method: 'POST',

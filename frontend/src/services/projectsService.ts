@@ -63,6 +63,17 @@ export const createProject = async (data: {
   return res.json();
 };
 
+export const getProjectWompiSignature = async (type: string): Promise<{
+  reference: string;
+  amountInCents: number;
+  currency: string;
+  signature: string;
+}> => {
+  const res = await fetch(`${API_URL}/projects/wompi/signature/${type}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error('Error obteniendo la firma de pago de Wompi');
+  return res.json();
+};
+
 // ── MIS PROYECTOS ───────────────────────────────────────────────────────────
 export const getMyProjects = async (): Promise<ProjectFeedItem[]> => {
   const res = await fetch(`${API_URL}/projects/own`, { headers: authHeaders() });
