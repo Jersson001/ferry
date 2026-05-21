@@ -58,6 +58,12 @@ export class Project {
   @Column({ type: 'text', nullable: true, name: 'image_url' })
   imageUrl?: string;
 
+  @Column({ type: 'varchar', default: 'STANDARD', name: 'post_type' })
+  postType: 'STANDARD' | 'MULTIMEDIA' | 'VIP';
+
+  @Column({ type: 'simple-array', nullable: true, name: 'media_urls' })
+  mediaUrls?: string[];
+
   @Column({ type: 'enum', enum: ProjectStatus, default: ProjectStatus.OPEN })
   status: ProjectStatus;
 

@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Badge, Card, Button } from '../components/UIComponents';
 import { MapPin, DollarSign, Briefcase, Plus, User, HardHat, Search, ChevronRight, CheckCircle2, ArrowLeft, ShieldCheck, FileText, Phone, Loader2, X, AlertCircle } from 'lucide-react';
 import { createProject, getMyProjects, getProjectFeed, getProjectApplications, applyToProject, acceptApplication, cancelProject, ProjectFeedItem, ProjectApplication } from '../services/projectsService';
+import { generateIntegrityHash, WOMPI_PUBLIC_KEY } from '../utils/wompi';
 
 const getInitials = (name?: string) => {
   if (!name || name === 'guest') return 'U';
@@ -41,7 +42,9 @@ export const ProjectHub: React.FC = () => {
   const [applyError, setApplyError] = useState<string | null>(null);
 
   // Form State
-  const [newProject, setNewProject] = useState({ title: '', desc: '', budget: '', category: 'Plomería', city: '', address: '', phone: '', urgent: false });
+  const [newProject, setNewProject] = useState<{ title: string, desc: string, budget: string, category: string, city: string, address: string, phone: string, urgent: boolean, postType: 'STANDARD'|'MULTIMEDIA'|'VIP' }>({ title: '', desc: '', budget: '', category: 'Plomería', city: '', address: '', phone: '', urgent: false, postType: 'STANDARD' });
+  const [mediaFiles, setMediaFiles] = useState<File[]>([]);
+  const [mediaError, setMediaError] = useState<string | null>(null);
 
   const categoriesList = ['Plomería', 'Eléctricos', 'Depósito', 'Pintura', 'Carpintería', 'Iluminación', 'Cerrajería', 'Gas', 'Estructural'];
 
@@ -60,24 +63,80 @@ export const ProjectHub: React.FC = () => {
   const handlePostProject = async () => {
     if (!newProject.title.trim() || !newProject.city.trim()) { setError('Título y Ciudad son obligatorios'); return; }
     setPosting(true); setError(null);
+    
     try {
       const budgetNum = parseInt(newProject.budget.replace(/\D/g, '')) || 0;
-      await createProject({
-        title: newProject.title,
-        description: newProject.desc,
-        category: newProject.category,
-        location: newProject.city,
-        exactAddress: newProject.address || undefined,
-        contactPhone: newProject.phone || undefined,
-        budgetInCents: budgetNum * 100,
-        isUrgent: newProject.urgent,
-      });
-      setIsPosting(false);
-      setNewProject({ title: '', desc: '', budget: '', category: 'Plomería', city: '', address: '', phone: '', urgent: false });
-      await loadMyProjects();
-    } catch (err: any) { setError(err.message); }
-    finally { setPosting(false); }
+      
+      const doSubmit = async (transactionId?: string) => {
+        // Upload files securely to backend using multipart/form-data
+        const uploadedUrls: string[] = [];
+        const token = localStorage.getItem('access_token');
+        for (const file of mediaFiles) {
+          const formData = new FormData();
+          formData.append('file', file);
+          const uploadRes = await fetch(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:3000'}/storage/upload`, {
+            method: 'POST',
+            headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+            body: formData
+          });
+          if (uploadRes.ok) {
+            const data = await uploadRes.json();
+            uploadedUrls.push(data.url);
+          } else {
+            throw new Error(`Fallo al subir el archivo: ${file.name}`);
+          }
+        }
+        
+        await createProject({
+          title: newProject.title,
+          description: newProject.desc,
+          category: newProject.category,
+          location: newProject.city,
+          exactAddress: newProject.address || undefined,
+          contactPhone: newProject.phone || undefined,
+          budgetInCents: budgetNum * 100,
+          isUrgent: newProject.urgent,
+          postType: newProject.postType,
+          mediaUrls: uploadedUrls,
+          // transactionId if Wompi was used
+        });
+        
+        setIsPosting(false);
+        setNewProject({ title: '', desc: '', budget: '', category: 'Plomería', city: '', address: '', phone: '', urgent: false, postType: 'STANDARD' });
+        setMediaFiles([]);
+        await loadMyProjects();
+      };
+
+      if (newProject.postType === 'MULTIMEDIA' || newProject.postType === 'VIP') {
+        const amount = newProject.postType === 'MULTIMEDIA' ? 990000 : 1990000;
+        const reference = `PROJECT-${Date.now()}`;
+        const hash = await generateIntegrityHash(reference, amount, 'COP');
+        
+        const checkout = new (window as any).WidgetCheckout({
+          currency: 'COP',
+          amountInCents: amount,
+          reference: reference,
+          publicKey: WOMPI_PUBLIC_KEY,
+          signature: { integrity: hash }
+        });
+        checkout.open((res: any) => {
+          if (res.transaction.status === 'APPROVED') {
+            doSubmit(res.transaction.id);
+          } else {
+            setError('El pago fue rechazado o cancelado.');
+            setPosting(false);
+          }
+        });
+      } else {
+        await doSubmit();
+      }
+    } catch (err: any) { 
+      setError(err.message);
+      setPosting(false); 
+    }
   };
+
+
 
   // ── Apply to project ──────────────────────────────────────────────
   const handleApply = async () => {
@@ -370,12 +429,117 @@ export const ProjectHub: React.FC = () => {
                   <label className="text-xs font-bold text-slate-500 uppercase">Descripción</label>
                   <textarea value={newProject.desc} onChange={(e) => setNewProject({...newProject, desc: e.target.value})} placeholder="Detalles del trabajo..." className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-ferry-500 h-24 resize-none"></textarea>
                 </div>
-                <label className="flex items-center gap-2 cursor-pointer">
+                <label className="flex items-center gap-2 cursor-pointer mb-2">
                   <input type="checkbox" checked={newProject.urgent} onChange={(e) => setNewProject({...newProject, urgent: e.target.checked})} className="rounded" />
                   <span className="text-sm font-semibold text-red-500">🔥 Marcar como URGENTE</span>
                 </label>
+
+                {/* Tiers UI */}
+                <div>
+                  <h4 className="text-sm font-bold text-slate-800 mb-2 mt-4">Elige el tipo de publicación</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div onClick={() => setNewProject({...newProject, postType: 'STANDARD'})} className={`cursor-pointer rounded-xl p-4 border-2 transition-all ${newProject.postType === 'STANDARD' ? 'border-ferry-500 bg-ferry-50 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
+                       <h5 className="font-bold text-slate-800 flex items-center gap-1">📝 Estándar</h5>
+                       <p className="text-xl font-black text-slate-800 my-1">Gratis</p>
+                       <p className="text-xs text-slate-500">Publicación en texto, recibe postulaciones base.</p>
+                    </div>
+                    <div onClick={() => setNewProject({...newProject, postType: 'MULTIMEDIA'})} className={`cursor-pointer rounded-xl p-4 border-2 transition-all ${newProject.postType === 'MULTIMEDIA' ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
+                       <h5 className="font-bold text-slate-800 flex items-center gap-1">📸 Multimedia</h5>
+                       <p className="text-xl font-black text-blue-600 my-1">$9.900</p>
+                       <p className="text-xs text-slate-500">Agrega fotos de tu daño para cotizaciones exactas.</p>
+                    </div>
+                    <div onClick={() => setNewProject({...newProject, postType: 'VIP'})} className={`cursor-pointer rounded-xl p-4 border-2 transition-all ${newProject.postType === 'VIP' ? 'border-yellow-500 bg-yellow-50 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
+                       <h5 className="font-bold text-slate-800 flex items-center gap-1">👑 VIP</h5>
+                       <p className="text-xl font-black text-yellow-600 my-1">$19.900</p>
+                       <p className="text-xs text-slate-500">Prioridad máxima. Atrae contratistas de 4.5+ estrellas.</p>
+                    </div>
+                  </div>
+                </div>
+
+                {(newProject.postType === 'MULTIMEDIA' || newProject.postType === 'VIP') && (
+                  <div className="mt-4 border-2 border-dashed border-slate-300 bg-slate-50 rounded-xl p-6 text-center">
+                    {mediaError && (
+                      <div className="mb-4 p-3 bg-red-50 text-red-600 text-xs rounded-xl flex items-start gap-2 text-left">
+                        <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" /><p>{mediaError}</p>
+                      </div>
+                    )}
+                    <input type="file" multiple accept="image/*,video/*" className="hidden" id="mediaUpload" onChange={(e) => {
+                      setMediaError(null);
+                      if (e.target.files) {
+                        const newFiles = Array.from(e.target.files);
+                        let err = '';
+                        
+                        setMediaFiles(prev => {
+                          const allFiles = [...prev, ...newFiles];
+                          let imgCount = 0;
+                          let vidCount = 0;
+                          const validFiles: File[] = [];
+
+                          for (const f of allFiles) {
+                            const isImage = f.type.startsWith('image/');
+                            const isVideo = f.type.startsWith('video/');
+                            
+                            if (isImage && f.size > 15 * 1024 * 1024) {
+                              err = 'Una imagen supera el límite de 15MB.'; continue;
+                            }
+                            if (isVideo && f.size > 50 * 1024 * 1024) {
+                              err = 'El video supera el límite de 50MB.'; continue;
+                            }
+
+                            if (isImage) {
+                              if (imgCount < 5) { imgCount++; validFiles.push(f); }
+                              else { err = 'Límite de 5 imágenes alcanzado. Se omitieron archivos extra.'; }
+                            } else if (isVideo) {
+                              if (vidCount < 1) { vidCount++; validFiles.push(f); }
+                              else { err = 'Límite de 1 video alcanzado. Se omitieron videos extra.'; }
+                            }
+                          }
+                          
+                          if (err) setMediaError(err);
+                          return validFiles;
+                        });
+                      }
+                    }} />
+                    <label htmlFor="mediaUpload" className="cursor-pointer">
+                      <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mx-auto shadow-sm mb-2 text-slate-500"><Plus /></div>
+                      <p className="text-sm font-bold text-slate-700">Subir fotos o video</p>
+                      <p className="text-xs text-slate-400">Hasta 5 fotos y 1 video</p>
+                    </label>
+                    {mediaFiles.length > 0 && (
+                      <div className="flex flex-wrap gap-3 justify-center mt-6">
+                        {mediaFiles.map((f, i) => {
+                          const isImage = f.type.startsWith('image/');
+                          const previewUrl = isImage ? URL.createObjectURL(f) : '';
+                          return (
+                            <div key={i} className="w-20 h-20 bg-slate-100 rounded-2xl relative border border-slate-200 shadow-sm group overflow-visible">
+                              {isImage ? (
+                                <img src={previewUrl} className="w-full h-full object-cover rounded-2xl" alt="" />
+                              ) : (
+                                <div className="w-full h-full flex flex-col items-center justify-center p-2 text-[10px] text-slate-500 font-bold">
+                                  <FileText className="w-6 h-6 mb-1 text-slate-400" />
+                                  <span className="truncate w-full text-center">{f.name}</span>
+                                </div>
+                              )}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  setMediaFiles(prev => prev.filter((_, idx) => idx !== i));
+                                }}
+                                className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-1 shadow-md hover:bg-red-600 transition-colors"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <Button onClick={handlePostProject} className="w-full mt-4" disabled={posting}>
-                  {posting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Publicar Ahora'}
+                  {posting ? <Loader2 className="w-5 h-5 animate-spin" /> : (newProject.postType === 'STANDARD' ? 'Publicar Gratis' : `Pagar ${newProject.postType === 'MULTIMEDIA' ? '$9.900' : '$19.900'} y Publicar`)}
                 </Button>
               </div>
             </div>
@@ -416,14 +580,19 @@ export const ProjectHub: React.FC = () => {
                 filteredProjects.map(project => {
                 const isApplied = appliedIds.has(project.id);
                 return (
-                    <Card key={project.id} className="relative transition-all hover:shadow-md">
+                    <Card key={project.id} className={`relative transition-all hover:shadow-md ${project.postType === 'VIP' ? 'border-2 border-yellow-400 shadow-yellow-100 bg-yellow-50/20' : ''}`}>
                     {project.isUrgent && (
                         <div className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] px-2 py-1 rounded-full font-bold shadow-sm animate-pulse z-10">
                         🔥 URGENTE
                         </div>
                     )}
+                    {project.postType === 'VIP' && (
+                        <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-yellow-400 text-yellow-900 text-[10px] px-3 py-0.5 rounded-b-lg font-black shadow-sm uppercase tracking-wider">
+                        👑 Proyecto VIP
+                        </div>
+                    )}
                     
-                    <div className="flex justify-between items-start mb-2">
+                    <div className={`flex justify-between items-start mb-2 ${project.postType === 'VIP' ? 'mt-3' : ''}`}>
                         <Badge type={['Arquitectura', 'Diseño', 'Ingeniería'].includes(project.category) ? 'warning' : 'info'}>{project.category}</Badge>
                         <span className="text-xs text-slate-400">{timeAgo(project.createdAt)}</span>
                     </div>
@@ -437,6 +606,14 @@ export const ProjectHub: React.FC = () => {
                     <p className="text-slate-600 text-sm line-clamp-2 mb-4 bg-slate-50 p-2 rounded-lg">
                         {project.description}
                     </p>
+
+                    {project.mediaUrls && project.mediaUrls.length > 0 && (
+                      <div className="flex gap-2 overflow-x-auto no-scrollbar mb-4">
+                        {project.mediaUrls.map((url, idx) => (
+                          <img key={idx} src={url} className="w-16 h-16 object-cover rounded-lg shadow-sm border border-slate-200" alt="Evidencia" />
+                        ))}
+                      </div>
+                    )}
 
                     <div className="flex items-center justify-between border-t border-slate-100 pt-3 mt-2">
                         <div className="flex items-center gap-1 font-bold text-slate-700">

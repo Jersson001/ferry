@@ -4,6 +4,7 @@ import { Repository, DataSource, Not } from 'typeorm';
 import { Project, ProjectStatus } from './entities/project.entity';
 import { ProjectApplication, ApplicationStatus } from './entities/project-application.entity';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import { StorageService } from '../storage/storage.service';
 
 @Injectable()
 export class ProjectsService {
@@ -13,6 +14,7 @@ export class ProjectsService {
     @InjectRepository(ProjectApplication)
     private applicationRepository: Repository<ProjectApplication>,
     private subscriptionsService: SubscriptionsService,
+    private storageService: StorageService,
     private dataSource: DataSource,
   ) {}
 
@@ -20,6 +22,18 @@ export class ProjectsService {
   // CLIENTES
   // ==========================================
   async createProject(userId: string, data: any): Promise<Project> {
+    const processedMediaUrls: string[] = [];
+    if (data.mediaUrls && Array.isArray(data.mediaUrls)) {
+      for (const media of data.mediaUrls) {
+        if (typeof media === 'string' && media.startsWith('data:image')) {
+          const savedUrl = await this.storageService.saveBase64Image(media, userId, 'projects');
+          processedMediaUrls.push(savedUrl);
+        } else if (typeof media === 'string') {
+          processedMediaUrls.push(media);
+        }
+      }
+    }
+
     const project = this.projectRepository.create({
       title: data.title,
       description: data.description,
@@ -30,6 +44,8 @@ export class ProjectsService {
       contactPhone: data.contactPhone,     // Teléfono confidencial — oculto
       isUrgent: data.isUrgent ?? false,
       imageUrl: data.imageUrl,
+      postType: data.postType ?? 'STANDARD',
+      mediaUrls: processedMediaUrls,
       userId,
       status: ProjectStatus.OPEN,
     });
@@ -144,7 +160,10 @@ export class ProjectsService {
     const projects = await this.projectRepository.find({
       where: { status: ProjectStatus.OPEN, userId: Not(userId) },
       relations: ['user'],
-      order: { createdAt: 'DESC' },
+      order: {
+        postType: 'DESC', // 'VIP' > 'STANDARD' > 'MULTIMEDIA' in alphabetic terms, wait, V > S > M. So VIP is first!
+        createdAt: 'DESC'
+      },
     });
 
     // Omit confidential fields from public feed
@@ -157,6 +176,8 @@ export class ProjectsService {
       location: p.location,          // Ciudad/Zona pública
       isUrgent: p.isUrgent,
       status: p.status,
+      postType: p.postType,
+      mediaUrls: p.mediaUrls,
       createdAt: p.createdAt,
       postedBy: p.user?.displayName ?? 'Cliente anónimo',
       // exactAddress and contactPhone intentionally OMITTED

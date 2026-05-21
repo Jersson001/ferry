@@ -18,6 +18,8 @@ export interface ProjectFeedItem {
   createdAt: string;
   postedBy: string;
   applicationCount?: number;
+  postType?: 'STANDARD' | 'MULTIMEDIA' | 'VIP';
+  mediaUrls?: string[];
 }
 
 export interface ProjectApplication {
@@ -46,6 +48,8 @@ export const createProject = async (data: {
   contactPhone?: string;
   budgetInCents?: number;
   isUrgent?: boolean;
+  postType?: 'STANDARD' | 'MULTIMEDIA' | 'VIP';
+  mediaUrls?: string[];
 }): Promise<ProjectFeedItem> => {
   const res = await fetch(`${API_URL}/projects`, {
     method: 'POST',
