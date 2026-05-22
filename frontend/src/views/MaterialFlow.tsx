@@ -431,6 +431,12 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
       setIsAddressValidated(true);
       setDeliveryAddress(place.formatted_address);
       localStorage.setItem('ferry_direccion_entrega', place.formatted_address);
+      if (place.geometry?.location) {
+        setDeliveryCoordinates({
+          lat: place.geometry.location.lat(),
+          lng: place.geometry.location.lng()
+        });
+      }
     });
     
     return () => {
@@ -441,6 +447,7 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
   const [quoteSentSuccess, setQuoteSentSuccess] = useState(false);
   const [quoteTitle, setQuoteTitle] = useState('');
   const [deliveryAddress, setDeliveryAddress] = useState(() => localStorage.getItem('ferry_direccion_entrega') ?? '');
+  const [deliveryCoordinates, setDeliveryCoordinates] = useState<{ lat: number; lng: number } | null>(null);
   const [savedAddresses, setSavedAddresses] = useState<string[]>(() => {
     const saved = localStorage.getItem('ferry_saved_addresses');
     return saved ? JSON.parse(saved) : [];
@@ -479,6 +486,12 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
       setDeliveryAddress(place.formatted_address);
       setAddressError(false);
       localStorage.setItem('ferry_direccion_entrega', place.formatted_address);
+      if (place.geometry?.location) {
+        setDeliveryCoordinates({
+          lat: place.geometry.location.lat(),
+          lng: place.geometry.location.lng()
+        });
+      }
     });
     
     return () => {
@@ -818,13 +831,13 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
     setGpsError(null);
     setIsSendingQuote(true);
 
-    // Resolve location — prompt browser GPS if not yet available
-    const resolvedLocation = await resolveUserLocation();
+    // Resolve location — use deliveryCoordinates if available (the obra location), else fallback to userLocation/GPS
+    let resolvedLocation = deliveryCoordinates;
     if (!resolvedLocation) {
-      setGpsError('No pudimos obtener tu ubicación. Activa el GPS y vuelve a intentarlo.');
-      setIsSendingQuote(false);
-      return;
+      resolvedLocation = await resolveUserLocation();
     }
+    // We do NOT block the request if resolvedLocation is still null/undefined.
+    // The deliveryAddress text is the primary source of truth, and userLocation is optional.
 
     // Construir payload final: uppercase + misma deduplicación que getDisplayName()
     const itemsLimpios = items.map(item => {
