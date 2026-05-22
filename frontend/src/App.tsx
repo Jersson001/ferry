@@ -17,7 +17,7 @@ import { Home, ShoppingBag, Briefcase, User, CheckCircle2, Inbox, Package, Shiel
 import ferryLogo from './assets/logo.svg';
 import { getCurrentUser, signOut as logoutUser, verifyEmailToken } from './services/authService';
 import { loadGuestCart, GuestCart } from './hooks/useGuestCart';
-
+import { APIProvider } from '@vis.gl/react-google-maps';
 
 // --- APP PRINCIPAL ---
 
@@ -369,7 +369,8 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50 max-w-md mx-auto shadow-2xl overflow-hidden relative">
+    <APIProvider apiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string} language="es" region="CO">
+      <div className="flex flex-col h-screen bg-gray-50 max-w-md mx-auto shadow-2xl overflow-hidden relative">
 
       {/* Modal de Auth Gate */}
       {showAuthGate && (
@@ -598,6 +599,7 @@ const App: React.FC = () => {
         </div>
       )}
     </div>
+    </APIProvider>
   );
 };
 

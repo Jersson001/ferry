@@ -10,25 +10,7 @@ import { PortfolioLightbox } from '../components/PortfolioLightbox';
 import { Crown, Sparkles } from 'lucide-react';
 import { getMySubscription, UserSubscription } from '../services/subscriptionService';
 import { PlansModal } from '../components/PlansModal';
-
-const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string;
-const GMAPS_SCRIPT_ID = 'google-maps-script';
-
-const ensureGoogleMapsScript = (onReady: () => void) => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const win = window as any;
-  if (win.google) { onReady(); return; }
-  if (!document.getElementById(GMAPS_SCRIPT_ID)) {
-    const script = document.createElement('script');
-    script.id = GMAPS_SCRIPT_ID;
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`;
-    script.async = true;
-    script.onload = onReady;
-    document.head.appendChild(script);
-  } else {
-    document.getElementById(GMAPS_SCRIPT_ID)!.addEventListener('load', onReady);
-  }
-};
+import { Map, AdvancedMarker, useMapsLibrary } from '@vis.gl/react-google-maps';
 
 const getInitials = (name?: string) => {
   if (!name || name === 'guest') return 'U';
@@ -51,7 +33,9 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
   const [description, setDescription] = useState(profile?.description || 'Arquitecto con 10 años de experiencia en remodelaciones residenciales. Apasionado por el diseño funcional y materiales sostenibles.');
   const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
   const [locationSaved, setLocationSaved] = useState(false);
-  const [showStoreMap, setShowStoreMap] = useState(!!profile?.location);
+  const [showStoreMap, setShowStoreMap] = useState(
+    !!(profile?.location?.lat != null && profile?.location?.lng != null && !isNaN(Number(profile.location.lat)) && !isNaN(Number(profile.location.lng)))
+  );
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileSaveStatus, setProfileSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [showBalance, setShowBalance] = useState(false);
@@ -74,11 +58,10 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
   const [isSaving, setIsSaving] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<any>(null);
-  const markerRef = useRef<any>(null);
   const profileRef = useRef(profile);
   const addressAutocompleteRef = useRef<HTMLInputElement>(null);
+  const placesLib = useMapsLibrary('places');
+  const autocompleteInstanceRef = useRef<google.maps.places.Autocomplete | null>(null);
   const [addressInput, setAddressInput] = useState(profile?.location?.address || '');
   const { updateUserProfile, saveStoreProfile: apiSaveStoreProfile, logoutUser } = useApi();
   const user = JSON.parse(localStorage.getItem('user') || 'null');
@@ -139,90 +122,34 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
     }
   };
 
-  // Initialize / update Google Maps when showStoreMap is true and we have coords
-  useEffect(() => {
-    if (!showStoreMap || !profile?.location) return;
-    const { lat, lng } = profile.location;
-    const center = { lat, lng };
-
-    const initMap = () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const win = window as any;
-      if (!mapContainerRef.current || !win.google) return;
-      if (!mapInstanceRef.current) {
-        mapInstanceRef.current = new win.google.maps.Map(mapContainerRef.current, {
-          center,
-          zoom: 16,
-          mapTypeControl: false,
-          streetViewControl: false,
-          fullscreenControl: false,
-        });
-        markerRef.current = new win.google.maps.Marker({
-          position: center,
-          map: mapInstanceRef.current,
-          draggable: true,
-          title: 'Arrastra para ajustar ubicación',
-        });
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        markerRef.current.addListener('dragend', async (e: any) => {
-          const newLat = e.latLng.lat();
-          const newLng = e.latLng.lng();
-          const cur = profileRef.current;
-          if (!cur) return;
-          const newLocation = { lat: newLat, lng: newLng, address: cur.location?.address || 'Ubicación actual' };
-          onUpdateProfile({ ...cur, location: newLocation });
-          try {
-            await updateUserProfile({ location: newLocation });
-          } catch (err) {
-            console.error('Error updating location after drag:', err);
-          }
-        });
-      } else {
-        mapInstanceRef.current.setCenter(center);
-        markerRef.current?.setPosition(center);
-      }
-    };
-
-    ensureGoogleMapsScript(initMap);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showStoreMap, profile?.location?.lat, profile?.location?.lng]);
-
   // Initialize Google Places Autocomplete on the address input
   useEffect(() => {
-    if (profile?.role !== UserRole.STORE) return;
-    const initAutocomplete = () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const win = window as any;
-      if (!addressAutocompleteRef.current || !win.google) return;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const ac = new win.google.maps.places.Autocomplete(addressAutocompleteRef.current, {
-        componentRestrictions: { country: 'co' },
-        fields: ['formatted_address', 'geometry'],
-      });
-      ac.addListener('place_changed', () => {
-        const place = ac.getPlace();
-        if (!place.geometry?.location) return;
-        const newLat = place.geometry.location.lat();
-        const newLng = place.geometry.location.lng();
-        const newAddress = place.formatted_address || '';
-        setAddressInput(newAddress);
-        const cur = profileRef.current;
-        if (!cur) return;
-        const newLocation = { lat: newLat, lng: newLng, address: newAddress };
-        onUpdateProfile({ ...cur, location: newLocation });
-        if (mapInstanceRef.current && markerRef.current) {
-          const newCenter = { lat: newLat, lng: newLng };
-          mapInstanceRef.current.setCenter(newCenter);
-          mapInstanceRef.current.setZoom(17);
-          markerRef.current.setPosition(newCenter);
-        } else {
-          setShowStoreMap(true);
-        }
-      });
+    if (profile?.role !== UserRole.STORE || !placesLib || !addressAutocompleteRef.current) return;
+    
+    autocompleteInstanceRef.current = new placesLib.Autocomplete(addressAutocompleteRef.current, {
+      componentRestrictions: { country: 'co' },
+      fields: ['formatted_address', 'geometry'],
+    });
+
+    const listener = autocompleteInstanceRef.current.addListener('place_changed', () => {
+      const place = autocompleteInstanceRef.current?.getPlace();
+      if (!place?.geometry?.location) return;
+      const newLat = place.geometry.location.lat();
+      const newLng = place.geometry.location.lng();
+      const newAddress = place.formatted_address || '';
+      setAddressInput(newAddress);
+      
+      const cur = profileRef.current;
+      if (!cur) return;
+      const newLocation = { lat: newLat, lng: newLng, address: newAddress };
+      onUpdateProfile({ ...cur, location: newLocation });
+      setShowStoreMap(true);
+    });
+
+    return () => {
+      if (listener) listener.remove();
     };
-    ensureGoogleMapsScript(initAutocomplete);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile?.role]);
+  }, [placesLib, profile?.role]);
 
   const AVAILABLE_SPECIALTIES = ['Plomería', 'Eléctricos', 'Depósito', 'Pintura', 'Carpintería', 'Iluminación', 'Cerrajería', 'Gas', 'Estructural'];
 
@@ -318,9 +245,6 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
         setIsUpdatingLocation(false);
         setLocationSaved(true);
         setShowStoreMap(true);
-        // Reset map instance so it re-initializes centered on new coords
-        mapInstanceRef.current = null;
-        markerRef.current = null;
         setTimeout(() => setLocationSaved(false), 3000);
       },
       (error) => {
@@ -622,8 +546,8 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
                       {isUpdatingLocation ? 'Obteniendo GPS...' : '📍 Fijar ubicación de la tienda'}
                     </p>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      {profile?.location?.lat && profile?.location?.lng
-                        ? `✅ ${profile.location.lat.toFixed(4)}, ${profile.location.lng.toFixed(4)}`
+                      {profile?.location?.lat != null && profile?.location?.lng != null && !isNaN(Number(profile.location.lat)) && !isNaN(Number(profile.location.lng))
+                        ? `✅ ${Number(profile.location.lat).toFixed(4)}, ${Number(profile.location.lng).toFixed(4)}`
                         : 'Los usuarios te encontrarán en el mapa'}
                     </p>
                   </div>
@@ -646,12 +570,31 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
                 </div>
 
                 {/* Draggable Google Map */}
-                {showStoreMap && profile?.location && (
+                {showStoreMap && profile?.location?.lat != null && profile?.location?.lng != null && !isNaN(Number(profile.location.lat)) && !isNaN(Number(profile.location.lng)) && (
                   <div className="mt-3 space-y-2">
-                    <div
-                      ref={mapContainerRef}
-                      className="w-full h-64 rounded-xl overflow-hidden border border-slate-200 shadow-sm"
-                    />
+                    <div className="w-full h-64 rounded-xl overflow-hidden border border-slate-200 shadow-sm">
+                      <Map
+                        defaultZoom={16}
+                        center={{ lat: Number(profile.location.lat), lng: Number(profile.location.lng) }}
+                        mapId="DEMO_MAP_ID"
+                        disableDefaultUI={true}
+                      >
+                        <AdvancedMarker
+                          position={{ lat: Number(profile.location.lat), lng: Number(profile.location.lng) }}
+                          draggable={true}
+                          onDragEnd={(e) => {
+                            if (!e.latLng) return;
+                            const newLat = e.latLng.lat();
+                            const newLng = e.latLng.lng();
+                            const cur = profileRef.current;
+                            if (!cur) return;
+                            const newLocation = { lat: newLat, lng: newLng, address: cur.location?.address || 'Ubicación actual' };
+                            onUpdateProfile({ ...cur, location: newLocation });
+                            updateUserProfile({ location: newLocation }).catch(err => console.error(err));
+                          }}
+                        />
+                      </Map>
+                    </div>
                     <p className="text-xs text-slate-400 text-center flex items-center justify-center gap-1">
                       <MapPin className="w-3 h-3" />
                       Arrastra el pin para ajustar la ubicación exacta de la entrada de tu ferretería

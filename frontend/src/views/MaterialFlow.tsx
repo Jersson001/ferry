@@ -9,6 +9,7 @@ import { Button, Card, Badge, StarRating } from '../components/UIComponents';
 import { MessageSquareText, FileText } from 'lucide-react';
 import { UserProfile } from '../types';
 import { getConfigProducto, inferirMedidaNominal, inferirCaracteristica, corregirNombreOCR, MODULE_PRODUCTS } from '../config/herrajesConfig';
+import { useMapsLibrary } from '@vis.gl/react-google-maps';
 
 interface Props {
   onRequestCreate: (req: MaterialRequest) => void;
@@ -411,44 +412,31 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
   const [isAddressValidated, setIsAddressValidated] = useState(false);
   const addressInputRef = useRef<HTMLInputElement>(null);
   const deliveryAddressInputRef = useRef<HTMLInputElement>(null);
+  const placesLib = useMapsLibrary('places');
+  const autocompleteRef1 = useRef<google.maps.places.Autocomplete | null>(null);
+  const autocompleteRef2 = useRef<google.maps.places.Autocomplete | null>(null);
 
   useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const win = window as any;
-    const initAutocomplete = () => {
-      if (!addressInputRef.current || !win.google) return;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const ac = new win.google.maps.places.Autocomplete(addressInputRef.current, {
-        componentRestrictions: { country: 'co' },
-        fields: ['formatted_address', 'geometry'],
-      });
-      ac.addListener('place_changed', () => {
-        const place = ac.getPlace();
-        if (!place?.formatted_address) return;
-        setAddressQuery(place.formatted_address);
-        setIsAddressValidated(true);
-        setDeliveryAddress(place.formatted_address);
-        localStorage.setItem('ferry_direccion_entrega', place.formatted_address);
-      });
+    if (!placesLib || !addressInputRef.current) return;
+    
+    autocompleteRef1.current = new placesLib.Autocomplete(addressInputRef.current, {
+      componentRestrictions: { country: 'co' },
+      fields: ['formatted_address', 'geometry'],
+    });
+    
+    const listener = autocompleteRef1.current.addListener('place_changed', () => {
+      const place = autocompleteRef1.current?.getPlace();
+      if (!place?.formatted_address) return;
+      setAddressQuery(place.formatted_address);
+      setIsAddressValidated(true);
+      setDeliveryAddress(place.formatted_address);
+      localStorage.setItem('ferry_direccion_entrega', place.formatted_address);
+    });
+    
+    return () => {
+      if (listener) listener.remove();
     };
-
-    if (win.google) {
-      initAutocomplete();
-      return;
-    }
-    const scriptId = 'google-maps-script';
-    if (!document.getElementById(scriptId)) {
-      const script = document.createElement('script');
-      script.id = scriptId;
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}&libraries=places`;
-      script.async = true;
-      script.onload = initAutocomplete;
-      document.head.appendChild(script);
-    } else {
-      // Script tag ya existe pero aún carga — espera
-      document.getElementById(scriptId)!.addEventListener('load', initAutocomplete);
-    }
-  }, []);
+  }, [placesLib]);
   const [isSendingQuote, setIsSendingQuote] = useState(false);
   const [quoteSentSuccess, setQuoteSentSuccess] = useState(false);
   const [quoteTitle, setQuoteTitle] = useState('');
@@ -478,28 +466,25 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
 
   // Google Places Autocomplete en el input de dirección de entrega (modo EDITING)
   useEffect(() => {
-    if (mode !== 'EDITING') return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const win = window as any;
-    const init = () => {
-      if (!deliveryAddressInputRef.current || !win.google) return;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const ac = new win.google.maps.places.Autocomplete(deliveryAddressInputRef.current, {
-        componentRestrictions: { country: 'co' },
-        fields: ['formatted_address', 'geometry'],
-      });
-      ac.addListener('place_changed', () => {
-        const place = ac.getPlace();
-        if (!place?.formatted_address) return;
-        setDeliveryAddress(place.formatted_address);
-        setAddressError(false);
-        localStorage.setItem('ferry_direccion_entrega', place.formatted_address);
-      });
+    if (mode !== 'EDITING' || !placesLib || !deliveryAddressInputRef.current) return;
+    
+    autocompleteRef2.current = new placesLib.Autocomplete(deliveryAddressInputRef.current, {
+      componentRestrictions: { country: 'co' },
+      fields: ['formatted_address', 'geometry'],
+    });
+    
+    const listener = autocompleteRef2.current.addListener('place_changed', () => {
+      const place = autocompleteRef2.current?.getPlace();
+      if (!place?.formatted_address) return;
+      setDeliveryAddress(place.formatted_address);
+      setAddressError(false);
+      localStorage.setItem('ferry_direccion_entrega', place.formatted_address);
+    });
+    
+    return () => {
+      if (listener) listener.remove();
     };
-    if (win.google) { init(); } else {
-      document.getElementById('google-maps-script')?.addEventListener('load', init);
-    }
-  }, [mode]);
+  }, [mode, placesLib]);
 
   // Auto-submit tras login si había carrito pendiente
   const autoSubmitDoneRef = useRef(false);
