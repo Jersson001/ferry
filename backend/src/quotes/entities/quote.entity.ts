@@ -65,6 +65,10 @@ export class Quote {
   @Column({ type: 'text', nullable: true })
   reviewComment?: string;
 
+  // Fecha en que la tienda marcó el pedido como enviado (para el cron de 72h)
+  @Column({ type: 'timestamp', nullable: true })
+  shippedAt?: Date;
+
   @CreateDateColumn()
   createdAt: Date;
 }

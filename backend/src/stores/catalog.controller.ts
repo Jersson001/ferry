@@ -42,14 +42,34 @@ export class CatalogController {
     if (!targetUrl) {
       throw new BadRequestException('Falta el parámetro url');
     }
+
+    // ── Protección SSRF: solo se permiten URLs de Google Sheets/Docs ──────────
+    let parsedUrl: URL;
     try {
-      // Usar fetch nativo de Node.js (disponible en Node 18+)
+      parsedUrl = new URL(targetUrl);
+    } catch {
+      throw new BadRequestException('La URL proporcionada no es válida.');
+    }
+
+    const ALLOWED_HOSTNAMES = [
+      'docs.google.com',
+      'spreadsheets.google.com',
+      'drive.google.com',
+    ];
+    if (!ALLOWED_HOSTNAMES.includes(parsedUrl.hostname)) {
+      throw new BadRequestException(
+        'Solo se permiten URLs de Google Sheets. Asegúrate de compartir el enlace público del archivo.',
+      );
+    }
+
+    try {
       const response = await fetch(targetUrl);
       if (!response.ok) {
         throw new BadRequestException('No se pudo descargar la hoja. Asegúrate de que el enlace sea público.');
       }
       return await response.text();
     } catch (err: any) {
+      if (err instanceof BadRequestException) throw err;
       throw new BadRequestException('Error al conectar con Google Sheets: ' + err.message);
     }
   }

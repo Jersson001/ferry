@@ -25,8 +25,13 @@ export class StoresController {
   }
 
   @Get(':id/catalog')
-  async getCatalog(@Param('id') id: string) {
-    return this.storesService.getCatalog(id);
+  async getCatalog(@Param('id') id: string, @Req() req: RequestWithUser) {
+    const catalog = await this.storesService.getCatalog(id);
+    // Si no es la tienda propietaria ni un ADMIN, ocultar campos de precio confidencial
+    if (req.user.uid !== id && req.user.role !== 'ADMIN') {
+      return catalog.map(({ price, cost, storeBaseUnitPrice, ...pub }) => pub);
+    }
+    return catalog;
   }
 
   @Get(':id/families')

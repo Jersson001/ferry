@@ -402,6 +402,11 @@ export class QuotesService {
 
     quote.status = status;
 
+    // Registrar timestamp de envío para el cron de auto-entrega (72h)
+    if (status === QuoteStatus.SHIPPED && !quote.shippedAt) {
+      quote.shippedAt = new Date();
+    }
+
     if (status === QuoteStatus.DELIVERED) {
       if (rating !== undefined) quote.rating = rating;
       if (comment !== undefined) quote.reviewComment = comment;

@@ -149,8 +149,11 @@ export class SubscriptionsService {
    * Solo se ejecuta si la tabla está vacía (auto-seeding al iniciar).
    */
   async seedPlans() {
-    // Forzar resiembra incondicional para asegurar textos de beneficios exactos del cliente
-    await this.planRepository.createQueryBuilder().delete().execute(); // Eliminar todos los registros con QueryBuilder para activar cascades
+    // Siembra idempotente: solo ejecutar si la tabla está vacía
+    const count = await this.planRepository.count();
+    if (count > 0) {
+      return; // Ya existen planes, no tocar nada
+    }
 
     await this.planRepository.save([
       // ─── SEGMENTO: FERRETERÍAS Y TIENDAS ───────────────────────────────

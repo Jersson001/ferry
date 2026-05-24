@@ -27,7 +27,11 @@ export class QuotesController {
   }
 
   @Get('requests/:id/quote-count')
-  async getQuoteCount(@Param('id') id: string) {
+  async getQuoteCount(@Param('id') id: string, @Req() req: RequestWithUser) {
+    // Verify ownership: only the request owner may query its quote count
+    const ownRequests = await this.quotesService.getOwnRequests(req.user.uid);
+    const owns = ownRequests.some(r => r.id === id);
+    if (!owns) throw new ForbiddenException('No tienes permiso para ver esta solicitud');
     const count = await this.quotesService.getQuoteCountForRequest(id);
     return { count };
   }
@@ -51,13 +55,26 @@ export class QuotesController {
 
   @Post(':id/status')
   async updateStatus(
-    @Param('id') id: string, 
-    @Body('status') status: QuoteStatus, 
+    @Param('id') id: string,
+    @Body('status') status: QuoteStatus,
     @Body('rating') rating: number,
     @Body('comment') comment: string,
     @Req() req: RequestWithUser
   ) {
-    return this.quotesService.updateQuoteStatus(id, status, req.user.uid, false, rating, comment);
+    const isStore = req.user.role === 'STORE';
+
+    // ── Whitelist de estados permitidos por rol ───────────────────────────────
+    // El cliente NUNCA puede marcar PAID, PREPARING, SHIPPED, DELIVERED
+    const CLIENT_ALLOWED: QuoteStatus[] = [QuoteStatus.REJECTED, QuoteStatus.DELIVERED];
+    // La tienda NUNCA puede marcar ACCEPTED o REJECTED (eso lo hace el cliente o el sistema)
+    const STORE_ALLOWED: QuoteStatus[] = [QuoteStatus.PREPARING, QuoteStatus.SHIPPED, QuoteStatus.DELIVERED];
+
+    const allowed = isStore ? STORE_ALLOWED : CLIENT_ALLOWED;
+    if (!allowed.includes(status)) {
+      throw new ForbiddenException(`Tu rol no puede establecer el estado "${status}"`);
+    }
+
+    return this.quotesService.updateQuoteStatus(id, status, req.user.uid, isStore, rating, comment);
   }
 
   // ==========================================

@@ -10,10 +10,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private usersService: UsersService,
     private jwtService: JwtService,
   ) {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+      throw new Error(
+        'FATAL: La variable de entorno JWT_SECRET no está configurada. ' +
+        'La aplicación no puede iniciarse sin un secreto JWT seguro.',
+      );
+    }
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: process.env.JWT_SECRET || 'ferry-super-secret-key-cambiar-en-produccion',
+      secretOrKey: secret,
     });
   }
 

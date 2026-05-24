@@ -114,7 +114,22 @@ export class StoresService {
   }
 
   async updateStoreProfile(storeId: string, profileData: any): Promise<any> {
-    return this.usersService.update(storeId, profileData);
+    // ── Whitelist de campos permitidos ────────────────────────────────────────
+    // NUNCA se permiten: role, email, password, isEmailVerified, uid, etc.
+    const ALLOWED_FIELDS = [
+      'displayName', 'description', 'photoURL', 'phoneNumber',
+      'location', 'specialties', 'rut', 'families', 'isProfileComplete',
+    ];
+    const safeData: Record<string, any> = {};
+    for (const key of ALLOWED_FIELDS) {
+      if (profileData[key] !== undefined) {
+        safeData[key] = profileData[key];
+      }
+    }
+    if (Object.keys(safeData).length === 0) {
+      return this.usersService.findOne(storeId);
+    }
+    return this.usersService.update(storeId, safeData);
   }
 }
 

@@ -874,8 +874,9 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
 
     const finalTitle = quoteTitle.trim() || (selectedCategory ? `Pedido ${selectedCategory}` : `Pedido ${new Date().toLocaleDateString()}`);
 
+    let backendRequestId: string = Date.now().toString(); // fallback
     try {
-      await sendQuoteRequest({
+      backendRequestId = await sendQuoteRequest({
         category: selectedCategory || 'General',
         items: itemsLimpios,
         userLocation: resolvedLocation,
@@ -884,13 +885,13 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
       });
     } catch (error) {
       console.error('Error al enviar cotización a Firestore:', error);
-      // Continue even if Firestore fails — local flow still works
+      // Continue even if backend fails — local flow still works
     } finally {
       setIsSendingQuote(false);
     }
 
     const newRequest: MaterialRequest = {
-      id: Date.now().toString(),
+      id: backendRequestId, // ← ID real del backend para polling
       title: finalTitle,
       date: new Date().toISOString(),
       category: selectedCategory || 'General',
