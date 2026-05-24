@@ -37,8 +37,8 @@ import {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const formatCOP = (n: number) =>
-  new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(n);
+const formatCOP = (n: number | null | undefined) =>
+  new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(n ?? 0);
 
 const CATEGORY_COLORS: Record<string, string> = {
   'Plomería':     'bg-blue-100 text-blue-700',
@@ -55,11 +55,12 @@ const categoryColor = (cat: string) =>
   CATEGORY_COLORS[cat] ?? 'bg-ferry-100 text-ferry-700';
 
 // Store initials avatar (revealed only after acceptance)
-const StoreAvatar: React.FC<{ name: string }> = ({ name }) => {
-  const initials = name
+const StoreAvatar: React.FC<{ name?: string }> = ({ name }) => {
+  const safeName = name || 'Ferretería';
+  const initials = safeName
     .split(' ')
     .slice(0, 2)
-    .map(w => w[0])
+    .map(w => w[0] || '')
     .join('')
     .toUpperCase();
   return (
@@ -772,16 +773,35 @@ const QuoteDetailModal: React.FC<{
         <div className="px-5 py-4 border-t border-slate-100 flex-shrink-0">
           {isPaid ? (
             <div className="space-y-2">
-              <div className="flex items-center justify-center gap-2 py-3 bg-green-50 rounded-2xl">
+              <div className="flex items-center justify-center gap-2 py-3 bg-green-50 rounded-2xl mb-2">
                 <CheckCircle2 className="w-5 h-5 text-green-600" />
                 <span className="font-bold text-green-700">¡Pedido Pagado!</span>
               </div>
-              <div className="flex items-center gap-2 bg-ferry-50 border border-ferry-100 rounded-xl px-3 py-2.5">
+              <div className="flex items-center gap-2 bg-ferry-50 border border-ferry-100 rounded-xl px-3 py-2.5 mb-2">
                 <Store className="w-4 h-4 text-ferry-600 flex-shrink-0" />
                 <div>
                   <p className="text-[10px] text-ferry-600 font-semibold uppercase tracking-wide">Proveedor</p>
                   <p className="text-sm font-bold text-slate-800">{quote.storeName}</p>
                 </div>
+              </div>
+              <div className="flex gap-2">
+                {quote.store?.phoneNumber && (
+                  <a
+                    href={`https://wa.me/${quote.store.phoneNumber.replace(/\D/g, '')}?text=Hola%20${encodeURIComponent(quote.storeName)},%20soy%20el%20contratista%20y%20te%20escribo%20sobre%20mi%20pedido%20en%20Ferry`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border-2 border-green-200 bg-green-50 hover:bg-green-100 text-green-700 text-xs font-bold transition-colors"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M12.031 0C5.383 0 0 5.383 0 12.031c0 2.115.548 4.175 1.594 5.992L0 24l6.152-1.564c1.748.966 3.708 1.474 5.879 1.474 6.648 0 12.031-5.383 12.031-12.031S18.679 0 12.031 0zm0 22.046c-1.802 0-3.568-.485-5.116-1.404l-.367-.217-3.805.967.98-3.707-.238-.379c-1.009-1.604-1.541-3.463-1.541-5.382 0-5.614 4.568-10.182 10.182-10.182 5.614 0 10.182 4.568 10.182 10.182 0 5.614-4.568 10.182-10.182 10.182zM17.6 15.11c-.305-.153-1.805-.891-2.084-.992-.279-.102-.483-.153-.686.153-.203.305-.788.992-.966 1.196-.178.203-.356.229-.661.076-1.748-.842-3.037-1.83-4.148-3.435-.285-.41.3-.393.889-1.574.076-.153.038-.28-.038-.432-.076-.153-.686-1.654-.94-2.264-.247-.594-.497-.514-.686-.523-.178-.009-.382-.009-.585-.009-.203 0-.534.076-.813.382C6.444 8.04 5.58 8.854 5.58 10.507c0 1.654 1.22 3.257 1.393 3.486.173.23 2.375 3.633 5.753 5.094 2.215.955 3.03.864 4.14.736 1.345-.155 2.871-1.173 3.277-2.308.406-1.135.406-2.107.285-2.311-.122-.204-.428-.328-.733-.481z"/></svg>
+                    Contactar
+                  </a>
+                )}
+                <a
+                  href="mailto:soporte@ferry.com?subject=Problema%20con%20pedido%20pagado"
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-red-200 text-red-600 bg-red-50 hover:bg-red-100 text-xs font-semibold transition-colors"
+                >
+                  <AlertCircle className="w-3.5 h-3.5" /> Reportar Problema
+                </a>
               </div>
             </div>
           ) : (
@@ -1076,7 +1096,7 @@ const QuoteCard: React.FC<{
         </div>
 
         {/* Missing items notice — hidden once split has been requested */}
-        {!splitHandled && quote.items.some(i => !i.available) && (
+        {!splitHandled && quote.items.some(i => !i.available) && quote.status === 'sent' && (
           <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-4 my-3">
             <div className="flex items-start gap-2">
               <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
@@ -1354,12 +1374,15 @@ export const UserQuotesInbox: React.FC = () => {
               setQuotes(prev => prev.map(q =>
                 q.id === result.ctx!.quoteId ? { ...q, status: 'paid' } : q
               ));
+              // Show success toast ONLY on success
+              setWompiPaidToast(true);
+              setTimeout(() => setWompiPaidToast(false), 6000);
             })
-            .catch(err => console.error('[Ferry/Wompi] verifyWompiPayment falló:', err));
+            .catch(err => {
+              console.error('[Ferry/Wompi] verifyWompiPayment falló:', err);
+              alert('Error al verificar el pago. Intenta de nuevo.');
+            });
         }
-        // Show success toast
-        setWompiPaidToast(true);
-        setTimeout(() => setWompiPaidToast(false), 6000);
       }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1395,7 +1418,7 @@ export const UserQuotesInbox: React.FC = () => {
   const handleCreateSplitOnly = async (quoteToAccept: ReceivedQuote): Promise<void> => {
     setPartialAccepting(true);
     try {
-      const result = await acceptQuote(quoteToAccept.id, quoteToAccept.requestId);
+      const result = await acceptQuote(quoteToAccept.id, quoteToAccept.requestId, true);
       const acceptedId = quoteToAccept.id;
       const reqId = quoteToAccept.requestId;
       setQuotes(prev =>
@@ -1428,6 +1451,7 @@ export const UserQuotesInbox: React.FC = () => {
       const result = await acceptQuote(
         quoteToAccept.id,
         quoteToAccept.requestId,
+        createSplit
       );
       // Update local state optimistically
       const acceptedId = quoteToAccept.id;
@@ -1498,29 +1522,34 @@ export const UserQuotesInbox: React.FC = () => {
     setReviewQuote(null);
   }, []);
 
-  const handleManualPaymentSuccess = useCallback((quoteId: string) => {
+  const handleManualPaymentSuccess = useCallback(async (quoteId: string) => {
     setQuotes(prev => prev.map(q =>
       q.id === quoteId ? { ...q, status: 'pending_validation' } : q
     ));
     setCheckoutQuote(null);
     setWompiPaidToast(true); // reuse same toast
     setTimeout(() => setWompiPaidToast(false), 6000);
-  }, []);
+    await loadQuotes(); // Refetch to get unblinded store info
+  }, [loadQuotes]);
 
   const handleWompiApproved = useCallback((transactionId: string) => {
     const q = checkoutQuote;
     if (q) {
       verifyWompiPayment(q.id, transactionId)
-        .then(() =>
+        .then(async () => {
           setQuotes(prev => prev.map(item =>
             item.id === q.id ? { ...item, status: 'paid' } : item
-          ))
-        )
-        .catch((err: unknown) => console.error('[Ferry/Wompi] verifyWompiPayment falló:', err));
+          ));
+          setWompiPaidToast(true);
+          setTimeout(() => setWompiPaidToast(false), 6000);
+          await loadQuotes(); // Refetch to get unblinded store info
+        })
+        .catch((err: unknown) => {
+          console.error('[Ferry/Wompi] verifyWompiPayment falló:', err);
+          alert('Error al verificar el pago con el servidor. Intenta de nuevo.');
+        });
     }
-    setWompiPaidToast(true);
-    setTimeout(() => setWompiPaidToast(false), 6000);
-  }, [checkoutQuote]);
+  }, [checkoutQuote, loadQuotes]);
 
   const handleReject = async (quote: ReceivedQuote) => {
     // Optimistic: remove immediately

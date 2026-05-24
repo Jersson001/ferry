@@ -120,9 +120,9 @@ const QuoteResponseModal: React.FC<QuoteResponseModalProps> = ({ req, storeName,
         return {
           name:           item.name,
           nombreComercial: item.nombreComercial,
-          quantity:       item.quantity,
+          quantity:       qty,
           unit:           item.unit,
-          unitPrice,           // precio tienda con IVA, sin markup
+          storeBaseUnitPrice: unitPrice,       // precio tienda con IVA, sin markup
           subtotal,
           available:      !isDiscarded && unitPriceBase > 0,
           sku:            isDiscarded ? null : (skus[idx]?.trim() || null),
@@ -146,7 +146,7 @@ const QuoteResponseModal: React.FC<QuoteResponseModalProps> = ({ req, storeName,
       await submitQuoteResponse({
         requestId:        req.id,
         storeName,
-        storeItems,
+        items:            storeItems,
         storeSubtotalBruto,
         discount:         parsedDiscount,
         storeSubtotalNeto,
@@ -543,6 +543,8 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
   }
   const [pendingPaymentQuotes, setPendingPaymentQuotes]   = useState<PendingPaymentQuote[]>([]);
   const [preparingQuotes, setPreparingQuotes]             = useState<PendingPaymentQuote[]>([]);
+  const [shippedQuotes, setShippedQuotes]                 = useState<PendingPaymentQuote[]>([]);
+  const [deliveredQuotes, setDeliveredQuotes]             = useState<PendingPaymentQuote[]>([]);
   const [loadingPayments, setLoadingPayments]             = useState(false);
   const [proofModalUrl, setProofModalUrl]                 = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId]             = useState<string | null>(null);
@@ -558,12 +560,20 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
       const sentQuotes = await getStoreSentQuotes();
       const pending = sentQuotes
         .filter(q => q.status === 'pending_validation')
-        .map(q => ({ id: q.id, requestId: q.requestId, storeName: q.storeName, total: q.total, status: q.status, createdAt: q.createdAt }));
+        .map(q => ({ ...q, status: q.status }));
       const preparing = sentQuotes
-        .filter(q => q.status === 'preparing')
-        .map(q => ({ id: q.id, requestId: q.requestId, storeName: q.storeName, total: q.total, status: q.status, createdAt: q.createdAt }));
-      setPendingPaymentQuotes(pending);
-      setPreparingQuotes(preparing);
+        .filter(q => q.status === 'preparing' || q.status === 'paid')
+        .map(q => ({ ...q, status: q.status }));
+      const shipped = sentQuotes
+        .filter(q => q.status === 'shipped')
+        .map(q => ({ ...q, status: q.status }));
+      const delivered = sentQuotes
+        .filter(q => q.status === 'delivered')
+        .map(q => ({ ...q, status: q.status }));
+      setPendingPaymentQuotes(pending as any);
+      setPreparingQuotes(preparing as any);
+      setShippedQuotes(shipped as any);
+      setDeliveredQuotes(delivered as any);
     } catch (e) {
       console.error('[Ferry/StorePanel] loadPendingPayments', e);
     } finally {
@@ -589,6 +599,7 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
     try {
       await updateQuoteLogisticStatus(q.id, q.requestId, 'shipped');
       setPreparingQuotes(prev => prev.filter(x => x.id !== q.id));
+      setShippedQuotes(prev => [...prev, { ...q, status: 'shipped' }]);
     } catch (e) {
       console.error('[Ferry/StorePanel] markShipped', e);
     } finally {
@@ -620,9 +631,18 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
   };
 
   useEffect(() => {
+    // Cargar estadísticas iniciales para los contadores del header
+    loadInbox();
+    loadSentQuotes();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    // Refrescar datos específicos al cambiar de pestaña
     if (activeTab === 'INBOX') loadInbox();
     if (activeTab === 'QUOTES') loadSentQuotes();
+    if (activeTab === 'ORDERS') loadPendingPayments();
   }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Store Identity from Profile or fallback
   const MY_STORE_NAME = profile?.displayName || "Ferretería El Tornillo";
   const MY_STORE_LOGO = profile?.photoURL;
@@ -630,11 +650,12 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
   // Filter Logic
   const pendingRequests = requests.filter(r => r.status === RequestStatus.PENDING_QUOTES);
 
-  const myOrders = requests.filter(r => {
-    const myQuote = r.quotes.find(q => q.storeName === MY_STORE_NAME);
-    const isWon = r.selectedQuoteId && myQuote && r.selectedQuoteId === myQuote.id;
-    return isWon && (r.status === RequestStatus.PAID || r.status === RequestStatus.DELIVERED);
-  });
+  const myOrders = sentQuotes.filter(q => 
+    q.status === 'paid' || 
+    q.status === 'preparing' || 
+    q.status === 'shipped' || 
+    q.status === 'delivered'
+  );
 
 
   const handleQuoteSuccess = (reqId: string) => {
@@ -738,7 +759,7 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
 
           <div className="grid grid-cols-4 gap-0 mt-4 pt-6 border-t border-white/10">
             <div className="text-center">
-              <span className="block text-2xl font-black text-white">{inboxRequests.length > 0 ? inboxRequests.length : pendingRequests.length}</span>
+              <span className="block text-2xl font-black text-white">{inboxRequests.length}</span>
               <span className="text-[10px] text-slate-400 uppercase font-bold tracking-widest mt-1">Nuevas</span>
             </div>
             <div className="text-center border-x border-white/10">
@@ -1090,29 +1111,36 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
 
                     {/* Items — show store prices (pre-markup) */}
                     <div className="space-y-1">
-                      {(q.storeItems ?? q.items).filter(i => i.available).slice(0, 3).map((item, i) => (
-                        <div key={i} className="flex justify-between text-xs">
-                          <span className="text-slate-600 truncate flex-1 mr-2">{item.name} × {item.quantity}</span>
-                          <span className="font-semibold text-slate-800 shrink-0">${item.subtotal.toLocaleString('es-CO')}</span>
-                        </div>
-                      ))}
-                      {(q.storeItems ?? q.items).filter(i => i.available).length > 3 && (
-                        <p className="text-[10px] text-slate-400">
-                          + {(q.storeItems ?? q.items).filter(i => i.available).length - 3} artículo(s) más
-                        </p>
-                      )}
+                      {(() => {
+                        const itemsList = q.storeItems ?? q.items ?? [];
+                        return (
+                          <>
+                            {itemsList.filter(i => i.available).slice(0, 3).map((item, i) => (
+                              <div key={i} className="flex justify-between text-xs">
+                                <span className="text-slate-600 truncate flex-1 mr-2">{item.name} × {item.quantity}</span>
+                                <span className="font-semibold text-slate-800 shrink-0">${(item.subtotal ?? 0).toLocaleString('es-CO')}</span>
+                              </div>
+                            ))}
+                            {itemsList.filter(i => i.available).length > 3 && (
+                              <p className="text-[10px] text-slate-400">
+                                + {itemsList.filter(i => i.available).length - 3} artículo(s) más
+                              </p>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
 
                     <div className="border-t border-slate-100 pt-2 flex justify-between items-center">
                       <div className="text-xs text-slate-500">
                         {q.transportCost === 0
                           ? <span className="text-emerald-600 font-semibold">✓ Envío gratis</span>
-                          : <span>Envío: ${q.transportCost.toLocaleString('es-CO')}</span>}
+                          : <span>Envío: ${(q.transportCost ?? 0).toLocaleString('es-CO')}</span>}
                       </div>
                       <div className="text-right">
                         <p className="text-[10px] text-slate-400">Total a recibir</p>
-                        <p className="font-black text-ferry-600 text-base">${(q.storeTotal ?? q.total).toLocaleString('es-CO')}</p>
-                        <p className="text-[10px] text-slate-400">Total cobrado al cliente: ${q.total.toLocaleString('es-CO')}</p>
+                        <p className="font-black text-ferry-600 text-base">${(q.storeTotal ?? q.total ?? 0).toLocaleString('es-CO')}</p>
+                        <p className="text-[10px] text-slate-400">Total cobrado al cliente: ${(q.total ?? 0).toLocaleString('es-CO')}</p>
                       </div>
                     </div>
 
@@ -1164,13 +1192,29 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
                           <p className="text-[10px] text-slate-400 font-mono uppercase tracking-wide">
                             Pedido #{q.id.slice(-5).toUpperCase()}
                           </p>
-                          <p className="font-bold text-slate-800 text-lg mt-0.5">
-                            $ {q.total?.toLocaleString('es-CO')}
+                          <p className="font-black text-ferry-600 text-lg mt-0.5">
+                            $ {((q.storeTotal ?? q.total) ?? 0).toLocaleString('es-CO')}
+                          </p>
+                          <p className="text-[10px] text-slate-400 font-medium">
+                            Total cobrado al cliente: ${(q.total ?? 0).toLocaleString('es-CO')}
                           </p>
                         </div>
                         <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-1 rounded-full whitespace-nowrap">
                           Pago en validación
                         </span>
+                      </div>
+
+                      {/* Items que se están pagando */}
+                      <div className="space-y-1 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Artículos del pedido:</p>
+                        {(() => {
+                          const itemsList = (q as any).storeItems ?? (q as any).items ?? [];
+                          return itemsList.filter((i: any) => i.available).map((item: any, i: number) => (
+                            <div key={i} className="flex justify-between text-xs">
+                              <span className="text-slate-600 truncate flex-1 mr-2">{item.name} × <span className="font-bold text-slate-800">{item.quantity}</span></span>
+                            </div>
+                          ));
+                        })()}
                       </div>
 
                       {/* Ver comprobante */}
@@ -1231,13 +1275,29 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
                           <p className="text-[10px] text-slate-400 font-mono uppercase tracking-wide">
                             Pedido #{q.id.slice(-5).toUpperCase()}
                           </p>
-                          <p className="font-bold text-slate-800 text-lg mt-0.5">
-                            $ {q.total?.toLocaleString('es-CO')}
+                          <p className="font-black text-ferry-600 text-lg mt-0.5">
+                            $ {((q.storeTotal ?? q.total) ?? 0).toLocaleString('es-CO')}
+                          </p>
+                          <p className="text-[10px] text-slate-400 font-medium">
+                            Total cobrado al cliente: ${(q.total ?? 0).toLocaleString('es-CO')}
                           </p>
                         </div>
                         <span className="text-[10px] font-bold bg-ferry-100 text-ferry-700 px-2 py-1 rounded-full">
                           Alistando 📦
                         </span>
+                      </div>
+
+                      {/* Items que deben prepararse */}
+                      <div className="space-y-1 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Artículos a empacar:</p>
+                        {(() => {
+                          const itemsList = (q as any).storeItems ?? (q as any).items ?? [];
+                          return itemsList.filter((i: any) => i.available).map((item: any, i: number) => (
+                            <div key={i} className="flex justify-between text-xs">
+                              <span className="text-slate-600 truncate flex-1 mr-2">{item.name} × <span className="font-bold text-slate-800">{item.quantity}</span></span>
+                            </div>
+                          ));
+                        })()}
                       </div>
 
                       {/* Yango link */}
@@ -1249,6 +1309,19 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
                       >
                         <Truck className="w-4 h-4" /> Programar envío en Yango
                       </a>
+
+                      {/* WhatsApp Client */}
+                      {q.clientPhone && (
+                        <a
+                          href={`https://wa.me/${q.clientPhone.replace(/\D/g, '')}?text=Hola%20${encodeURIComponent(q.clientName || 'cliente')},%20somos%20la%20ferretería%20preparando%20tu%20pedido%20en%20Ferry`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border-2 border-green-200 bg-green-50 hover:bg-green-100 text-green-700 text-sm font-semibold transition-colors"
+                        >
+                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12.031 0C5.383 0 0 5.383 0 12.031c0 2.115.548 4.175 1.594 5.992L0 24l6.152-1.564c1.748.966 3.708 1.474 5.879 1.474 6.648 0 12.031-5.383 12.031-12.031S18.679 0 12.031 0zm0 22.046c-1.802 0-3.568-.485-5.116-1.404l-.367-.217-3.805.967.98-3.707-.238-.379c-1.009-1.604-1.541-3.463-1.541-5.382 0-5.614 4.568-10.182 10.182-10.182 5.614 0 10.182 4.568 10.182 10.182 0 5.614-4.568 10.182-10.182 10.182zM17.6 15.11c-.305-.153-1.805-.891-2.084-.992-.279-.102-.483-.153-.686.153-.203.305-.788.992-.966 1.196-.178.203-.356.229-.661.076-1.748-.842-3.037-1.83-4.148-3.435-.285-.41.3-.393.889-1.574.076-.153.038-.28-.038-.432-.076-.153-.686-1.654-.94-2.264-.247-.594-.497-.514-.686-.523-.178-.009-.382-.009-.585-.009-.203 0-.534.076-.813.382C6.444 8.04 5.58 8.854 5.58 10.507c0 1.654 1.22 3.257 1.393 3.486.173.23 2.375 3.633 5.753 5.094 2.215.955 3.03.864 4.14.736 1.345-.155 2.871-1.173 3.277-2.308.406-1.135.406-2.107.285-2.311-.122-.204-.428-.328-.733-.481z"/></svg>
+                          WhatsApp del Cliente
+                        </a>
+                      )}
 
                       {/* Marcar en camino */}
                       <button
@@ -1263,6 +1336,119 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
                         )}
                         {actionLoadingId === q.id ? 'Actualizando...' : 'Marcar como En Camino'}
                       </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* ── Sección 3: En Camino (shipped) ── */}
+            <div>
+              <div className="flex items-center justify-between px-1 mb-2 mt-6">
+                <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
+                  <Truck className="w-4 h-4 text-blue-500" />
+                  En Camino — Esperando Cliente
+                  {shippedQuotes.length > 0 && (
+                    <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">
+                      {shippedQuotes.length}
+                    </span>
+                  )}
+                </h3>
+              </div>
+              {shippedQuotes.length === 0 ? (
+                <div className="text-center py-6 bg-white rounded-2xl border border-dashed border-slate-200">
+                  <p className="text-sm text-slate-400">Sin pedidos en tránsito</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {shippedQuotes.map(q => (
+                    <div key={q.id} className="bg-white rounded-2xl border-2 border-blue-100 p-4 space-y-3 shadow-sm">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="text-[10px] text-slate-400 font-mono uppercase tracking-wide">
+                            Pedido #{q.id.slice(-5).toUpperCase()}
+                          </p>
+                          <p className="font-black text-ferry-600 text-lg mt-0.5">
+                            $ {((q.storeTotal ?? q.total) ?? 0).toLocaleString('es-CO')}
+                          </p>
+                          <p className="text-[10px] text-slate-400 font-medium">
+                            Total cobrado al cliente: ${(q.total ?? 0).toLocaleString('es-CO')}
+                          </p>
+                        </div>
+                        <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-1 rounded-full flex items-center gap-1">
+                          En Tránsito
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                        El contratista debe confirmar la entrega desde su panel para finalizar la orden.
+                      </p>
+                      {/* WhatsApp / Contact Button */}
+                      {q.clientPhone && (
+                        <a
+                          href={`https://wa.me/${q.clientPhone.replace(/\D/g, '')}?text=Hola%20${encodeURIComponent(q.clientName || 'cliente')},%20somos%20la%20ferretería%20escribiéndote%20por%20tu%20pedido%20en%20Ferry`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-green-200 bg-green-50 hover:bg-green-100 text-green-700 text-sm font-semibold transition-colors"
+                        >
+                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12.031 0C5.383 0 0 5.383 0 12.031c0 2.115.548 4.175 1.594 5.992L0 24l6.152-1.564c1.748.966 3.708 1.474 5.879 1.474 6.648 0 12.031-5.383 12.031-12.031S18.679 0 12.031 0zm0 22.046c-1.802 0-3.568-.485-5.116-1.404l-.367-.217-3.805.967.98-3.707-.238-.379c-1.009-1.604-1.541-3.463-1.541-5.382 0-5.614 4.568-10.182 10.182-10.182 5.614 0 10.182 4.568 10.182 10.182 0 5.614-4.568 10.182-10.182 10.182zM17.6 15.11c-.305-.153-1.805-.891-2.084-.992-.279-.102-.483-.153-.686.153-.203.305-.788.992-.966 1.196-.178.203-.356.229-.661.076-1.748-.842-3.037-1.83-4.148-3.435-.285-.41.3-.393.889-1.574.076-.153.038-.28-.038-.432-.076-.153-.686-1.654-.94-2.264-.247-.594-.497-.514-.686-.523-.178-.009-.382-.009-.585-.009-.203 0-.534.076-.813.382C6.444 8.04 5.58 8.854 5.58 10.507c0 1.654 1.22 3.257 1.393 3.486.173.23 2.375 3.633 5.753 5.094 2.215.955 3.03.864 4.14.736 1.345-.155 2.871-1.173 3.277-2.308.406-1.135.406-2.107.285-2.311-.122-.204-.428-.328-.733-.481z"/></svg>
+                          Contactar Cliente
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* ── Sección 4: Entregadas (Historial) ── */}
+            <div>
+              <div className="flex items-center justify-between px-1 mb-2 mt-6">
+                <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
+                  <CheckCircle2 className="w-4 h-4 text-green-600" />
+                  Historial Entregadas
+                  {deliveredQuotes.length > 0 && (
+                    <span className="text-[10px] font-bold bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">
+                      {deliveredQuotes.length}
+                    </span>
+                  )}
+                </h3>
+              </div>
+              {deliveredQuotes.length === 0 ? (
+                <div className="text-center py-6 bg-white rounded-2xl border border-dashed border-slate-200">
+                  <p className="text-sm text-slate-400">Aún no hay pedidos entregados</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {deliveredQuotes.map(q => (
+                    <div key={q.id} className="bg-white rounded-2xl border border-slate-200 p-4 space-y-2 opacity-80 hover:opacity-100 transition-opacity">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="text-[10px] text-slate-400 font-mono uppercase tracking-wide">
+                            Pedido #{q.id.slice(-5).toUpperCase()}
+                          </p>
+                          <p className="font-black text-ferry-600 text-base mt-0.5">
+                            $ {((q.storeTotal ?? q.total) ?? 0).toLocaleString('es-CO')}
+                          </p>
+                          <p className="text-[10px] text-slate-400 font-medium">
+                            Total cobrado al cliente: ${(q.total ?? 0).toLocaleString('es-CO')}
+                          </p>
+                        </div>
+                        <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-1 rounded-full">
+                          Entregado
+                        </span>
+                      </div>
+                      {(q as any).reviewComment && (
+                        <div className="mt-2 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                          <div className="flex items-center gap-1 mb-1">
+                            {[1, 2, 3, 4, 5].map(star => (
+                              <svg key={star} className={`w-3 h-3 ${(q as any).rating >= star ? 'text-amber-400 fill-amber-400' : 'text-slate-300'}`} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                              </svg>
+                            ))}
+                          </div>
+                          <p className="text-xs text-slate-600 italic">"{(q as any).reviewComment}"</p>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

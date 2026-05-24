@@ -545,14 +545,19 @@ const fuzzyMatchWord = (word: string, maxDist = 2): string | null => {
     if (word.length < 4) return null; // palabras muy cortas no se corrigen
     const upper = word.toUpperCase();
     const terms = getKnownTerms();
+    
+    // Ajustar la distancia máxima permitida según la longitud de la palabra
+    // para evitar que palabras cortas cambien completamente (ej: TEJA -> PEÑA con dist=2)
+    const currentMaxDist = upper.length <= 5 ? 1 : maxDist;
+    
     let bestMatch: string | null = null;
-    let bestDist = maxDist + 1;
+    let bestDist = currentMaxDist + 1;
     for (const term of terms) {
-        // Solo comparar con términos de longitud similar (±2 chars)
-        if (Math.abs(term.length - upper.length) > maxDist) continue;
+        // Solo comparar con términos de longitud similar
+        if (Math.abs(term.length - upper.length) > currentMaxDist) continue;
         const dist = levenshteinDistance(upper, term);
         if (dist === 0) return null; // Ya es exacto, no corregir
-        if (dist <= maxDist && dist < bestDist) {
+        if (dist <= currentMaxDist && dist < bestDist) {
             bestDist = dist;
             bestMatch = term;
         }

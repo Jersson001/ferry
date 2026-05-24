@@ -26,14 +26,20 @@ export class QuotesController {
     return this.quotesService.getOwnRequests(req.user.uid);
   }
 
+  @Get('requests/:id/quote-count')
+  async getQuoteCount(@Param('id') id: string) {
+    const count = await this.quotesService.getQuoteCountForRequest(id);
+    return { count };
+  }
+
   @Get('responses/received')
   async getReceived(@Req() req: RequestWithUser) {
     return this.quotesService.getReceivedQuotes(req.user.uid);
   }
 
   @Post(':id/accept')
-  async acceptQuote(@Param('id') id: string, @Req() req: RequestWithUser) {
-    return this.quotesService.acceptQuote(id, req.user.uid);
+  async acceptQuote(@Param('id') id: string, @Body('createSplit') createSplit: boolean, @Req() req: RequestWithUser) {
+    return this.quotesService.acceptQuote(id, req.user.uid, createSplit);
   }
 
   @Post(':id/reject')
@@ -60,7 +66,14 @@ export class QuotesController {
   @Get('requests/pending')
   async getPending(@Req() req: RequestWithUser) {
     if (req.user.role !== 'STORE') throw new ForbiddenException('Solo tiendas');
-    return this.quotesService.getPendingRequests();
+    return this.quotesService.getPendingRequests(req.user.uid);
+  }
+
+  @Get('requests/pending-count')
+  async getPendingCount(@Req() req: RequestWithUser) {
+    if (req.user.role !== 'STORE') throw new ForbiddenException('Solo tiendas');
+    const count = await this.quotesService.getPendingRequestsCount(req.user.uid);
+    return { count };
   }
 
   @Get('responses/sent')
@@ -76,8 +89,9 @@ export class QuotesController {
   }
 
   @Post(':id/logistic-status')
-  async updateLogisticStatus(@Param('id') id: string, @Body('status') status: QuoteStatus, @Req() req: RequestWithUser) {
+  async updateLogisticStatus(@Param('id') id: string, @Body('status') status: string, @Req() req: RequestWithUser) {
     if (req.user.role !== 'STORE') throw new ForbiddenException('Solo tiendas');
-    return this.quotesService.updateQuoteStatus(id, status, req.user.uid, true);
+    const upperStatus = status.toUpperCase() as QuoteStatus;
+    return this.quotesService.updateQuoteStatus(id, upperStatus, req.user.uid, true);
   }
 }

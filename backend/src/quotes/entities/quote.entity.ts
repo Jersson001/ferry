@@ -8,6 +8,8 @@ export enum QuoteStatus {
   ACCEPTED = 'ACCEPTED',
   REJECTED = 'REJECTED',
   PAID = 'PAID',
+  PREPARING = 'PREPARING',
+  SHIPPED = 'SHIPPED',
   DELIVERED = 'DELIVERED'
 }
 

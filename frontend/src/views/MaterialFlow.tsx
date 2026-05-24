@@ -736,6 +736,16 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
     setEditingIndex(null);
   };
 
+  const handleAddNewItem = () => {
+    const newItem = { name: '', quantity: '1', unit: 'und', nombreComercial: '', medidaNominal: '', caracteristica: '' };
+    setItems(prev => [...prev, newItem]);
+    setEditingIndex(items.length);
+    setEditValues({
+      cantidad: '1', unidad: 'und', nombreComercial: '', medidaNominal: '', caracteristica: '',
+      nombre: '', tipoCorredera: '', tipoSoporte: '', observacion: ''
+    });
+  };
+
   // If we receive an active request in a specific state, sync the view mode
   React.useEffect(() => {
     if (activeRequest) {
@@ -862,12 +872,14 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
       };
     });
 
+    const finalTitle = quoteTitle.trim() || (selectedCategory ? `Pedido ${selectedCategory}` : `Pedido ${new Date().toLocaleDateString()}`);
+
     try {
       await sendQuoteRequest({
         category: selectedCategory || 'General',
         items: itemsLimpios,
         userLocation: resolvedLocation,
-        title: quoteTitle.trim() || undefined,
+        title: finalTitle,
         deliveryAddress: deliveryAddress.trim(),
       });
     } catch (error) {
@@ -879,7 +891,7 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
 
     const newRequest: MaterialRequest = {
       id: Date.now().toString(),
-      title: selectedCategory ? `Pedido ${selectedCategory}` : `Pedido ${new Date().toLocaleDateString()}`,
+      title: finalTitle,
       date: new Date().toISOString(),
       category: selectedCategory || 'General',
       items: itemsLimpios,
@@ -1279,7 +1291,7 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
             </button>
             <h2 className="text-xl font-bold">Revisar Lista</h2>
           </div>
-          <Button variant="ghost" onClick={() => setItems([...items, { name: '', quantity: '1', unit: 'und', nombreComercial: '', medidaNominal: '', caracteristica: '' }])} className="!p-2">
+          <Button variant="ghost" onClick={handleAddNewItem} className="!p-2">
             <Plus className="w-5 h-5" />
           </Button>
         </div>

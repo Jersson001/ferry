@@ -7,6 +7,7 @@ import { Quote } from './entities/quote.entity';
 import { QuoteItem } from './entities/quote-item.entity';
 import { QuoteReview } from './entities/quote-review.entity';
 import { UsersModule } from '../users/users.module';
+import { QuotesCronService } from './quotes.cron';
 
 @Module({
   imports: [
@@ -14,7 +15,7 @@ import { UsersModule } from '../users/users.module';
     UsersModule,
   ],
   controllers: [QuotesController],
-  providers: [QuotesService],
+  providers: [QuotesService, QuotesCronService],
   exports: [QuotesService],
 })
 export class QuotesModule {}

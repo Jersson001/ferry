@@ -30,7 +30,7 @@ services:
       DATABASE_USER: root
       DATABASE_PASSWORD: rootpassword
       DATABASE_NAME: ferry_db
-      JWT_SECRET: ${JWT_SECRET:-ferry_super_secret_jwt_key_change_in_production}
+      JWT_SECRET: ${JWT_SECRET:-ferry-super-secret-key-cambiar-en-produccion}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       UPLOADS_PATH: /var/lib/ferry/uploads
       UPLOADS_BASE_URL: ${UPLOADS_BASE_URL:-http://localhost:3000/uploads}

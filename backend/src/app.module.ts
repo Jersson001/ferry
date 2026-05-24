@@ -14,9 +14,11 @@ import { AiModule } from './ai/ai.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { ProjectsModule } from './projects/projects.module';
 import { AdminModule } from './admin/admin.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRoot({
       type: 'postgres',

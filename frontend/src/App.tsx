@@ -16,6 +16,7 @@ import { UserRole, MaterialRequest, RequestStatus, Quote, Product, QuoteLineItem
 import { Home, ShoppingBag, Briefcase, User, CheckCircle2, Inbox, Package, ShieldAlert, X, Store, LogOut } from 'lucide-react';
 import ferryLogo from './assets/logo.svg';
 import { getCurrentUser, signOut as logoutUser, verifyEmailToken } from './services/authService';
+import { getStorePendingRequestsCount } from './services/quoteService';
 import { loadGuestCart, GuestCart } from './hooks/useGuestCart';
 import { APIProvider } from '@vis.gl/react-google-maps';
 
@@ -55,6 +56,7 @@ const App: React.FC = () => {
 
   // Estado para geolocalización del usuario
   const [userLocation, setUserLocation] = useState<{ lat: number, lng: number } | null>(null);
+  const [pendingStoreRequestsCount, setPendingStoreRequestsCount] = useState(0);
 
   // Fórmula de Haversine para calcular distancia en Kilómetros
   const calcularDistancia = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -69,43 +71,75 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    const user = getCurrentUser();
-    
-    if (user) {
-      if (!authFirstCheckRef.current) {
-        setIsLoggedIn(true);
-        setIsGuest(false);
-        // Mostrar banner de verificación si el email no está verificado
-        if (user.isEmailVerified === false) {
-          setShowVerifyEmailBanner(true);
+    const initAuth = async () => {
+      const token = localStorage.getItem('access_token');
+      const user = getCurrentUser();
+
+      if (token && user) {
+        // Validate token with server BEFORE setting logged-in state
+        try {
+          const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:3000'}/auth/me`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+
+          if (response.status === 401 || response.status === 403) {
+            // Token inválido — limpiar todo
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('user');
+            setIsLoggedIn(false);
+            setCurrentUserProfile(null);
+            setIsGuest(false);
+            setIsAuthReady(true);
+            authFirstCheckRef.current = true;
+            return;
+          }
+
+          if (response.ok) {
+            const freshUser = await response.json();
+            const mappedUser: UserProfile = {
+              ...freshUser,
+              role: freshUser.role === 'STORE' ? UserRole.STORE : UserRole.USER,
+              createdAt: new Date(freshUser.createdAt),
+            };
+            localStorage.setItem('user', JSON.stringify(mappedUser));
+            setIsLoggedIn(true);
+            setIsGuest(false);
+            setCurrentUserProfile(mappedUser);
+            if (mappedUser.role === UserRole.STORE) {
+              getStorePendingRequestsCount().then(setPendingStoreRequestsCount).catch(console.error);
+            }
+            if (mappedUser.isEmailVerified === false) {
+              setShowVerifyEmailBanner(true);
+            }
+            // Pedir geolocalización
+            if ("geolocation" in navigator) {
+              navigator.geolocation.getCurrentPosition(
+                (position) => {
+                  setUserLocation({ lat: position.coords.latitude, lng: position.coords.longitude });
+                },
+                (error) => console.error("Error obteniendo ubicación:", error),
+                { enableHighAccuracy: true }
+              );
+            }
+          }
+        } catch {
+          // Error de red — mantener sesión en caché
+          setIsLoggedIn(true);
+          setIsGuest(false);
+          setCurrentUserProfile(user);
         }
-      }
-      setPreselectedRole(null);
-      setCurrentUserProfile(prev => {
-        if (prev?.uid === user.uid) return prev;
-        return user;
-      });
-      
-      // Pedir geolocalización
-      if ("geolocation" in navigator) {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            setUserLocation({ lat: position.coords.latitude, lng: position.coords.longitude });
-          },
-          (error) => console.error("Error obteniendo ubicación:", error),
-          { enableHighAccuracy: true }
-        );
-      }
-    } else {
-      if (!authFirstCheckRef.current) {
+      } else {
         setIsLoggedIn(false);
         setCurrentUserProfile(null);
-        setIsGuest(true);
+        setIsGuest(false);
       }
-    }
-    
-    setIsAuthReady(true);
-    authFirstCheckRef.current = true;
+
+      setPreselectedRole(null);
+      setIsAuthReady(true);
+      authFirstCheckRef.current = true;
+    };
+
+    initAuth();
   }, []);
 
 
@@ -125,33 +159,6 @@ const App: React.FC = () => {
       }
     };
     window.addEventListener('storage', handleStorageChange);
-
-    const syncSession = async () => {
-      const token = localStorage.getItem('access_token');
-      if (!token) return;
-      try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:3000'}/auth/me`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (response.ok) {
-          const freshUser = await response.json();
-          const mappedUser: UserProfile = {
-            ...freshUser,
-            role: freshUser.role === 'STORE' ? UserRole.STORE : UserRole.USER,
-            createdAt: new Date(freshUser.createdAt),
-          };
-          localStorage.setItem('user', JSON.stringify(mappedUser));
-          setCurrentUserProfile(mappedUser);
-          if (mappedUser.isEmailVerified) {
-            setShowVerifyEmailBanner(false);
-          }
-        }
-      } catch (err) {
-        console.error('Error al sincronizar sesión:', err);
-      }
-    };
-    syncSession();
-
     return () => {
       window.removeEventListener('storage', handleStorageChange);
     };
@@ -262,15 +269,27 @@ const App: React.FC = () => {
   };
   const handleAddProduct = (product: Product) => setProducts(prev => [product, ...prev]);
   const handleCycleRole = () => {
+    if (currentUserProfile) {
+      if (currentUserRole === UserRole.STORE) {
+        getStorePendingRequestsCount().then(setPendingStoreRequestsCount).catch(console.error);
+      }
+    }
     if (!currentUserProfile) return;
     const roles = [UserRole.USER, UserRole.STORE, UserRole.ADMIN];
     const nextRole = roles[(roles.indexOf(currentUserRole) + 1) % roles.length];
     setCurrentUserProfile({ ...currentUserProfile, role: nextRole });
   };
 
-  const NavItem = ({ icon: Icon, label, view }: { icon: any, label: string, view: any }) => (
-    <button onClick={() => setCurrentView(view)} className={`flex flex-col items-center justify-center w-full h-full space-y-1 ${currentView === view ? 'text-ferry-600' : 'text-slate-400'}`}>
-      <Icon className={`w-6 h-6 ${currentView === view ? 'fill-ferry-600/10' : ''}`} />
+  const NavItem = ({ icon: Icon, label, view, badgeCount = 0 }: { icon: any, label: string, view: any, badgeCount?: number }) => (
+    <button onClick={() => setCurrentView(view)} className={`relative flex flex-col items-center justify-center w-full h-full space-y-1 ${currentView === view ? 'text-ferry-600' : 'text-slate-400'}`}>
+      <div className="relative">
+        <Icon className={`w-6 h-6 ${currentView === view ? 'fill-ferry-600/10' : ''}`} />
+        {badgeCount > 0 && (
+          <span className="absolute -top-1 -right-2 bg-red-500 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full border-2 border-white">
+            {badgeCount > 9 ? '9+' : badgeCount}
+          </span>
+        )}
+      </div>
       <span className="text-[10px] font-medium">{label}</span>
     </button>
   );
@@ -568,7 +587,7 @@ const App: React.FC = () => {
             </>
           ) : (
             <>
-              <NavItem icon={Store} label="Panel" view="HOME" />
+              <NavItem icon={Store} label="Panel" view="HOME" badgeCount={pendingStoreRequestsCount} />
               <NavItem icon={Package} label="Catálogo" view="CATALOG" />
               <NavItem icon={User} label="Perfil" view="PROFILE" />
             </>

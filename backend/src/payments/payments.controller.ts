@@ -21,18 +21,16 @@ export class PaymentsController {
   @UseGuards(JwtAuthGuard)
   @Get('wompi/signature/:quoteId')
   async getSignature(@Param('quoteId') quoteId: string, @Req() req: RequestWithUser) {
-    // 1. Obtener los detalles de la cotización
-    // Para simplificar, obtenemos las cotizaciones recibidas y buscamos la correcta
-    const receivedQuotes = await this.quotesService.getReceivedQuotes(req.user.uid);
-    const quote = receivedQuotes.find(q => q.id === quoteId);
+    // 1. Obtener los detalles de la cotización directamente de la base de datos
+    const quote = await this.quotesService.findOneById(quoteId);
     
-    if (!quote) {
+    if (!quote || quote.request?.userId !== req.user.uid) {
       throw new NotFoundException('Cotización no encontrada o no te pertenece');
     }
 
     // 2. Generar referencia única (QUOTE-uuid-timestamp)
     const reference = `QUOTE-${quote.id}-${Date.now()}`;
-    const amountInCents = quote.clientFinalTotal;
+    const amountInCents = Math.round(quote.clientFinalTotal * 100);
     
     // 3. Generar la firma segura en el servidor
     const signature = this.paymentsService.generateWidgetSignature(reference, amountInCents, 'COP');

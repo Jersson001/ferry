@@ -87,10 +87,21 @@ export interface QuoteResponseItem {
   sku?: string | null;
 }
 
+export interface QuoteSubmitItem {
+  name: string;
+  nombreComercial?: string | null;
+  quantity: number;
+  unit: string;
+  storeBaseUnitPrice: number;
+  subtotal: number;
+  available: boolean;
+  sku?: string | null;
+}
+
 export interface QuoteResponsePayload {
   requestId: string;
   storeName: string;
-  storeItems: QuoteResponseItem[];
+  items: QuoteSubmitItem[];
   storeSubtotalBruto: number;
   discount: number;
   storeSubtotalNeto: number;
@@ -115,6 +126,8 @@ export interface StoreSentQuote {
   status: string;
   createdAt: any;
   distanceKm?: number | null;
+  clientName?: string;
+  clientPhone?: string;
 }
 
 export interface QuoteReview {
@@ -128,6 +141,10 @@ export interface ReceivedQuote {
   requestId: string;
   storeId: string;
   storeName: string;
+  store?: {
+    phoneNumber?: string;
+    email?: string;
+  };
   items: QuoteResponseItem[];
   total: number;
   transportCost?: number;
@@ -203,6 +220,15 @@ export const getPendingRequestsForStore = async (
   return apiRequest<IncomingQuoteRequest[]>('/quotes/requests/pending');
 };
 
+export const getStorePendingRequestsCount = async (): Promise<number> => {
+  try {
+    const res = await apiRequest<{ count: number }>('/quotes/requests/pending-count');
+    return res.count;
+  } catch {
+    return 0;
+  }
+};
+
 export const getUserOwnRequests = async (): Promise<UserOwnRequest[]> => {
   return apiRequest<UserOwnRequest[]>('/quotes/requests/own');
 };
@@ -239,10 +265,10 @@ export const getRecentPendingQuotes = async (_maxResults = 3): Promise<RecentPen
 
 // ─── Quote Actions ────────────────────────────────────────────────────────────
 
-export const acceptQuote = async (quoteId: string, requestId: string): Promise<AcceptQuoteResult> => {
+export const acceptQuote = async (quoteId: string, requestId: string, createSplit: boolean = false): Promise<AcceptQuoteResult> => {
   return apiRequest<AcceptQuoteResult>(`/quotes/${quoteId}/accept`, {
     method: 'POST',
-    body: JSON.stringify({ requestId }),
+    body: JSON.stringify({ requestId, createSplit }),
   });
 };
 

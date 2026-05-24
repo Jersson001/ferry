@@ -48,30 +48,81 @@ export class QuotesService {
     });
   }
 
+  async getQuoteCountForRequest(requestId: string): Promise<number> {
+    return this.quoteRepository.count({ where: { requestId } });
+  }
+
   // ==========================================
   // FERRETERÍA: VER SOLICITUDES
   // ==========================================
-  async getPendingRequests(): Promise<MaterialRequest[]> {
-    // Retorna las solicitudes ABIERTAS que las tiendas pueden cotizar
-    return this.requestRepository.find({
-      where: { status: RequestStatus.OPEN },
-      relations: ['user'],
-      order: { createdAt: 'DESC' },
+  async getPendingRequests(storeId: string): Promise<MaterialRequest[]> {
+    // 1. Obtener los IDs de las solicitudes que esta tienda ya cotizó
+    const existingQuotes = await this.quoteRepository.find({
+      where: { storeId },
+      select: ['requestId']
     });
+    const quotedRequestIds = existingQuotes.map(q => q.requestId);
+
+    // 2. Retornar las solicitudes ABIERTAS que NO han sido cotizadas por la tienda
+    const query = this.requestRepository.createQueryBuilder('request')
+      .leftJoinAndSelect('request.user', 'user')
+      .where('request.status = :status', { status: RequestStatus.OPEN });
+
+    if (quotedRequestIds.length > 0) {
+      query.andWhere('request.id NOT IN (:...quotedRequestIds)', { quotedRequestIds });
+    }
+
+    return query.orderBy('request.createdAt', 'DESC').getMany();
+  }
+
+  async getPendingRequestsCount(storeId: string): Promise<number> {
+    const existingQuotes = await this.quoteRepository.find({
+      where: { storeId },
+      select: ['requestId']
+    });
+    const quotedRequestIds = existingQuotes.map(q => q.requestId);
+
+    const query = this.requestRepository.createQueryBuilder('request')
+      .where('request.status = :status', { status: RequestStatus.OPEN });
+
+    if (quotedRequestIds.length > 0) {
+      query.andWhere('request.id NOT IN (:...quotedRequestIds)', { quotedRequestIds });
+    }
+
+    return query.getCount();
   }
 
   async getSentQuotes(storeId: string): Promise<any[]> {
     const quotes = await this.quoteRepository.find({
       where: { storeId },
-      relations: ['request'],
+      relations: ['request', 'request.user', 'items', 'store'],
       order: { createdAt: 'DESC' },
     });
-    return quotes.map(q => ({
-      ...q,
-      requestTitle: q.request?.title,
-      requestCategory: q.request?.category,
-      requestDisplayId: q.request?.displayId
-    }));
+    return quotes.map(q => {
+      let mappedStatus = q.status as string;
+      if (mappedStatus === QuoteStatus.PENDING) mappedStatus = 'sent';
+      else mappedStatus = mappedStatus.toLowerCase();
+
+      const isPaidOrLater = [QuoteStatus.PAID, QuoteStatus.PREPARING, QuoteStatus.SHIPPED, QuoteStatus.DELIVERED].includes(q.status);
+
+      return {
+        ...q,
+        status: mappedStatus,
+        total: q.clientFinalTotal,
+        storeTotal: q.storeBaseTotal + (q.transportCost || 0),
+        storeName: q.store?.displayName || q.store?.email || 'Tienda',
+        requestTitle: q.request?.title,
+        requestCategory: q.request?.category,
+        requestDisplayId: q.request?.displayId,
+        clientName: isPaidOrLater ? q.request?.user?.displayName : undefined,
+        clientPhone: isPaidOrLater ? q.request?.user?.phoneNumber : undefined,
+        items: q.items?.map(i => ({
+          ...i,
+          subtotal: i.storeBaseSubtotal,
+          unitPrice: i.storeBaseUnitPrice
+        })) || []
+      };
+    });
   }
 
   // ==========================================
@@ -148,35 +199,55 @@ export class QuotesService {
     const quotes = await this.quoteRepository.createQueryBuilder('quote')
       .leftJoinAndSelect('quote.items', 'items')
       .leftJoinAndSelect('quote.store', 'store')
-      .where('quote.request_id IN (:...requestIds)', { requestIds })
+      .where('quote.requestId IN (:...requestIds)', { requestIds })
       .orderBy('quote.createdAt', 'DESC')
       .getMany();
 
     // 3. APLICAR BLIND STRATEGY (Ocultar datos si está PENDING/ACCEPTED/REJECTED)
     return quotes.map(quote => {
+      let mappedStatus = quote.status as string;
+      if (mappedStatus === QuoteStatus.PENDING) mappedStatus = 'sent';
+      else mappedStatus = mappedStatus.toLowerCase();
+
+      const mappedQuote = {
+        ...quote,
+        status: mappedStatus,
+        total: quote.clientFinalTotal,
+        storeName: quote.store?.displayName || quote.store?.email || 'Tienda',
+        items: quote.items.map(item => ({
+          ...item,
+          unitPrice: item.clientFinalUnitPrice,
+          subtotal: item.clientFinalSubtotal,
+        }))
+      };
+
       // Remover datos sensibles internos
-      delete (quote as any).storeBaseTotal;
-      delete (quote as any).ferryCommission;
-      delete (quote as any).ferryIva;
+      delete (mappedQuote as any).storeBaseTotal;
+      delete (mappedQuote as any).ferryCommission;
+      delete (mappedQuote as any).ferryIva;
+      delete (mappedQuote as any).clientFinalTotal;
       
-      quote.items.forEach(item => {
+      mappedQuote.items.forEach(item => {
         delete (item as any).storeBaseUnitPrice;
         delete (item as any).storeBaseSubtotal;
+        delete (item as any).clientFinalUnitPrice;
+        delete (item as any).clientFinalSubtotal;
       });
 
       // Si no ha pagado, NO MOSTRAR la tienda
       if (quote.status === QuoteStatus.PENDING || quote.status === QuoteStatus.ACCEPTED || quote.status === QuoteStatus.REJECTED) {
         return {
-          ...quote,
+          ...mappedQuote,
           store: undefined, // Ocultar tienda completamente
           storeId: undefined, // Ocultar ID
+          storeName: undefined, // Ocultar nombre
           isBlind: true, // Flag para el frontend
         };
       }
 
       // Si pagó o ya se entregó, se liberan los datos
       return {
-        ...quote,
+        ...mappedQuote,
         isBlind: false,
       };
     });
@@ -185,18 +256,18 @@ export class QuotesService {
   // ==========================================
   // TRANSACCIONES ATÓMICAS (ACEPTAR / PAGAR)
   // ==========================================
-  async acceptQuote(quoteId: string, userId: string): Promise<Quote> {
+  async acceptQuote(quoteId: string, userId: string, createSplit: boolean = false): Promise<any> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
-      // 1. Bloquear la cotización (Evitar race conditions)
-      const quote = await queryRunner.manager.findOne(Quote, {
-        where: { id: quoteId },
-        relations: ['request'],
-        lock: { mode: 'pessimistic_write' },
-      });
+      // 1. Bloquear la cotización usando QueryBuilder para evitar JOINs automáticos con FOR UPDATE
+      const quote = await queryRunner.manager.createQueryBuilder(Quote, 'q')
+        .innerJoinAndSelect('q.request', 'request')
+        .where('q.id = :id', { id: quoteId })
+        .setLock('pessimistic_write')
+        .getOne();
 
       if (!quote) throw new NotFoundException('Cotización no encontrada');
       if (quote.request.userId !== userId) throw new ForbiddenException('No es tu cotización');
@@ -212,8 +283,42 @@ export class QuotesService {
         { status: QuoteStatus.REJECTED }
       );
 
+      // 4. Lógica de Split Order
+      let splitCreated = false;
+      let splitRequestId: string | undefined = undefined;
+
+      if (createSplit) {
+        quote.items = await queryRunner.manager.find(QuoteItem, { where: { quoteId: quote.id } });
+        const unavailableItems = quote.items.filter(item => !item.available);
+        if (unavailableItems.length > 0) {
+          const newRequest = this.requestRepository.create({
+            userId: quote.request.userId,
+            title: quote.request.title + ' (Complemento)',
+            category: quote.request.category,
+            items: unavailableItems.map(i => ({
+              name: i.name,
+              quantity: i.quantity,
+              unit: i.unit
+            })),
+            deliveryAddress: quote.request.deliveryAddress,
+            userLat: quote.request.userLat,
+            userLng: quote.request.userLng,
+            publicationType: quote.request.publicationType,
+            status: RequestStatus.OPEN,
+            displayId: `REQ-${Math.floor(10000 + Math.random() * 90000)}`,
+          });
+          const savedNewRequest = await queryRunner.manager.save(newRequest);
+          splitCreated = true;
+          splitRequestId = savedNewRequest.id;
+        }
+      }
+
       await queryRunner.commitTransaction();
-      return quote;
+      return {
+        ...quote,
+        splitCreated,
+        splitRequestId
+      };
     } catch (err) {
       await queryRunner.rollbackTransaction();
       throw err;
@@ -228,31 +333,46 @@ export class QuotesService {
     await queryRunner.startTransaction();
 
     try {
-      // Bloquear fila con write lock para evitar race conditions
-      const quote = await queryRunner.manager.findOne(Quote, {
-        where: { id: quoteId },
-        relations: ['request'],
-        lock: { mode: 'pessimistic_write' },
-      });
+      // Bloquear fila con write lock usando QueryBuilder para evitar LEFT JOIN automáticos
+      const quote = await queryRunner.manager.createQueryBuilder(Quote, 'q')
+        .where('q.id = :id', { id: quoteId })
+        .setLock('pessimistic_write')
+        .getOne();
 
       if (!quote) throw new NotFoundException('Cotización no encontrada');
       if (quote.status === QuoteStatus.PAID) return quote; // Idempotencia
-      if (quote.status !== QuoteStatus.ACCEPTED) {
-        throw new ForbiddenException('Solo se pueden pagar cotizaciones aceptadas');
+      if (quote.status !== QuoteStatus.ACCEPTED && quote.status !== QuoteStatus.PENDING) {
+        throw new ForbiddenException('La cotización no está en estado válido para pagar');
       }
+
+      // Obtener el request por separado
+      const request = await queryRunner.manager.findOne(MaterialRequest, {
+        where: { id: quote.requestId },
+      });
+
+      if (!request) throw new NotFoundException('Solicitud original no encontrada');
 
       // PARCHE DE SEGURIDAD: Validar que la cotización pertenece al usuario que paga.
       // Excepción: SYSTEM_WEBHOOK cuando viene del procesador de webhooks de Wompi.
-      if (userId !== 'SYSTEM_WEBHOOK' && quote.request.userId !== userId) {
+      if (userId !== 'SYSTEM_WEBHOOK' && request.userId !== userId) {
         throw new ForbiddenException('No tienes permiso para pagar esta cotización');
       }
+
+      const wasPending = quote.status === QuoteStatus.PENDING;
 
       // 1. Marcar como pagada
       quote.status = QuoteStatus.PAID;
       await queryRunner.manager.save(quote);
 
+      if (wasPending) {
+        // Rechazar automáticamente las demás cotizaciones del mismo request
+        await queryRunner.manager.update(Quote, 
+          { requestId: quote.requestId, status: QuoteStatus.PENDING }, 
+          { status: QuoteStatus.REJECTED }
+        );
+      }
+
       // 2. Marcar la solicitud original como completada
-      const request = quote.request;
       request.status = RequestStatus.COMPLETED;
       await queryRunner.manager.save(request);
 
