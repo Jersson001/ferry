@@ -282,7 +282,10 @@ const App: React.FC = () => {
   };
 
   const NavItem = ({ icon: Icon, label, view, badgeCount = 0 }: { icon: any, label: string, view: any, badgeCount?: number }) => (
-    <button onClick={() => setCurrentView(view)} className={`relative flex flex-col items-center justify-center w-full h-full space-y-1 ${currentView === view ? 'text-ferry-600' : 'text-slate-400'}`}>
+    <button onClick={() => {
+      if (view === 'SHOP') setActiveRequestId(null);
+      setCurrentView(view);
+    }} className={`relative flex flex-col items-center justify-center w-full h-full space-y-1 ${currentView === view ? 'text-ferry-600' : 'text-slate-400'}`}>
       <div className="relative">
         <Icon className={`w-6 h-6 ${currentView === view ? 'fill-ferry-600/10' : ''}`} />
         {badgeCount > 0 && (
@@ -540,7 +543,10 @@ const App: React.FC = () => {
                 />}
                 {currentView === 'SHOP' && <MaterialFlow
                   onNavigate={(view) => {
-                    if (view === 'QUOTES') setQuotesInitialTab('recibidas');
+                    if (view === 'QUOTES') {
+                      setQuotesInitialTab('recibidas');
+                      setActiveRequestId(null);
+                    }
                     setCurrentView(view);
                   }}
                   onRequestCreate={(req) => { handleRequestCreate(req); setPendingCart(null); setAutoSubmitAfterLogin(false); }}
