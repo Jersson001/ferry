@@ -54,7 +54,7 @@ export class AiService {
         },
       });
 
-      const prompt = `Analiza el siguiente texto y extrae una lista de materiales de construcción con su nombre, cantidad numérica y unidad de medida. Texto: "${text}"`;
+      const prompt = `Analiza el siguiente texto y extrae una lista de artículos o materiales solicitados con su nombre, cantidad numérica y unidad de medida. IMPORTANTE: NO descartes NINGÚN artículo mencionado, incluso si no parece un material de construcción tradicional (ej: canecas, escobas, herramientas, elementos de limpieza, misceláneos). Todo lo que el usuario pida debe incluirse. Texto: "${text}"`;
 
       const result = await model.generateContent(prompt);
       const response = await result.response;

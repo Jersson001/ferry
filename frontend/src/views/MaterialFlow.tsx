@@ -517,70 +517,123 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
 
   // === DICTADO POR VOZ ===
   const [isListening, setIsListening] = useState(false);
+  const [interimText, setInterimText] = useState('');
   const recognitionRef = useRef<any>(null);
+  const shouldListenRef = useRef(false);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      shouldListenRef.current = false;
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
 
   const toggleDictation = () => {
     if (isListening) {
-      recognitionRef.current?.stop();
+      shouldListenRef.current = false;
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch (e) {}
+      }
       setIsListening(false);
+      setInterimText('');
       return;
     }
+
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
       alert('Tu navegador no soporta dictado por voz. Usa Chrome o Edge.');
       return;
     }
+
     const recognition = new SpeechRecognition();
     recognition.lang = 'es-CO';
     recognition.continuous = true;
-    recognition.interimResults = true; // Habilitar resultados parciales para que sea más reactivo
-    
-    let currentInterim = '';
-    
+    recognition.interimResults = true; 
+
     recognition.onresult = (event: any) => {
+      // Reseteamos el contador porque el usuario está hablando
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => {
+        shouldListenRef.current = false;
+        if (recognitionRef.current) {
+          try { recognitionRef.current.stop(); } catch (e) {}
+        }
+        setIsListening(false);
+        setInterimText('');
+      }, 15000);
+
       let finalTranscript = '';
-      let interimTranscript = '';
+      let currentInterim = '';
       
       for (let i = event.resultIndex; i < event.results.length; i++) {
         if (event.results[i].isFinal) {
           finalTranscript += event.results[i][0].transcript;
         } else {
-          interimTranscript += event.results[i][0].transcript;
+          currentInterim += event.results[i][0].transcript;
         }
       }
-      
+
+      setInterimText(currentInterim);
+
       if (finalTranscript) {
         const processed = finalTranscript.replace(/\blisto\b/gi, '\n').trim();
         if (processed) {
           setTextInput(prev => {
-            // Remove previous interim text if we were showing it
-            const baseText = currentInterim ? prev.replace(currentInterim, '').trim() : prev;
-            currentInterim = '';
-            return baseText ? baseText + ' ' + processed : processed;
+            const separator = prev && !prev.endsWith('\n') ? ' ' : '';
+            return prev + separator + processed;
           });
         }
-      } else if (interimTranscript) {
-        setTextInput(prev => {
-          const baseText = currentInterim ? prev.replace(currentInterim, '').trim() : prev;
-          currentInterim = ' ' + interimTranscript;
-          return baseText ? baseText + currentInterim : interimTranscript.trim();
-        });
       }
     };
-    
+
     recognition.onerror = (e: any) => {
-      console.error("Error en dictado:", e);
-      setIsListening(false);
+      console.error("Error en dictado:", e.error);
+      if (e.error === 'not-allowed' || e.error === 'aborted') {
+        shouldListenRef.current = false;
+        setIsListening(false);
+        setInterimText('');
+      }
     };
+
     recognition.onend = () => {
-      // Limpiar interim text actual
-      currentInterim = '';
-      setIsListening(false);
+      if (shouldListenRef.current) {
+        setTimeout(() => {
+          if (shouldListenRef.current && recognitionRef.current) {
+            try { recognitionRef.current.start(); } catch (e) {}
+          }
+        }, 300);
+      } else {
+        setIsListening(false);
+        setInterimText('');
+      }
     };
-    
+
     recognitionRef.current = recognition;
-    recognition.start();
-    setIsListening(true);
+    shouldListenRef.current = true;
+    
+    try {
+      recognition.start();
+      setIsListening(true);
+      // Iniciar el temporizador inicial de 15 segundos
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => {
+        shouldListenRef.current = false;
+        if (recognitionRef.current) {
+          try { recognitionRef.current.stop(); } catch (e) {}
+        }
+        setIsListening(false);
+        setInterimText('');
+      }, 15000);
+    } catch (e) {
+      console.error("Error al iniciar dictado:", e);
+      setIsListening(false);
+      shouldListenRef.current = false;
+    }
   };
 
   // Expanded state for quotes breakdown
@@ -1182,9 +1235,11 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
             </button>
           </div>
           {isListening && (
-            <div className="px-4 py-2 bg-red-50 border-t border-red-100 flex items-center gap-2">
-              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-              <span className="text-xs text-red-600 font-medium">Escuchando... habla ahora</span>
+            <div className="px-4 py-3 bg-red-50 border-t border-red-100 flex items-start gap-2 max-h-24 overflow-y-auto">
+              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse flex-shrink-0 mt-1" />
+              <span className="text-sm text-red-600 font-medium italic break-words flex-1 leading-tight">
+                {interimText ? `"${interimText}"...` : 'Escuchando... habla ahora'}
+              </span>
             </div>
           )}
           <div className="bg-slate-50 p-3 border-t border-slate-100 flex justify-between items-center">
