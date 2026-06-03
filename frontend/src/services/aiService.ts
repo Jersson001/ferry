@@ -1,4 +1,4 @@
-import { MaterialItem } from "../types";
+import { MaterialItem } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3000';
 
@@ -12,23 +12,21 @@ const apiRequest = async <T>(endpoint: string, options: RequestInit = {}): Promi
       ...options.headers,
     },
   });
+  
+  if (response.status === 401) {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('user');
+    throw new Error('Sesión expirada');
+  }
+  
   const data = await response.json();
   if (!response.ok) throw new Error(data.message || 'Error en la petición de IA');
   return data;
 };
 
-export const analyzeMaterialImage = async (base64Image: string): Promise<MaterialItem[]> => {
-  const result = await apiRequest<{ items: MaterialItem[] }>('/ai/analyze-image', {
+export const smartMatchWithAi = async (requestedItems: MaterialItem[]): Promise<any> => {
+  return apiRequest<{ matches: any[] }>('/ai/smart-match', {
     method: 'POST',
-    body: JSON.stringify({ base64Image }),
+    body: JSON.stringify({ requestedItems }),
   });
-  return result.items || [];
-};
-
-export const extractMaterialsFromText = async (textInput: string): Promise<MaterialItem[]> => {
-  const result = await apiRequest<{ items: MaterialItem[] }>('/ai/parse-materials', {
-    method: 'POST',
-    body: JSON.stringify({ text: textInput }),
-  });
-  return result.items || [];
 };

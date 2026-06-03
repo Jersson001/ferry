@@ -533,24 +533,51 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
     const recognition = new SpeechRecognition();
     recognition.lang = 'es-CO';
     recognition.continuous = true;
-    recognition.interimResults = false;
+    recognition.interimResults = true; // Habilitar resultados parciales para que sea más reactivo
+    
+    let currentInterim = '';
+    
     recognition.onresult = (event: any) => {
-      let transcript = '';
+      let finalTranscript = '';
+      let interimTranscript = '';
+      
       for (let i = event.resultIndex; i < event.results.length; i++) {
         if (event.results[i].isFinal) {
-          transcript += event.results[i][0].transcript;
+          finalTranscript += event.results[i][0].transcript;
+        } else {
+          interimTranscript += event.results[i][0].transcript;
         }
       }
-      if (transcript) {
-        // "listo" actúa como Enter (salto de línea para separar productos)
-        const processed = transcript.replace(/\blisto\b/gi, '\n').trim();
+      
+      if (finalTranscript) {
+        const processed = finalTranscript.replace(/\blisto\b/gi, '\n').trim();
         if (processed) {
-          setTextInput(prev => prev ? prev + ' ' + processed : processed);
+          setTextInput(prev => {
+            // Remove previous interim text if we were showing it
+            const baseText = currentInterim ? prev.replace(currentInterim, '').trim() : prev;
+            currentInterim = '';
+            return baseText ? baseText + ' ' + processed : processed;
+          });
         }
+      } else if (interimTranscript) {
+        setTextInput(prev => {
+          const baseText = currentInterim ? prev.replace(currentInterim, '').trim() : prev;
+          currentInterim = ' ' + interimTranscript;
+          return baseText ? baseText + currentInterim : interimTranscript.trim();
+        });
       }
     };
-    recognition.onerror = () => setIsListening(false);
-    recognition.onend = () => setIsListening(false);
+    
+    recognition.onerror = (e: any) => {
+      console.error("Error en dictado:", e);
+      setIsListening(false);
+    };
+    recognition.onend = () => {
+      // Limpiar interim text actual
+      currentInterim = '';
+      setIsListening(false);
+    };
+    
     recognitionRef.current = recognition;
     recognition.start();
     setIsListening(true);
@@ -773,10 +800,16 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
       const base64 = reader.result as string;
       const cleanBase64 = base64.split(',')[1];
 
-      const recognizedItems = await analyzeMaterialImage(cleanBase64);
-      setItems(normalizarProductos(recognizedItems));
-      setIsAnalyzing(false);
-      setMode('EDITING');
+      try {
+        const recognizedItems = await analyzeMaterialImage(cleanBase64);
+        setItems(normalizarProductos(recognizedItems));
+        setMode('EDITING');
+      } catch (error: any) {
+        alert(error.message || 'Error al procesar la imagen con Inteligencia Artificial.');
+        setMode('INITIAL');
+      } finally {
+        setIsAnalyzing(false);
+      }
     };
     reader.readAsDataURL(file);
   };
@@ -785,10 +818,16 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
     if (!textInput.trim()) return;
     setIsAnalyzing(true);
     setMode('SCANNING');
-    const recognizedItems = await extractMaterialsFromText(textInput);
-    setItems(normalizarProductos(recognizedItems));
-    setIsAnalyzing(false);
-    setMode('EDITING');
+    try {
+      const recognizedItems = await extractMaterialsFromText(textInput);
+      setItems(normalizarProductos(recognizedItems));
+      setMode('EDITING');
+    } catch (error: any) {
+      alert(error.message || 'Error al procesar el texto con Inteligencia Artificial.');
+      setMode('TEXT_INPUT');
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   /** Resolves the user's current GPS position. Returns null if unavailable or denied. */
@@ -952,30 +991,6 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
 
         {/* ── Dirección de entrega ── */}
         <div className="bg-gray-50 rounded-2xl border border-gray-200 p-4 space-y-3">
-
-          {/* Toggle disponibilidad */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-slate-700">Estoy disponible / En servicio</span>
-              {isGpsActive && (
-                <span className="flex items-center gap-1 bg-green-100 text-green-700 text-xs font-semibold px-2 py-0.5 rounded-full">
-                  <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-                  En línea
-                </span>
-              )}
-            </div>
-            <button
-              onClick={() => {
-                const next = !isGpsActive;
-                setIsGpsActive(next);
-                localStorage.setItem('ferry_disponible', String(next));
-              }}
-              className={`relative inline-flex items-center w-11 h-6 rounded-full transition-colors duration-300 shrink-0 ${isGpsActive ? 'bg-green-500' : 'bg-gray-300'}`}
-              aria-label="Cambiar disponibilidad"
-            >
-              <span className={`inline-block w-4 h-4 bg-white rounded-full shadow transition-transform duration-300 ${isGpsActive ? 'translate-x-6' : 'translate-x-1'}`} />
-            </button>
-          </div>
 
           {/* Dirección — Google Places Autocomplete + Historial */}
           <div className="relative">

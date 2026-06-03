@@ -60,10 +60,10 @@ export class Quote {
   distanceKm?: number;
 
   @Column({ type: 'integer', nullable: true })
-  rating?: number;
+  rating?: number | null;
 
   @Column({ type: 'text', nullable: true })
-  reviewComment?: string;
+  reviewComment?: string | null;
 
   // Fecha en que la tienda marcó el pedido como enviado (para el cron de 72h)
   @Column({ type: 'timestamp', nullable: true })

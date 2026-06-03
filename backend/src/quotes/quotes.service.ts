@@ -218,7 +218,12 @@ export class QuotesService {
           ...item,
           unitPrice: item.clientFinalUnitPrice,
           subtotal: item.clientFinalSubtotal,
-        }))
+        })),
+        review: (quote.rating !== undefined && quote.rating !== null) ? {
+          rating: quote.rating,
+          comment: quote.reviewComment,
+          createdAt: quote.createdAt,
+        } : undefined
       };
 
       // Remover datos sensibles internos
@@ -408,8 +413,8 @@ export class QuotesService {
     }
 
     if (status === QuoteStatus.DELIVERED) {
-      if (rating !== undefined) quote.rating = rating;
-      if (comment !== undefined) quote.reviewComment = comment;
+      quote.rating = (rating !== undefined && rating > 0) ? rating : null;
+      quote.reviewComment = (comment !== undefined && comment.trim() !== '') ? comment : null;
     }
 
     return this.quoteRepository.save(quote);

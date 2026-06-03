@@ -119,7 +119,6 @@ const ReviewModal: React.FC<{
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
-    if (rating === 0) return;
     setSaveError(null);
     setSaving(true);
     try {
@@ -180,20 +179,22 @@ const ReviewModal: React.FC<{
         <div className="space-y-2 pb-safe">
           <button
             onClick={handleSubmit}
-            disabled={rating === 0 || saving}
+            disabled={saving}
             className="w-full py-3.5 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2
               disabled:bg-slate-100 disabled:text-slate-400
               bg-ferry-600 hover:bg-ferry-700 text-white shadow-lg shadow-ferry-200/60"
           >
             {saving ? (
               <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Guardando...</>
+            ) : rating === 0 ? (
+              <>Confirmar entrega sin calificar</>
             ) : (
               <><Star className="w-4 h-4 fill-white" /> Enviar calificación y cerrar pedido</>
             )}
           </button>
           {!saving && (
             <button onClick={onClose} className="w-full py-2.5 text-sm text-slate-400 hover:text-slate-600 transition-colors">
-              Cerrar sin calificar
+              Cancelar
             </button>
           )}
         </div>
@@ -1224,14 +1225,24 @@ const QuoteCard: React.FC<{
 
         {/* Delivered — show review stars */}
         {quote.status === 'delivered' && quote.review && (
-          <div className="mt-3 flex items-center gap-1.5 px-1">
-            {[1, 2, 3, 4, 5].map(n => (
-              <Star
-                key={n}
-                className={`w-4 h-4 ${n <= quote.review!.rating ? 'fill-amber-400 text-amber-400' : 'text-slate-200 fill-slate-200'}`}
-              />
-            ))}
-            <span className="text-xs text-slate-500 ml-1">{quote.review.comment || 'Sin comentario'}</span>
+          <div className="mt-3 flex flex-wrap items-center gap-1.5 px-1">
+            {quote.review.rating > 0 ? (
+              <div className="flex items-center gap-1">
+                {[1, 2, 3, 4, 5].map(n => (
+                  <Star
+                    key={n}
+                    className={`w-4 h-4 ${n <= quote.review!.rating ? 'fill-amber-400 text-amber-400' : 'text-slate-200 fill-slate-200'}`}
+                  />
+                ))}
+              </div>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-100 uppercase tracking-wider">
+                ✔️ Entrega confirmada sin calificar
+              </span>
+            )}
+            {quote.review.comment && (
+              <span className="text-xs text-slate-500 italic ml-1">"{quote.review.comment}"</span>
+            )}
           </div>
         )}
       </div>
@@ -1322,8 +1333,8 @@ const RequestCard: React.FC<{ request: UserOwnRequest }> = ({ request }) => {
 // Main View
 // ---------------------------------------------------------------------------
 
-export const UserQuotesInbox: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'enviadas' | 'recibidas' | 'en-camino' | 'entregadas'>('enviadas');
+export const UserQuotesInbox: React.FC<{ initialTab?: 'enviadas' | 'recibidas' | 'en-camino' | 'entregadas' }> = ({ initialTab = 'enviadas' }) => {
+  const [activeTab, setActiveTab] = useState<'enviadas' | 'recibidas' | 'en-camino' | 'entregadas'>(initialTab);
   const [quotes, setQuotes] = useState<ReceivedQuote[]>([]);
   const [ownRequests, setOwnRequests] = useState<UserOwnRequest[]>([]);
   const [loading, setLoading] = useState(true);

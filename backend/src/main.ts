@@ -16,10 +16,10 @@ async function bootstrap() {
     credentials: true,
   });
 
-  // Aumentar límite del body parser para peticiones JSON (base64 de imágenes pequeñas para IA)
+  // Aumentar límite del body parser para peticiones JSON (base64 de imágenes para IA)
   const expressApp = app.getHttpAdapter().getInstance();
-  expressApp.use(require('express').json({ limit: '10mb' }));
-  expressApp.use(require('express').urlencoded({ extended: true, limit: '10mb' }));
+  expressApp.use(require('express').json({ limit: '50mb' }));
+  expressApp.use(require('express').urlencoded({ extended: true, limit: '50mb' }));
 
   // Servir archivos estáticos subidos (fotos de perfil, portafolio, catálogo)
   const uploadsPath = process.env.UPLOADS_PATH || path.join(process.cwd(), 'uploads');

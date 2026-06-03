@@ -29,6 +29,7 @@ interface Props {
 
 export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSignOut }) => {
   const [activeTab, setActiveTab] = useState<'PROFESSIONAL' | 'ACCOUNT'>('PROFESSIONAL');
+  const [isGpsActive, setIsGpsActive] = useState(() => localStorage.getItem('ferry_disponible') === 'true');
   const [isEditingBio, setIsEditingBio] = useState(false);
   const [description, setDescription] = useState(profile?.description || 'Arquitecto con 10 años de experiencia en remodelaciones residenciales. Apasionado por el diseño funcional y materiales sostenibles.');
   const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
@@ -630,6 +631,41 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
                 </p>
               </div>
             </div>
+          )}
+
+          {/* Availability Toggle for Professionals */}
+          {profile?.role !== UserRole.STORE && (
+            <Card className="bg-white border border-slate-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                    Estoy disponible / En servicio
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1 max-w-[200px]">
+                    Activa esta opción para aparecer en las búsquedas de clientes que necesitan profesionales en este momento.
+                  </p>
+                </div>
+                <div className="flex flex-col items-end gap-2">
+                  <button
+                    onClick={() => {
+                      const next = !isGpsActive;
+                      setIsGpsActive(next);
+                      localStorage.setItem('ferry_disponible', String(next));
+                    }}
+                    className={`relative inline-flex items-center w-11 h-6 rounded-full transition-colors duration-300 shrink-0 ${isGpsActive ? 'bg-green-500' : 'bg-gray-300'}`}
+                    aria-label="Cambiar disponibilidad"
+                  >
+                    <span className={`inline-block w-4 h-4 bg-white rounded-full shadow transition-transform duration-300 ${isGpsActive ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                  {isGpsActive && (
+                    <span className="flex items-center gap-1 bg-green-100 text-green-700 text-[10px] font-semibold px-2 py-0.5 rounded-full">
+                      <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                      En línea
+                    </span>
+                  )}
+                </div>
+              </div>
+            </Card>
           )}
 
           {/* Portfolio Section */}

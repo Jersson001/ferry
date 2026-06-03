@@ -47,7 +47,7 @@ export class AiService {
       };
 
       const model = this.genAI.getGenerativeModel({
-        model: 'gemini-1.5-flash',
+        model: 'gemini-2.5-flash',
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: responseSchema,
@@ -66,7 +66,7 @@ export class AiService {
       
     } catch (error) {
       this.logger.error('Error al procesar con Gemini', error);
-      throw new HttpException('No se pudo procesar la lista con Inteligencia Artificial', HttpStatus.INTERNAL_SERVER_ERROR);
+      this.handleGeminiError(error, 'No se pudo procesar la lista con Inteligencia Artificial');
     }
   }
 
@@ -91,7 +91,7 @@ export class AiService {
       };
 
       const model = this.genAI.getGenerativeModel({
-        model: 'gemini-1.5-flash',
+        model: 'gemini-2.5-flash',
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: responseSchema,
@@ -127,7 +127,86 @@ export class AiService {
       
     } catch (error) {
       this.logger.error('Error al analizar imagen con Gemini', error);
-      throw new HttpException('No se pudo analizar la imagen con Inteligencia Artificial', HttpStatus.INTERNAL_SERVER_ERROR);
+      this.handleGeminiError(error, 'No se pudo analizar la imagen con Inteligencia Artificial');
     }
+  }
+
+  async smartMatch(requestedItems: any[], storeCatalog: any[]): Promise<any> {
+    if (!this.genAI) {
+      throw new HttpException('El servicio de IA no está configurado', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    try {
+      const responseSchema: Schema = {
+        type: SchemaType.OBJECT,
+        description: 'Resultado del emparejamiento entre los ítems solicitados y el catálogo de la tienda.',
+        properties: {
+          matches: {
+            type: SchemaType.ARRAY,
+            description: 'Lista de ítems analizados.',
+            items: {
+              type: SchemaType.OBJECT,
+              properties: {
+                requestedName: { type: SchemaType.STRING, description: 'El nombre del ítem solicitado originalmente' },
+                status: { type: SchemaType.STRING, description: 'Debe ser "EXACT_MATCH", "ALTERNATIVE", o "NOT_FOUND"' },
+                suggestedCatalogId: { type: SchemaType.STRING, description: 'El ID del producto en el catálogo de la tienda (en blanco si NOT_FOUND)' },
+                suggestedQuantity: { type: SchemaType.NUMBER, description: 'La cantidad sugerida basada en la presentación del producto' },
+                reasoning: { type: SchemaType.STRING, description: 'Breve justificación de por qué se sugirió este producto o por qué no se encontró.' },
+              },
+              required: ['requestedName', 'status', 'suggestedCatalogId', 'suggestedQuantity', 'reasoning'],
+            }
+          }
+        },
+        required: ['matches'],
+      };
+
+      const model = this.genAI.getGenerativeModel({
+        model: 'gemini-2.5-flash',
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema: responseSchema,
+        },
+      });
+
+      const prompt = `
+Eres un ferretero experto y un asistente de ventas.
+Tienes un pedido de un cliente y tu catálogo de productos.
+Tu objetivo es cruzar la lista de materiales solicitados con tu catálogo.
+
+Para cada ítem solicitado, debes indicar:
+1. Si hay un "EXACT_MATCH" (tienes el producto exacto o muy similar).
+2. Si hay un "ALTERNATIVE" (no tienes la marca exacta o medida, pero tienes un reemplazo válido).
+3. Si es "NOT_FOUND" (no manejas nada que sirva).
+
+IMPORTANTE: 
+- Solo puedes sugerir productos usando el campo "id" que viene en el catálogo. No inventes IDs ni productos.
+- Ajusta la "suggestedQuantity" si la unidad de venta del catálogo es diferente a la solicitada (ej. si piden 10 kg y vendes bultos de 50 kg, sugiere 1 bulto).
+
+Pedido del cliente:
+${JSON.stringify(requestedItems, null, 2)}
+
+Catálogo de tu Ferretería:
+${JSON.stringify(storeCatalog, null, 2)}
+`;
+
+      const result = await model.generateContent(prompt);
+      const jsonText = result.response.text();
+      return JSON.parse(jsonText);
+      
+    } catch (error) {
+      this.logger.error('Error al realizar Smart Match con Gemini', error);
+      this.handleGeminiError(error, 'No se pudo analizar el pedido con Inteligencia Artificial');
+    }
+  }
+
+  private handleGeminiError(error: any, defaultMessage: string): never {
+    const errorMessage = error?.message?.toLowerCase() || '';
+    if (errorMessage.includes('quota') || errorMessage.includes('429') || errorMessage.includes('too many requests')) {
+      throw new HttpException(
+        'El servicio de IA está temporalmente saturado o sin cuota. Por favor, intenta de nuevo en unos minutos.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    throw new HttpException(defaultMessage, HttpStatus.INTERNAL_SERVER_ERROR);
   }
 }

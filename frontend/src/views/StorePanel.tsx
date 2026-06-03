@@ -35,6 +35,9 @@ const QuoteResponseModal: React.FC<QuoteResponseModalProps> = ({ req, storeName,
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   const toggleDiscard = (idx: number) =>
     setDiscarded(prev => {
@@ -205,9 +208,67 @@ const QuoteResponseModal: React.FC<QuoteResponseModalProps> = ({ req, storeName,
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
 
           {/* Instruction */}
-          <p className="text-xs text-slate-400 px-0.5">
-            Ingresa tu precio unitario por cada artículo. Deja en <span className="font-semibold">0</span> los que no tienes en stock.
-          </p>
+          <div className="flex items-center justify-between px-0.5 mb-2">
+            <p className="text-xs text-slate-400 max-w-[65%]">
+              Ingresa tu precio unitario por cada artículo. Deja en <span className="font-semibold">0</span> los que no tienes en stock.
+            </p>
+            <button
+              type="button"
+              onClick={async () => {
+                setIsAiLoading(true);
+                setAiError(null);
+                try {
+                  const { smartMatchWithAi } = await import('../services/aiService');
+                  const response = await smartMatchWithAi(req.items as any);
+                  
+                  const newPrices = { ...prices };
+                  const newSkus = { ...skus };
+                  const newDiscarded = new Set(discarded);
+
+                  req.items.forEach((item, idx) => {
+                    const match = response.matches?.find((m: any) => m.requestedName === item.name);
+                    if (match) {
+                      if (match.status === 'NOT_FOUND') {
+                        newDiscarded.add(idx);
+                      } else {
+                        const price = skuMap[match.suggestedCatalogId?.toUpperCase()] || 0;
+                        if (price > 0) {
+                          newPrices[idx] = String(price);
+                          newSkus[idx] = match.suggestedCatalogId;
+                          newDiscarded.delete(idx);
+                        } else {
+                          newDiscarded.add(idx); // Si Gemini halla el ID pero la tienda tiene precio 0
+                        }
+                      }
+                    }
+                  });
+                  setPrices(newPrices);
+                  setSkus(newSkus);
+                  setDiscarded(newDiscarded);
+                } catch (err: any) {
+                  setAiError(err.message);
+                } finally {
+                  setIsAiLoading(false);
+                }
+              }}
+              disabled={isAiLoading}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-violet-600 to-fuchsia-600 rounded-lg hover:shadow-lg hover:shadow-fuchsia-500/30 transition-all disabled:opacity-50"
+            >
+              {isAiLoading ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Store className="w-3.5 h-3.5" />
+              )}
+              {isAiLoading ? 'Buscando...' : 'IA Smart Match'}
+            </button>
+          </div>
+          
+          {aiError && (
+            <div className="p-3 bg-red-50 text-red-600 rounded-lg text-xs font-medium border border-red-100 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <p>{aiError}</p>
+            </div>
+          )}
 
           {/* Item rows */}
           {req.items.map((item, idx) => {
@@ -537,9 +598,12 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
     requestId: string;
     storeName: string;
     total: number;
+    storeTotal?: number;
     proofImageUrl?: string;
     status: string;
     createdAt?: any;
+    clientPhone?: string;
+    clientName?: string;
   }
   const [pendingPaymentQuotes, setPendingPaymentQuotes]   = useState<PendingPaymentQuote[]>([]);
   const [preparingQuotes, setPreparingQuotes]             = useState<PendingPaymentQuote[]>([]);
@@ -1104,9 +1168,25 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
                       <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wide">
                         #{q.id.slice(-6).toUpperCase()}
                       </span>
-                      <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
-                        Esperando cliente
-                      </span>
+                      {(() => {
+                        let label = 'Esperando cliente';
+                        let colorClass = 'bg-amber-100 text-amber-700';
+                        if (q.status === 'rejected') {
+                          label = 'No seleccionada / Rechazada';
+                          colorClass = 'bg-red-100 text-red-700';
+                        } else if (q.status === 'accepted') {
+                          label = 'Aceptada - Esperando pago';
+                          colorClass = 'bg-blue-100 text-blue-700';
+                        } else if (['paid', 'preparing', 'shipped', 'delivered', 'pending_validation'].includes(q.status)) {
+                          label = 'Venta cerrada';
+                          colorClass = 'bg-green-100 text-green-700';
+                        }
+                        return (
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${colorClass}`}>
+                            {label}
+                          </span>
+                        );
+                      })()}
                     </div>
 
                     {/* Items — show store prices (pre-markup) */}

@@ -30,6 +30,7 @@ const App: React.FC = () => {
   const [pendingCart, setPendingCart] = useState<GuestCart | null>(null);
   const [autoSubmitAfterLogin, setAutoSubmitAfterLogin] = useState(false);
   const [currentView, setCurrentView] = useState<'HOME' | 'SHOP' | 'HUB' | 'PROFILE' | 'ADMIN' | 'QUOTES' | 'CATALOG'>('HOME');
+  const [quotesInitialTab, setQuotesInitialTab] = useState<'enviadas' | 'recibidas' | 'en-camino' | 'entregadas'>('enviadas');
   const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   // Controla si ya se hizo la primera verificación de sesión al cargar la app
@@ -538,6 +539,10 @@ const App: React.FC = () => {
                   onRegister={(role) => { setPreselectedRole(role); setIsGuest(false); setCurrentUserProfile(null); }}
                 />}
                 {currentView === 'SHOP' && <MaterialFlow
+                  onNavigate={(view) => {
+                    if (view === 'QUOTES') setQuotesInitialTab('recibidas');
+                    setCurrentView(view);
+                  }}
                   onRequestCreate={(req) => { handleRequestCreate(req); setPendingCart(null); setAutoSubmitAfterLogin(false); }}
                   activeRequest={activeRequest}
                   onAcceptQuote={handleAcceptQuote}
@@ -567,7 +572,7 @@ const App: React.FC = () => {
                       <button onClick={() => setShowAuthGate(true)} className="px-6 py-3 bg-ferry-500 text-white font-semibold rounded-2xl">Crear cuenta gratis</button>
                       <button onClick={() => { setIsGuest(false); setCurrentUserProfile(null); }} className="text-sm text-ferry-600 font-semibold hover:text-ferry-700 transition-colors">¿Ya tienes cuenta? Inicia sesión</button>
                     </div>
-                  : <UserQuotesInbox />
+                  : <UserQuotesInbox initialTab={quotesInitialTab} />
                 )}
               </>
             )}
