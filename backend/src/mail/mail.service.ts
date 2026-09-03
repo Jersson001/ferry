@@ -45,15 +45,18 @@ export class MailService {
               Tu cuenta en Ferry ha sido creada exitosamente. Solo necesitas verificar tu correo electrónico para comenzar a usar la plataforma.
             </p>
             <!-- CTA Button -->
-            <a href="${verifyUrl}"
-               style="display:block; background:linear-gradient(135deg, #f97316, #fb923c); color:white; text-align:center; padding:16px 24px; border-radius:14px; font-size:16px; font-weight:700; text-decoration:none; margin:0 0 24px;">
-              ✅ Verificar mi cuenta
-            </a>
-            <p style="color:#94a3b8; font-size:13px; text-align:center; margin:0 0 8px;">
-              O copia este enlace en tu navegador:
-            </p>
-            <p style="color:#f97316; font-size:12px; text-align:center; word-break:break-all; margin:0 0 28px;">
-              ${verifyUrl}
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 20px;">
+              <tr>
+                <td align="center" bgcolor="#f97316" style="border-radius:14px;">
+                  <a href="${verifyUrl}"
+                     style="display:block; background-color:#f97316; color:#ffffff; text-align:center; padding:16px 24px; border-radius:14px; font-size:16px; font-weight:700; text-decoration:none;">
+                    ✅ Verificar mi cuenta
+                  </a>
+                </td>
+              </tr>
+            </table>
+            <p style="color:#94a3b8; font-size:12px; text-align:center; margin:0 0 28px;">
+              ¿El botón no funciona? <a href="${verifyUrl}" style="color:#f97316; text-decoration:underline;">Abre este enlace</a>.
             </p>
             <!-- Info box -->
             <div style="background:#fff7ed; border:1px solid #fed7aa; border-radius:12px; padding:16px; margin-bottom:8px;">
@@ -104,15 +107,18 @@ export class MailService {
               Recibimos una solicitud para restablecer la contraseña de tu cuenta de Ferry. Haz clic en el botón de abajo para crear una nueva contraseña.
             </p>
             <!-- CTA Button -->
-            <a href="${resetUrl}"
-               style="display:block; background:linear-gradient(135deg, #1e40af, #3b82f6); color:white; text-align:center; padding:16px 24px; border-radius:14px; font-size:16px; font-weight:700; text-decoration:none; margin:0 0 24px;">
-              🔑 Restablecer contraseña
-            </a>
-            <p style="color:#94a3b8; font-size:13px; text-align:center; margin:0 0 8px;">
-              O copia este enlace en tu navegador:
-            </p>
-            <p style="color:#3b82f6; font-size:12px; text-align:center; word-break:break-all; margin:0 0 28px;">
-              ${resetUrl}
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 20px;">
+              <tr>
+                <td align="center" bgcolor="#1e40af" style="border-radius:14px;">
+                  <a href="${resetUrl}"
+                     style="display:block; background-color:#1e40af; color:#ffffff; text-align:center; padding:16px 24px; border-radius:14px; font-size:16px; font-weight:700; text-decoration:none;">
+                    🔑 Restablecer contraseña
+                  </a>
+                </td>
+              </tr>
+            </table>
+            <p style="color:#94a3b8; font-size:12px; text-align:center; margin:0 0 28px;">
+              ¿El botón no funciona? <a href="${resetUrl}" style="color:#3b82f6; text-decoration:underline;">Abre este enlace</a>.
             </p>
             <!-- Warning box -->
             <div style="background:#fef2f2; border:1px solid #fecaca; border-radius:12px; padding:16px;">

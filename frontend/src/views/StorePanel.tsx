@@ -246,7 +246,13 @@ const QuoteResponseModal: React.FC<QuoteResponseModalProps> = ({ req, storeName,
                   setSkus(newSkus);
                   setDiscarded(newDiscarded);
                 } catch (err: any) {
-                  setAiError(err.message);
+                  // 503 = credencial de IA inválida o sin acceso: reintentar no sirve,
+                  // así que le indicamos a la ferretería que cotice a mano.
+                  setAiError(
+                    err?.status === 503
+                      ? 'La IA no está disponible por un problema de configuración. Puedes ingresar los precios a mano mientras se resuelve.'
+                      : err.message
+                  );
                 } finally {
                   setIsAiLoading(false);
                 }
