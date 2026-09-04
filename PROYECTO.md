@@ -82,24 +82,35 @@ Dos advertencias que cuestan tiempo si se pasan por alto:
 
 ## Servicios externos
 
-| Servicio | Dónde | Estado al 2026-09-02 |
+| Servicio | Dónde | Estado al 2026-09-03 |
 |---|---|---|
 | Google Maps + Places | `VITE_GOOGLE_MAPS_API_KEY` (frontend) | ✅ Funcionando |
-| Gemini | `GEMINI_API_KEY` (backend) | ❌ `429` — saldo de prepago agotado |
-| SMTP Gmail | `MAIL_*` (backend) | ✅ Funcionando |
+| Gemini | `GEMINI_API_KEY` (backend) | ✅ Funcionando |
+| SMTP Gmail | `MAIL_*` (backend) | ⚠️ Revisar credenciales |
 | Wompi | `VITE_WOMPI_PUBLIC_KEY` (frontend) + firma en backend | Sin verificar |
 
 ### Gemini
 
-Los tres endpoints de IA (`/ai/parse-materials`, `/ai/analyze-image`, `/ai/smart-match`) comparten cliente y clave, así que fallan y se recuperan juntos.
+Los tres endpoints de IA (`/ai/parse-materials`, `/ai/analyze-image`, `/ai/smart-match`) comparten cliente, clave y modelo, así que fallan y se recuperan juntos.
 
-Historial del bloqueo: primero `403 PERMISSION_DENIED` ("Your project has been denied access") por el proyecto de Cloud sin facturación; una vez resuelta la facturación pasó a `429 RESOURCE_EXHAUSTED` ("Your prepayment credits are depleted"). El saldo se recarga en [ai.studio/projects](https://ai.studio/projects). Pendiente confirmar que el saldo esté cargado **en el mismo proyecto** que emitió la clave.
+**Modelo:** `gemini-3.6-flash`, definido en `ai.service.ts`. Google retira modelos para cuentas nuevas: `gemini-2.5-flash` empezó a responder `404` en cuanto la clave pasó a emitirse desde un proyecto recién creado. Si aparece un `404` con el texto *"no longer available to new users"*, el mensaje mismo indica a qué modelo migrar.
 
-Cómo distinguir los errores de Google, que es lo que más confusión generó:
+Cómo distinguir los errores de Google, que es lo que más confusión generó al configurarlo:
 
-- `403 API_KEY_SERVICE_BLOCKED` → restricciones de la clave: falta habilitar la API en esa credencial.
-- `403 PERMISSION_DENIED` → proyecto bloqueado o sin facturación.
-- `429 RESOURCE_EXHAUSTED` → la clave tiene permiso, pero no hay saldo.
+| Error | Significado | Se arregla en |
+|---|---|---|
+| `400 API_KEY_INVALID` | La clave no existe o fue revocada | El `.env` |
+| `403 API_KEY_SERVICE_BLOCKED` | Falta habilitar esa API en las restricciones de la clave | Credenciales de Cloud |
+| `403 PERMISSION_DENIED` | Proyecto bloqueado o sin facturación | Facturación de Cloud |
+| `429 RESOURCE_EXHAUSTED` | La clave tiene permiso, pero no hay saldo | Saldo en AI Studio |
+| `404 NOT_FOUND` | El modelo ya no está disponible para la cuenta | El código |
+| `503` "high demand" | Sobrecarga temporal del modelo | Reintentar |
+
+Una lección que costó varias horas: **una clave nueva en el mismo proyecto bloqueado no arregla nada.** `PERMISSION_DENIED` es un bloqueo de proyecto, no de credencial; hay que emitir la clave en un proyecto distinto y con facturación activa.
+
+### SMTP
+
+Al 2026-09-03 el `.env` tiene `MAIL_PASSWORD` con espacios y un prefijo que parece un error de pegado, y `MAIL_FROM` apunta a una cuenta distinta de `MAIL_USER`, cosa que Gmail suele rechazar. Conviene verificarlo antes de confiar en los correos.
 
 ### Google Maps
 
@@ -124,6 +135,14 @@ Ferry **no** usa Cloud Vision: el análisis de fotos va por Gemini (`analyzeImag
 - **`StorePanel.tsx`**: ante un 503, el banner indica a la ferretería que ingrese los precios manualmente. Aquí no hace falta diálogo: el formulario manual ya es el estado por defecto y Smart Match solo lo autocompleta.
 
 Detalle a favor del diseño actual: `ai.controller.ts` descuenta los créditos **después** de que la IA responde, así que estos fallos no le queman créditos a la ferretería.
+
+### Modelo de Gemini actualizado — 2026-09-03
+
+Con la clave emitida en un proyecto nuevo, los tres flujos empezaron a fallar con `404`: Google retiró `gemini-2.5-flash` para cuentas nuevas. Se actualizaron las tres ocurrencias a `gemini-3.6-flash` en `ai.service.ts`.
+
+Verificado contra el backend local: `parse-materials` parsea el texto a ítems, `analyze-image` extrae cinco materiales de una lista fotografiada, y `smart-match` devuelve `EXACT_MATCH` contra el catálogo.
+
+En la misma sesión se agregó a `handleGeminiError` el caso del `503` de sobrecarga de Google, que antes caía en el `500` genérico. Ahora se traduce a `429` con un mensaje de reintento, porque es transitorio; el `503` sigue reservado para los fallos de credenciales, que es lo que el frontend usa para ofrecer la captura manual.
 
 ### Limpieza
 

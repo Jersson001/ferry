@@ -210,6 +210,20 @@ ${JSON.stringify(storeCatalog, null, 2)}
       );
     }
 
+    // 503 de Google: el modelo está sobrecargado. Es transitorio y se resuelve
+    // reintentando, así que lo tratamos como saturación y no como fallo de config.
+    if (
+      status === 503 ||
+      errorMessage.includes('high demand') ||
+      errorMessage.includes('overloaded') ||
+      errorMessage.includes('service unavailable')
+    ) {
+      throw new HttpException(
+        'El servicio de IA está saturado en este momento. Por favor, intenta de nuevo en unos minutos.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
     // 401/403: la credencial de Gemini es inválida o el proyecto no tiene acceso.
     // No es un fallo transitorio: reintentar no sirve, hay que revisar la configuración.
     if (
