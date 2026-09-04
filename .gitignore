@@ -3,3 +3,18 @@ dist/
 .env
 GUIA_PRODUCCION.md
 uploads/
+
+# Respaldos comprimidos del codigo
+*.zip
+
+# Logs de desarrollo
+*.log
+*_log.txt
+
+# Archivos temporales que genera Vite al recargar su config
+vite.config.ts.timestamp-*.mjs
+
+# Archivos sueltos con variables VITE_ que Vite NO lee.
+# El unico .env valido del frontend es frontend/.env
+frontend/env
+frontend/src/env
