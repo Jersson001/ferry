@@ -116,6 +116,18 @@ Al 2026-09-03 el `.env` tiene `MAIL_PASSWORD` con espacios y un prefijo que pare
 
 La clave necesita *Maps JavaScript API*, *Places API* y *Places API (New)* habilitadas en sus restricciones, y facturación activa en el proyecto. Conviene restringirla por referente HTTP (`localhost:5173` y el dominio de producción), porque queda expuesta en el navegador.
 
+**Maps y Gemini deben vivir en el mismo proyecto de Google Cloud.** No es un requisito técnico, sino una lección práctica: al migrar Gemini a un proyecto nuevo y borrar el viejo, la clave de Maps —que seguía siendo la del proyecto eliminado— murió con él, y Maps dejó de funcionar de un momento a otro sin que nadie tocara el código. Si se cambia de proyecto, hay que reemitir **las dos** claves.
+
+Errores de Maps y qué significan:
+
+| Error | Significado |
+|---|---|
+| `BillingNotEnabledMapError` | El proyecto existe pero no tiene facturación activa |
+| `DeletedApiProjectMapError` | El proyecto dueño de la clave fue eliminado; la clave está muerta y hay que emitir otra |
+| `RefererNotAllowedMapError` | El dominio desde el que se carga no está en los referentes permitidos de la clave |
+
+Para verificar una clave de navegador desde la terminal: si responde `"API keys with referer restrictions cannot be used with this API"`, la clave está **viva y bien restringida**. Ese "error" es la respuesta sana.
+
 Ferry **no** usa Cloud Vision: el análisis de fotos va por Gemini (`analyzeImage` manda la imagen en base64 al mismo modelo).
 
 ---
@@ -143,6 +155,12 @@ Con la clave emitida en un proyecto nuevo, los tres flujos empezaron a fallar co
 Verificado contra el backend local: `parse-materials` parsea el texto a ítems, `analyze-image` extrae cinco materiales de una lista fotografiada, y `smart-match` devuelve `EXACT_MATCH` contra el catálogo.
 
 En la misma sesión se agregó a `handleGeminiError` el caso del `503` de sobrecarga de Google, que antes caía en el `500` genérico. Ahora se traduce a `429` con un mensaje de reintento, porque es transitorio; el `503` sigue reservado para los fallos de credenciales, que es lo que el frontend usa para ofrecer la captura manual.
+
+### Clave de Maps reemitida — 2026-09-03
+
+Al borrar el proyecto de Google Cloud viejo, Maps empezó a fallar con `DeletedApiProjectMapError`: la clave del frontend pertenecía a ese proyecto. Se reemitió en el proyecto nuevo, con las tres APIs de Maps habilitadas y restricción por referente HTTP, y se actualizó `VITE_GOOGLE_MAPS_API_KEY`.
+
+Verificado tras reiniciar Vite —que lee el `.env` solo al arrancar—: el autocompletado devuelve sugerencias reales y el navegador carga el script de Maps con la clave nueva.
 
 ### Limpieza
 
