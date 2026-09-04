@@ -826,6 +826,31 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
     });
   };
 
+  /**
+   * La IA responde 503 cuando su credencial no es válida o el proyecto no tiene acceso.
+   * Reintentar no sirve, así que en vez de dejar al usuario sin salida le ofrecemos
+   * capturar los materiales a mano. Devuelve true si ya se manejó el error.
+   */
+  const handleAiUnavailable = (error: any): boolean => {
+    if (error?.status !== 503) return false;
+
+    const irManual = window.confirm(
+      `${error.message}\n\n¿Quieres agregarlos a mano ahora?`
+    );
+    if (irManual) {
+      setItems([{ name: '', quantity: '1', unit: 'und', nombreComercial: '', medidaNominal: '', caracteristica: '' }]);
+      setEditingIndex(0);
+      setEditValues({
+        cantidad: '1', unidad: 'und', nombreComercial: '', medidaNominal: '', caracteristica: '',
+        nombre: '', tipoCorredera: '', tipoSoporte: '', observacion: ''
+      });
+      setMode('EDITING');
+    } else {
+      setMode('INITIAL');
+    }
+    return true;
+  };
+
   // If we receive an active request in a specific state, sync the view mode
   React.useEffect(() => {
     if (activeRequest) {
@@ -858,8 +883,10 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
         setItems(normalizarProductos(recognizedItems));
         setMode('EDITING');
       } catch (error: any) {
-        alert(error.message || 'Error al procesar la imagen con Inteligencia Artificial.');
-        setMode('INITIAL');
+        if (!handleAiUnavailable(error)) {
+          alert(error.message || 'Error al procesar la imagen con Inteligencia Artificial.');
+          setMode('INITIAL');
+        }
       } finally {
         setIsAnalyzing(false);
       }
@@ -876,8 +903,10 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
       setItems(normalizarProductos(recognizedItems));
       setMode('EDITING');
     } catch (error: any) {
-      alert(error.message || 'Error al procesar el texto con Inteligencia Artificial.');
-      setMode('TEXT_INPUT');
+      if (!handleAiUnavailable(error)) {
+        alert(error.message || 'Error al procesar el texto con Inteligencia Artificial.');
+        setMode('TEXT_INPUT');
+      }
     } finally {
       setIsAnalyzing(false);
     }

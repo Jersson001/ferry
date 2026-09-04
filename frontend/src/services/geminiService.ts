@@ -13,7 +13,11 @@ const apiRequest = async <T>(endpoint: string, options: RequestInit = {}): Promi
     },
   });
   const data = await response.json();
-  if (!response.ok) throw new Error(data.message || 'Error en la petición de IA');
+  if (!response.ok) {
+    const error = new Error(data.message || 'Error en la petición de IA') as Error & { status?: number };
+    error.status = response.status;
+    throw error;
+  }
   return data;
 };
 

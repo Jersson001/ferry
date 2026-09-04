@@ -47,7 +47,7 @@ export class AiService {
       };
 
       const model = this.genAI.getGenerativeModel({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3.6-flash',
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: responseSchema,
@@ -91,7 +91,7 @@ export class AiService {
       };
 
       const model = this.genAI.getGenerativeModel({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3.6-flash',
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: responseSchema,
@@ -161,7 +161,7 @@ export class AiService {
       };
 
       const model = this.genAI.getGenerativeModel({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3.6-flash',
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: responseSchema,
@@ -201,12 +201,44 @@ ${JSON.stringify(storeCatalog, null, 2)}
 
   private handleGeminiError(error: any, defaultMessage: string): never {
     const errorMessage = error?.message?.toLowerCase() || '';
+    const status = error?.status;
+
     if (errorMessage.includes('quota') || errorMessage.includes('429') || errorMessage.includes('too many requests')) {
       throw new HttpException(
         'El servicio de IA está temporalmente saturado o sin cuota. Por favor, intenta de nuevo en unos minutos.',
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
+
+    // 503 de Google: el modelo está sobrecargado. Es transitorio y se resuelve
+    // reintentando, así que lo tratamos como saturación y no como fallo de config.
+    if (
+      status === 503 ||
+      errorMessage.includes('high demand') ||
+      errorMessage.includes('overloaded') ||
+      errorMessage.includes('service unavailable')
+    ) {
+      throw new HttpException(
+        'El servicio de IA está saturado en este momento. Por favor, intenta de nuevo en unos minutos.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    // 401/403: la credencial de Gemini es inválida o el proyecto no tiene acceso.
+    // No es un fallo transitorio: reintentar no sirve, hay que revisar la configuración.
+    if (
+      status === 401 ||
+      status === 403 ||
+      errorMessage.includes('permission_denied') ||
+      errorMessage.includes('denied access') ||
+      errorMessage.includes('api key not valid')
+    ) {
+      throw new HttpException(
+        'El servicio de IA no está disponible por un problema de configuración. Puedes agregar los materiales a mano mientras se resuelve.',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+
     throw new HttpException(defaultMessage, HttpStatus.INTERNAL_SERVER_ERROR);
   }
 }

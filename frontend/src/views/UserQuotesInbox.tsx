@@ -1568,7 +1568,7 @@ export const UserQuotesInbox: React.FC<{ initialTab?: 'enviadas' | 'recibidas' |
     try {
       await rejectQuote(quote.id, quote.requestId);
     } catch (e: any) {
-      console.error('Detalle del error en Firebase:', e?.code, e?.message, e);
+      console.error('Error al rechazar la cotización:', e?.message, e);
       setQuotes(prev => [...prev, quote]);
       setActionError('No se pudo rechazar. Intenta de nuevo.');
       setTimeout(() => setActionError(null), 3500);
