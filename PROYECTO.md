@@ -86,7 +86,7 @@ Dos advertencias que cuestan tiempo si se pasan por alto:
 |---|---|---|
 | Google Maps + Places | `VITE_GOOGLE_MAPS_API_KEY` (frontend) | ✅ Funcionando |
 | Gemini | `GEMINI_API_KEY` (backend) | ✅ Funcionando |
-| SMTP Gmail | `MAIL_*` (backend) | ⚠️ Revisar credenciales |
+| SMTP Gmail | `MAIL_*` (backend) | ✅ Funcionando |
 | Wompi | `VITE_WOMPI_PUBLIC_KEY` (frontend) + firma en backend | Sin verificar |
 
 ### Gemini
@@ -110,7 +110,18 @@ Una lección que costó varias horas: **una clave nueva en el mismo proyecto blo
 
 ### SMTP
 
-Al 2026-09-03 el `.env` tiene `MAIL_PASSWORD` con espacios y un prefijo que parece un error de pegado, y `MAIL_FROM` apunta a una cuenta distinta de `MAIL_USER`, cosa que Gmail suele rechazar. Conviene verificarlo antes de confiar en los correos.
+Gmail por SMTP (`smtp.gmail.com:587`, sin SSL directo). `MAIL_PASSWORD` es una **contraseña de aplicación**, no la contraseña de la cuenta.
+
+Requisitos para que Gmail acepte la autenticación:
+
+- La contraseña de aplicación debe generarse desde la **misma cuenta** que está en `MAIL_USER`. Una generada desde otra cuenta da `535` aunque sea válida.
+- Esa cuenta necesita verificación en dos pasos activa; sin ella Google no emite contraseñas de aplicación.
+- Se pega en **16 caracteres seguidos, sin espacios**. Google la muestra en cuatro grupos de cuatro y los espacios hay que quitarlos; si quedan, Gmail recibe otra cadena y rechaza.
+- `MAIL_FROM` debe usar la misma dirección de `MAIL_USER`. Gmail suele rechazar remitentes distintos al autenticado.
+
+Síntoma de que algo de lo anterior falla: `535-5.7.8 Username and Password not accepted` con `code: 'EAUTH'` en el log. Es de Google, no de Ferry — el código llegó a conectarse.
+
+Para probar el envío sin molestar a nadie, pide un reset con el usuario de prueba de dominio `.test`: el correo rebota, pero el log confirma si la autenticación pasó, que es lo que interesa.
 
 ### Google Maps
 
@@ -161,6 +172,12 @@ En la misma sesión se agregó a `handleGeminiError` el caso del `503` de sobrec
 Al borrar el proyecto de Google Cloud viejo, Maps empezó a fallar con `DeletedApiProjectMapError`: la clave del frontend pertenecía a ese proyecto. Se reemitió en el proyecto nuevo, con las tres APIs de Maps habilitadas y restricción por referente HTTP, y se actualizó `VITE_GOOGLE_MAPS_API_KEY`.
 
 Verificado tras reiniciar Vite —que lee el `.env` solo al arrancar—: el autocompletado devuelve sugerencias reales y el navegador carga el script de Maps con la clave nueva.
+
+### SMTP arreglado — 2026-09-03
+
+Los correos fallaban con `535 EAUTH`. Fueron dos causas encadenadas: `MAIL_FROM` apuntaba a una cuenta distinta de `MAIL_USER`, y la contraseña de aplicación estaba mal —con espacios, un prefijo pegado por error y un número de caracteres que no daba 16—. Se alineó `MAIL_FROM` y se regeneró la contraseña desde la cuenta correcta.
+
+Verificado: `POST /auth/forgot-password` deja en el log `Email enviado`, sin `EAUTH`.
 
 ### Limpieza
 
