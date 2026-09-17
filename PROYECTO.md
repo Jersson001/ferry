@@ -80,13 +80,80 @@ Dos advertencias que cuestan tiempo si se pasan por alto:
 
 ---
 
+## Estado actual — 2026-09-16
+
+> Migración de infraestructura **a medio camino**. Leer esta sección antes de tocar nada.
+
+| Pieza | Dónde | Estado |
+|---|---|---|
+| Frontend | Vercel, proyecto `frontend` | ✅ Desplegado y bien configurado — pero sin backend al cual llamar |
+| Backend | VPS Hostinger `2.25.68.84` | ❌ **Caído**: no responde en ningún puerto, ni SSH. Probable suspensión por falta de pago |
+| Base de datos | Postgres dentro del VPS | ❌ Caída junto con el VPS. Solo tenía datos de prueba |
+| Dominio | `ferryapp.co` en Hostinger, activo hasta mayo 2027 | ⚠️ `api` apunta al VPS; `@` y `www` siguen en el parking de Hostinger |
+| Entorno local | Tu equipo | ✅ Todo funciona |
+
+**Todo lo que había en producción eran pruebas**, así que perder el VPS no cuesta datos reales. El código del backend está completo en el repo y en el equipo local.
+
+### Repositorio
+
+El repo oficial pasó a ser **`Jersson001/ferry`**, que es el que ve Vercel. El anterior, `ingdanielacastaneda-bit/ferry`, quedó atrás: la cuenta de Vercel no tiene acceso a él.
+
+En el clon local, `origin` **todavía apunta al repo viejo**; el nuevo está como remoto `jersson`. Pendiente: convertir `jersson` en `origin` y archivar el repo viejo, para que nadie siga subiendo cambios ahí.
+
+### Frontend en Vercel
+
+- Equipo *Jersson Escobar's projects*, plan **Hobby** (uso no comercial según los términos de Vercel; para producción con pagos corresponde Pro).
+- Proyecto `frontend`, enlazado a `Jersson001/ferry` con **Root Directory = `frontend`**. Se despliega solo en cada push a `main`.
+- URL temporal: `frontend-black-ten-37.vercel.app`. Pendiente: renombrar el proyecto a `ferry` y conectar `ferryapp.co`.
+- `frontend/vercel.json` reescribe todas las rutas a `index.html`. Sin eso, los enlaces de los correos a `/reset-password` y `/verify-email` dan 404.
+- Variables configuradas en Vercel: `VITE_API_URL=https://api.ferryapp.co`, `VITE_GOOGLE_MAPS_API_KEY`, `VITE_WOMPI_PUBLIC_KEY`. Verificado sobre el bundle publicado: las tres presentes, el secreto de integridad de Wompi ausente.
+
+Dos trampas de Vercel que costaron redespliegues:
+
+- **Cambiar variables no redespliega.** Hay que hacer *Redeploy* a mano, porque Vite las incrusta al compilar.
+- Vercel advierte que las variables `VITE_` con formato de clave "deberían ser privadas". **Hay que ignorarlo** para la clave de Maps y la llave pública de Wompi: están hechas para el navegador. Quitar el prefijo las deja en `undefined` y rompe Maps y los pagos.
+
+La clave de Maps debe autorizar en sus restricciones de referente los dominios de Vercel y `ferryapp.co`, además de `localhost:5173`.
+
+Existe además un proyecto viejo `ferry-001` enlazado a `Jersson001/ferry-1.2`, un repo sin contenido. No sirve; se puede borrar.
+
+### Por qué el frontend todavía no funciona en línea
+
+Vercel sirve todo por HTTPS, y los navegadores **bloquean** que una página HTTPS llame a una API por HTTP. El backend solo respondía por `http://2.25.68.84:3000`, así que necesita un dominio con certificado. Se preparó `deploy/nginx/api.ferryapp.co.conf` para eso, pero no llegó a instalarse porque el VPS se cayó antes.
+
+### Decisión pendiente: dónde correr el backend
+
+El plan conversado es dejar el VPS y usar servicios administrados, conservando el backend NestJS tal como está:
+
+- **Base de datos → Supabase**, pero **solo como Postgres y almacenamiento de archivos**. No su autenticación ni sus políticas RLS: reescribir auth, cotizaciones, pagos y suscripciones sobre Supabase sería una migración enorme sin beneficio claro. TypeORM se conecta a Supabase como a cualquier Postgres.
+- **Backend → Render o Railway.** Supabase no ejecuta un servidor NestJS.
+
+Costos revisados el 2026-09-16:
+
+| Servicio | Gratis | Siempre encendido |
+|---|---|---|
+| Render | Free: se apaga tras 15 min sin uso, ~1 min en despertar | Starter, $7/mes |
+| Railway | $1/mes de uso, no alcanza para un backend encendido | Hobby, $5/mes |
+| Supabase | 500 MB de base, 1 GB de archivos, se pausa tras 1 semana sin uso | Pro, desde $25/mes |
+
+Recomendación: **Render Free + Supabase Free mientras sean pruebas** ($0), y pasar a Render Starter o Railway Hobby (~$5–7/mes) cuando haya usuarios. Con Render Free, la primera petición tras un rato de inactividad se suma a los 15–35 s que ya tarda Gemini: aceptable para probar, no para usuarios.
+
+Cambios de código que implicaría:
+
+1. Cadena de conexión de TypeORM apuntando a Supabase.
+2. `uploads/` en disco no sobrevive en Render ni Railway (disco efímero): migrar `storage` a Supabase Storage.
+3. Pasar de `synchronize: true` a migraciones, antes de tener datos reales.
+4. `FRONTEND_URL` del backend con la URL de Vercel o `ferryapp.co`, y actualizar `VITE_API_URL` en Vercel con la URL del backend nuevo.
+
+---
+
 ## Servicios externos
 
-| Servicio | Dónde | Estado al 2026-09-03 |
+| Servicio | Dónde | Estado al 2026-09-16 |
 |---|---|---|
-| Google Maps + Places | `VITE_GOOGLE_MAPS_API_KEY` (frontend) | ✅ Funcionando |
-| Gemini | `GEMINI_API_KEY` (backend) | ✅ Funcionando |
-| SMTP Gmail | `MAIL_*` (backend) | ✅ Funcionando |
+| Google Maps + Places | `VITE_GOOGLE_MAPS_API_KEY` (frontend) | ✅ Funcionando en local y en el bundle de Vercel |
+| Gemini | `GEMINI_API_KEY` (backend) | ⚠️ Funciona, pero en **nivel gratuito: 20 peticiones al día** |
+| SMTP Gmail | `MAIL_*` (backend) | ✅ Funcionando en local |
 | Wompi | `VITE_WOMPI_PUBLIC_KEY` (frontend) + firma en backend | Sin verificar |
 
 ### Gemini
@@ -107,6 +174,15 @@ Cómo distinguir los errores de Google, que es lo que más confusión generó al
 | `503` "high demand" | Sobrecarga temporal del modelo | Reintentar |
 
 Una lección que costó varias horas: **una clave nueva en el mismo proyecto bloqueado no arregla nada.** `PERMISSION_DENIED` es un bloqueo de proyecto, no de credencial; hay que emitir la clave en un proyecto distinto y con facturación activa.
+
+**Cuota y latencia.** La clave actual está en **nivel gratuito: 20 peticiones diarias** para `gemini-3.6-flash` (métrica `generate_content_free_tier_requests`). El pago hecho en AI Studio no se está aplicando a esta clave. Con ese límite la app no es viable en producción, porque cada foto o lista de un usuario consume una petición. Revisar el nivel en [ai.dev/rate-limit](https://ai.dev/rate-limit).
+
+Tiempos medidos: `/ai/parse-materials` tardó 33, 14 y 22 s en tres intentos; la misma consulta directa a Google, 4,3 s. El modelo gasta más tokens razonando que respondiendo (426 de razonamiento contra 137 de salida). Mejoras posibles, por impacto:
+
+1. Salir del nivel gratuito: más prioridad en la cola, menos `503`.
+2. Reducir el razonamiento. `thinkingBudget: 0` es rechazado con `400` por este modelo; falta probar `thinkingLevel: "low"`, que puede requerir migrar al SDK `@google/genai`.
+3. Reintento con backoff para `503` y `429`; Google incluye `retryDelay` en la respuesta.
+4. Redimensionar las fotos antes de enviarlas (`sharp` ya es dependencia).
 
 ### SMTP
 
@@ -158,6 +234,14 @@ Ferry **no** usa Cloud Vision: el análisis de fotos va por Gemini (`analyzeImag
 - **`StorePanel.tsx`**: ante un 503, el banner indica a la ferretería que ingrese los precios manualmente. Aquí no hace falta diálogo: el formulario manual ya es el estado por defecto y Smart Match solo lo autocompleta.
 
 Detalle a favor del diseño actual: `ai.controller.ts` descuenta los créditos **después** de que la IA responde, así que estos fallos no le queman créditos a la ferretería.
+
+### Migración a Vercel y caída del VPS — 2026-09-16
+
+- **Contenedor del backend reparado.** Quedaba en bucle con `exec format error`. No era la arquitectura: el disco virtual de Docker Desktop estaba corrupto y extraía las imágenes con archivos en 0 bytes, incluso una imagen oficial recién descargada. `npm install` y `npm run build` "pasaban" sin hacer nada porque ejecutar un archivo vacío devuelve éxito. Se resolvió con *Troubleshoot → Clean / Purge data* (solo WSL 2) y reconstrucción con `--no-cache`. La base local se recreó vacía.
+- **Repo movido a `Jersson001/ferry`**, porque Vercel no tenía acceso a `ingdanielacastaneda-bit/ferry`, privado y de otra cuenta.
+- **Frontend desplegado en Vercel** con `vercel.json` para las rutas SPA. Hicieron falta tres despliegues: el primero sin variables, el segundo con `VITE_API_URL` apuntando a `localhost`. Ver la sección *Estado actual*.
+- **Registro DNS `api.ferryapp.co` → `2.25.68.84`** creado y propagado.
+- **El VPS dejó de responder** en todos los puertos antes de poder instalar nginx y HTTPS. Queda en pausa la decisión de dónde correr el backend.
 
 ### Modelo de Gemini actualizado — 2026-09-03
 

@@ -1,8 +1,35 @@
 # Despliegue
 
-Ferry **no tiene despliegue automático**: no hay GitHub Actions ni ningún otro CI en el repositorio. Hacer `git push` actualiza GitHub y nada más — el servidor sigue con la versión anterior hasta que alguien la actualice a mano.
+> **Estado al 2026-09-16: en transición.** El frontend ya se despliega solo en Vercel. El backend estaba en un VPS de Hostinger que dejó de responder, y está pendiente decidir su nuevo destino. Ver *Estado actual* en [PROYECTO.md](PROYECTO.md).
 
-Este documento describe ese proceso manual.
+## Frontend — Vercel (automático)
+
+Cada push a `main` en **`Jersson001/ferry`** despliega el frontend solo. Nada que hacer a mano, salvo en dos casos:
+
+- **Si cambias una variable de entorno en Vercel**, hay que redesplegar: *Deployments → ⋯ → Redeploy*, desmarcando *Use existing Build Cache*. Vite incrusta las variables al compilar, así que el build anterior no ve el cambio.
+- **Si el push va a `origin`**, no despliega nada: en el clon local `origin` todavía apunta al repo viejo `ingdanielacastaneda-bit/ferry`. El que usa Vercel es el remoto `jersson`.
+
+Configuración del proyecto en Vercel:
+
+| Ajuste | Valor |
+|---|---|
+| Repositorio | `Jersson001/ferry` |
+| Root Directory | `frontend` |
+| `VITE_API_URL` | `https://api.ferryapp.co` |
+| `VITE_GOOGLE_MAPS_API_KEY` | clave de Maps, **con** prefijo `VITE_` |
+| `VITE_WOMPI_PUBLIC_KEY` | llave pública, **con** prefijo `VITE_` |
+
+Vercel advierte que las variables `VITE_` con formato de clave deberían ser privadas. Para estas dos **no hay que hacerle caso**: están hechas para el navegador y sin el prefijo quedan en `undefined`. El secreto de integridad de Wompi, en cambio, nunca va en el frontend.
+
+Para verificar un despliegue, lo más confiable es inspeccionar el bundle publicado: que la URL de la API sea la correcta y que no aparezca ningún secreto.
+
+---
+
+## Backend — VPS de Hostinger (en pausa)
+
+> El VPS `2.25.68.84` no responde desde el 2026-09-16. Lo que sigue documenta cómo funcionaba, por si se reactiva; si el backend se muda a Render o Railway, esta sección queda obsoleta.
+
+El backend **no tiene despliegue automático**: hacer `git push` no actualiza el servidor, que sigue con la versión anterior hasta que alguien la actualice a mano.
 
 ---
 
@@ -59,11 +86,7 @@ Reconstruye la imagen y recrea el contenedor. La base de datos no se toca.
 
 ### 4. Frontend
 
-```bash
-cd frontend && npm install && npm run build
-```
-
-Genera `frontend/dist/`, que es lo que sirve el servidor web. **Verifica cómo se publica ese directorio en tu servidor** (nginx, Apache o similar) — no está descrito en el repositorio y no forma parte del `docker-compose.yml`, que solo define `db` y `backend`.
+Ya no se construye en el servidor: lo publica Vercel. Ver la sección de arriba.
 
 ### 5. Verificar
 
