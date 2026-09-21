@@ -10,7 +10,9 @@ import { PortfolioLightbox } from '../components/PortfolioLightbox';
 import { Crown, Sparkles } from 'lucide-react';
 import { getMySubscription, UserSubscription } from '../services/subscriptionService';
 import { PlansModal } from '../components/PlansModal';
-import { Map, AdvancedMarker, useMapsLibrary } from '@vis.gl/react-google-maps';
+import { Map, AdvancedMarker } from '@vis.gl/react-google-maps';
+import { usePlacesAutocomplete, PlacePick } from '../hooks/usePlacesAutocomplete';
+import { PlaceSuggestionsDropdown } from '../components/PlaceSuggestionsDropdown';
 
 const getInitials = (name?: string) => {
   if (!name || name === 'guest') return 'U';
@@ -61,8 +63,7 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
   const fileInputRef = useRef<HTMLInputElement>(null);
   const profileRef = useRef(profile);
   const addressAutocompleteRef = useRef<HTMLInputElement>(null);
-  const placesLib = useMapsLibrary('places');
-  const autocompleteInstanceRef = useRef<google.maps.places.Autocomplete | null>(null);
+  const addressPlaces = usePlacesAutocomplete();
   const [addressInput, setAddressInput] = useState(profile?.location?.address || '');
   const { updateUserProfile, saveStoreProfile: apiSaveStoreProfile, logoutUser } = useApi();
   const user = JSON.parse(localStorage.getItem('user') || 'null');
@@ -123,34 +124,14 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
     }
   };
 
-  // Initialize Google Places Autocomplete on the address input
-  useEffect(() => {
-    if (profile?.role !== UserRole.STORE || !placesLib || !addressAutocompleteRef.current) return;
-    
-    autocompleteInstanceRef.current = new placesLib.Autocomplete(addressAutocompleteRef.current, {
-      componentRestrictions: { country: 'co' },
-      fields: ['formatted_address', 'geometry'],
-    });
-
-    const listener = autocompleteInstanceRef.current.addListener('place_changed', () => {
-      const place = autocompleteInstanceRef.current?.getPlace();
-      if (!place?.geometry?.location) return;
-      const newLat = place.geometry.location.lat();
-      const newLng = place.geometry.location.lng();
-      const newAddress = place.formatted_address || '';
-      setAddressInput(newAddress);
-      
-      const cur = profileRef.current;
-      if (!cur) return;
-      const newLocation = { lat: newLat, lng: newLng, address: newAddress };
-      onUpdateProfile({ ...cur, location: newLocation });
-      setShowStoreMap(true);
-    });
-
-    return () => {
-      if (listener) listener.remove();
-    };
-  }, [placesLib, profile?.role]);
+  // Al elegir una sugerencia de Google (Places API New) se ubica la tienda en el mapa.
+  const applyStoreAddressPick = (pick: PlacePick) => {
+    setAddressInput(pick.address);
+    const cur = profileRef.current;
+    if (!cur) return;
+    onUpdateProfile({ ...cur, location: { lat: pick.lat, lng: pick.lng, address: pick.address } });
+    setShowStoreMap(true);
+  };
 
   const AVAILABLE_SPECIALTIES = ['Plomería', 'Eléctricos', 'Depósito', 'Pintura', 'Carpintería', 'Iluminación', 'Cerrajería', 'Gas', 'Estructural'];
 
@@ -564,9 +545,20 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
                     ref={addressAutocompleteRef}
                     type="text"
                     value={addressInput}
-                    onChange={(e) => setAddressInput(e.target.value)}
+                    onChange={(e) => {
+                      setAddressInput(e.target.value);
+                      addressPlaces.search(e.target.value);
+                    }}
+                    onBlur={() => setTimeout(addressPlaces.clear, 200)}
                     placeholder="Busca la dirección de tu ferretería..."
                     className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-ferry-500 outline-none shadow-sm"
+                  />
+                  <PlaceSuggestionsDropdown
+                    predictions={addressPlaces.predictions}
+                    onPickPrediction={async (prediction) => {
+                      const pick = await addressPlaces.select(prediction);
+                      if (pick) applyStoreAddressPick(pick);
+                    }}
                   />
                 </div>
 

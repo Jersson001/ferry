@@ -9,7 +9,8 @@ import { Button, Card, Badge, StarRating } from '../components/UIComponents';
 import { MessageSquareText, FileText } from 'lucide-react';
 import { UserProfile } from '../types';
 import { getConfigProducto, inferirMedidaNominal, inferirCaracteristica, corregirNombreOCR, MODULE_PRODUCTS } from '../config/herrajesConfig';
-import { useMapsLibrary } from '@vis.gl/react-google-maps';
+import { usePlacesAutocomplete, PlacePick } from '../hooks/usePlacesAutocomplete';
+import { PlaceSuggestionsDropdown } from '../components/PlaceSuggestionsDropdown';
 
 interface Props {
   onRequestCreate: (req: MaterialRequest) => void;
@@ -412,37 +413,26 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
   const [isAddressValidated, setIsAddressValidated] = useState(false);
   const addressInputRef = useRef<HTMLInputElement>(null);
   const deliveryAddressInputRef = useRef<HTMLInputElement>(null);
-  const placesLib = useMapsLibrary('places');
-  const autocompleteRef1 = useRef<google.maps.places.Autocomplete | null>(null);
-  const autocompleteRef2 = useRef<google.maps.places.Autocomplete | null>(null);
+  // Autocompletado de Google (Places API New) para los dos campos de dirección:
+  // el de la obra, arriba, y el de entrega, en la pantalla de edición.
+  const addressPlaces = usePlacesAutocomplete();
+  const deliveryPlaces = usePlacesAutocomplete();
 
-  useEffect(() => {
-    if (!placesLib || !addressInputRef.current) return;
-    
-    autocompleteRef1.current = new placesLib.Autocomplete(addressInputRef.current, {
-      componentRestrictions: { country: 'co' },
-      fields: ['formatted_address', 'geometry'],
-    });
-    
-    const listener = autocompleteRef1.current.addListener('place_changed', () => {
-      const place = autocompleteRef1.current?.getPlace();
-      if (!place?.formatted_address) return;
-      setAddressQuery(place.formatted_address);
-      setIsAddressValidated(true);
-      setDeliveryAddress(place.formatted_address);
-      localStorage.setItem('ferry_direccion_entrega', place.formatted_address);
-      if (place.geometry?.location) {
-        setDeliveryCoordinates({
-          lat: place.geometry.location.lat(),
-          lng: place.geometry.location.lng()
-        });
-      }
-    });
-    
-    return () => {
-      if (listener) listener.remove();
-    };
-  }, [placesLib]);
+  const applyAddressPick = (pick: PlacePick) => {
+    setAddressQuery(pick.address);
+    setIsAddressValidated(true);
+    setShowAddressSuggestions(false);
+    setDeliveryAddress(pick.address);
+    localStorage.setItem('ferry_direccion_entrega', pick.address);
+    setDeliveryCoordinates({ lat: pick.lat, lng: pick.lng });
+  };
+
+  const applyDeliveryPick = (pick: PlacePick) => {
+    setDeliveryAddress(pick.address);
+    setAddressError(false);
+    localStorage.setItem('ferry_direccion_entrega', pick.address);
+    setDeliveryCoordinates({ lat: pick.lat, lng: pick.lng });
+  };
   const [isSendingQuote, setIsSendingQuote] = useState(false);
   const [quoteSentSuccess, setQuoteSentSuccess] = useState(false);
   const [quoteTitle, setQuoteTitle] = useState('');
@@ -470,34 +460,6 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
       setMode('EDITING');
     }
   }, [restoredCart]);
-
-  // Google Places Autocomplete en el input de dirección de entrega (modo EDITING)
-  useEffect(() => {
-    if (mode !== 'EDITING' || !placesLib || !deliveryAddressInputRef.current) return;
-    
-    autocompleteRef2.current = new placesLib.Autocomplete(deliveryAddressInputRef.current, {
-      componentRestrictions: { country: 'co' },
-      fields: ['formatted_address', 'geometry'],
-    });
-    
-    const listener = autocompleteRef2.current.addListener('place_changed', () => {
-      const place = autocompleteRef2.current?.getPlace();
-      if (!place?.formatted_address) return;
-      setDeliveryAddress(place.formatted_address);
-      setAddressError(false);
-      localStorage.setItem('ferry_direccion_entrega', place.formatted_address);
-      if (place.geometry?.location) {
-        setDeliveryCoordinates({
-          lat: place.geometry.location.lat(),
-          lng: place.geometry.location.lng()
-        });
-      }
-    });
-    
-    return () => {
-      if (listener) listener.remove();
-    };
-  }, [mode, placesLib]);
 
   // Auto-submit tras login si había carrito pendiente
   const autoSubmitDoneRef = useRef(false);
@@ -1086,7 +1048,8 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
                 const val = e.target.value;
                 setAddressQuery(val);
                 setIsAddressValidated(false);
-                
+                addressPlaces.search(val);
+
                 // Filtrar direcciones guardadas
                 if (val.trim().length > 0) {
                   const filtered = savedAddresses.filter(addr => 
@@ -1105,7 +1068,10 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
                 }
               }}
               onBlur={e => {
-                setTimeout(() => setShowAddressSuggestions(false), 200);
+                setTimeout(() => {
+                  setShowAddressSuggestions(false);
+                  addressPlaces.clear();
+                }, 200);
                 const val = e.target.value.trim();
                 if (val.length > 3) {
                   setIsAddressValidated(true);
@@ -1127,28 +1093,23 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
               <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-green-500 pointer-events-none z-10" />
             )}
             
-            {/* Sugerencias de direcciones guardadas */}
-            {showAddressSuggestions && filteredAddresses.length > 0 && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-50 max-h-48 overflow-y-auto">
-                {filteredAddresses.map((addr, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => {
-                      setAddressQuery(addr);
-                      setDeliveryAddress(addr);
-                      setIsAddressValidated(true);
-                      setShowAddressSuggestions(false);
-                      localStorage.setItem('ferry_direccion_entrega', addr);
-                    }}
-                    className="w-full text-left px-4 py-2.5 hover:bg-orange-50 border-b border-slate-100 last:border-b-0 text-sm text-slate-700 flex items-center gap-2 transition-colors"
-                  >
-                    <MapPin className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                    <span className="truncate">{addr}</span>
-                  </button>
-                ))}
-              </div>
-            )}
+            {/* Direcciones guardadas + sugerencias de Google, en una sola lista */}
+            <PlaceSuggestionsDropdown
+              saved={showAddressSuggestions ? filteredAddresses : []}
+              onPickSaved={addr => {
+                setAddressQuery(addr);
+                setDeliveryAddress(addr);
+                setIsAddressValidated(true);
+                setShowAddressSuggestions(false);
+                addressPlaces.clear();
+                localStorage.setItem('ferry_direccion_entrega', addr);
+              }}
+              predictions={addressPlaces.predictions}
+              onPickPrediction={async prediction => {
+                const pick = await addressPlaces.select(prediction);
+                if (pick) applyAddressPick(pick);
+              }}
+            />
           </div>
 
           {/* Detalles de la obra */}
@@ -1520,11 +1481,13 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
           {/* Delivery address (required) — primero */}
           {!quoteSentSuccess && (
             <div>
+              <div className="relative">
               <input
                 ref={deliveryAddressInputRef}
                 type="text"
                 value={deliveryAddress}
-                onChange={e => { setDeliveryAddress(e.target.value); localStorage.setItem('ferry_direccion_entrega', e.target.value); if (e.target.value.trim()) setAddressError(false); }}
+                onChange={e => { setDeliveryAddress(e.target.value); localStorage.setItem('ferry_direccion_entrega', e.target.value); if (e.target.value.trim()) setAddressError(false); deliveryPlaces.search(e.target.value); }}
+                onBlur={() => setTimeout(deliveryPlaces.clear, 200)}
                 placeholder="Dirección exacta de entrega (Ej. Obra Calle 100 #15-20, Barrio X) *"
                 className={`w-full text-sm px-4 py-2.5 rounded-xl border placeholder:text-slate-400 text-slate-700 focus:outline-none focus:ring-2 focus:border-transparent shadow-sm ${
                   addressError
@@ -1533,6 +1496,14 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
                 }`}
                 maxLength={120}
               />
+              <PlaceSuggestionsDropdown
+                predictions={deliveryPlaces.predictions}
+                onPickPrediction={async prediction => {
+                  const pick = await deliveryPlaces.select(prediction);
+                  if (pick) applyDeliveryPick(pick);
+                }}
+              />
+              </div>
               {addressError && (
                 <p className="text-xs text-red-500 font-medium mt-1 pl-1">
                   La dirección de entrega es obligatoria.
