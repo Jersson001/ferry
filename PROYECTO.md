@@ -97,7 +97,7 @@ Navegador ──► Vercel (frontend) ──► Render (backend NestJS) ──�
 | Backend | Render, modo Docker | `https://ferry-jogo.onrender.com` | ✅ |
 | Base de datos | Supabase | — | ✅ |
 | Login y sesión | — | — | ✅ Verificado de punta a punta |
-| Google Maps | — | — | ❌ Falta autorizar el dominio de Vercel en la clave |
+| Google Maps | — | — | ✅ Autocompletado verificado en producción |
 | IA | — | — | ⚠️ Conecta, pero desde Render Google respondió sobrecargado |
 
 La infraestructura anterior —un VPS de Hostinger con Postgres adentro— dejó de responder el 2026-09-16, probablemente por falta de pago. Solo tenía datos de prueba, así que no se perdió nada real.
@@ -160,7 +160,7 @@ Con usuarios reales, lo mínimo razonable es Render Starter: unos $7 al mes.
 
 | Servicio | Dónde | Estado al 2026-09-21 |
 |---|---|---|
-| Google Maps + Places | `VITE_GOOGLE_MAPS_API_KEY` (frontend) | ✅ Local — ❌ en Vercel: `RefererNotAllowedMapError` |
+| Google Maps + Places (New) | `VITE_GOOGLE_MAPS_API_KEY` (frontend) | ✅ Local y en Vercel |
 | Gemini | `GEMINI_API_KEY` (backend) | ⚠️ Nivel gratuito, 20 peticiones al día; `503` intermitentes desde Render |
 | SMTP Gmail | `MAIL_*` (backend) | ✅ Funcionando en local |
 | Wompi | `VITE_WOMPI_PUBLIC_KEY` (frontend) + firma en backend | Sin verificar |
@@ -210,7 +210,13 @@ Para probar el envío sin molestar a nadie, pide un reset con el usuario de prue
 
 ### Google Maps
 
-La clave necesita *Maps JavaScript API*, *Places API* y *Places API (New)* habilitadas en sus restricciones, y facturación activa en el proyecto. Conviene restringirla por referente HTTP (`localhost:5173` y el dominio de producción), porque queda expuesta en el navegador.
+La clave de Maps es la **"Clave API 2"**, en el mismo proyecto de Google Cloud que Gemini. Necesita:
+
+- En el proyecto, **habilitadas** *Maps JavaScript API* y **Places API (New)** (*APIs y servicios → Biblioteca*).
+- En la clave, esas mismas dos en **Restricciones de API**, y en **Restricciones de aplicaciones → Sitios web**: `https://frontend-black-ten-37.vercel.app/*` y `http://localhost:5173/*`.
+- Facturación activa en el proyecto.
+
+El autocompletado de direcciones usa **Places API (New)**, no la *legacy* `google.maps.places.Autocomplete`. Google dejó de ofrecer la legacy a proyectos creados desde marzo de 2025: en ellos falla con `LegacyApiNotActivatedMapError` y no hay forma de activarla. El código vive en `hooks/usePlacesAutocomplete.ts` y `components/PlaceSuggestionsDropdown.tsx`, y lo usan los tres campos de dirección.
 
 **Maps y Gemini deben vivir en el mismo proyecto de Google Cloud.** No es un requisito técnico, sino una lección práctica: al migrar Gemini a un proyecto nuevo y borrar el viejo, la clave de Maps —que seguía siendo la del proyecto eliminado— murió con él, y Maps dejó de funcionar de un momento a otro sin que nadie tocara el código. Si se cambia de proyecto, hay que reemitir **las dos** claves.
 
@@ -220,7 +226,9 @@ Errores de Maps y qué significan:
 |---|---|
 | `BillingNotEnabledMapError` | El proyecto existe pero no tiene facturación activa |
 | `DeletedApiProjectMapError` | El proyecto dueño de la clave fue eliminado; la clave está muerta y hay que emitir otra |
-| `RefererNotAllowedMapError` | El dominio desde el que se carga no está en los referentes permitidos de la clave |
+| `RefererNotAllowedMapError` | El dominio desde el que se carga no está en los referentes permitidos de la clave. Verificar que se editó **la misma clave que usa el sitio**: el 2026-09-21 se autorizó el dominio en otra y no cambió nada |
+| `LegacyApiNotActivatedMapError` | Código usando una API legacy en un proyecto nuevo; hay que migrar a la versión New |
+| `Places API (New) has not been used in project…` | La API no está habilitada en el proyecto, o la clave no la tiene en sus restricciones |
 
 Para verificar una clave de navegador desde la terminal: si responde `"API keys with referer restrictions cannot be used with this API"`, la clave está **viva y bien restringida**. Ese "error" es la respuesta sana.
 
@@ -308,4 +316,3 @@ Ordenada por urgencia antes de tener usuarios reales:
 - **`frontend/src/env`** es un archivo suelto con variables `VITE_` que Vite no lee. Induce a error al editar configuración; conviene borrarlo.
 - **`frontend/dist/`** contiene un build previo a la migración desde Firebase. Está desactualizado respecto a `src/`.
 - **`synchronize: true`** en TypeORM altera el esquema automáticamente. Antes de producción debería migrarse a migraciones explícitas.
-- `google.maps.places.Autocomplete` ya no se ofrece a clientes nuevos; Google recomienda migrar a `PlaceAutocompleteElement`.
