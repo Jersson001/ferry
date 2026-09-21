@@ -17,4 +17,7 @@ ENV NODE_ENV=production
 EXPOSE 3000
 
 ENTRYPOINT []
-CMD ["npm", "run", "start:prod"]
+# node directo y no `npm run start:prod`: npm no reenvía bien SIGTERM y,
+# cuando Render duerme o reemplaza la instancia, lo registra como
+# "npm error ... signal SIGTERM" aunque el apagado sea normal.
+CMD ["node", "dist/main"]

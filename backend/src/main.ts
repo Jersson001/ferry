@@ -9,6 +9,10 @@ async function bootstrap() {
     bodyParser: true,
   });
 
+  // Al recibir SIGTERM (Render lo manda al dormir o reemplazar la instancia),
+  // Nest cierra las conexiones a la base antes de salir en vez de cortarlas.
+  app.enableShutdownHooks();
+
   // Habilitar CORS para el frontend
   app.enableCors({
     origin: true,
