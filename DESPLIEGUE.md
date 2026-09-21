@@ -1,122 +1,119 @@
 # Despliegue
 
-> **Estado al 2026-09-16: en transición.** El frontend ya se despliega solo en Vercel. El backend estaba en un VPS de Hostinger que dejó de responder, y está pendiente decidir su nuevo destino. Ver *Estado actual* en [PROYECTO.md](PROYECTO.md).
+Ferry se despliega **solo**: cada push a `main` en `Jersson001/ferry` actualiza el frontend en Vercel y el backend en Render. No hay servidor que administrar a mano.
 
-## Frontend — Vercel (automático)
+```
+git push jersson main
+        │
+        ├──► Vercel  construye frontend/  → https://frontend-black-ten-37.vercel.app
+        └──► Render  construye backend/   → https://ferry-jogo.onrender.com
+                                                  └──► Supabase (Postgres)
+```
 
-Cada push a `main` en **`Jersson001/ferry`** despliega el frontend solo. Nada que hacer a mano, salvo en dos casos:
+> **Ojo con el remoto.** En el clon local, `origin` todavía apunta al repo viejo `ingdanielacastaneda-bit/ferry`, que no despliega nada. El que usan Vercel y Render es el remoto **`jersson`**. Un `git push` a secas no publica.
 
-- **Si cambias una variable de entorno en Vercel**, hay que redesplegar: *Deployments → ⋯ → Redeploy*, desmarcando *Use existing Build Cache*. Vite incrusta las variables al compilar, así que el build anterior no ve el cambio.
-- **Si el push va a `origin`**, no despliega nada: en el clon local `origin` todavía apunta al repo viejo `ingdanielacastaneda-bit/ferry`. El que usa Vercel es el remoto `jersson`.
+El estado detallado de cada pieza está en [PROYECTO.md](PROYECTO.md), sección *Producción*.
 
-Configuración del proyecto en Vercel:
+---
+
+## Antes de desplegar
+
+Tres cosas que causaron casi todos los despliegues fallidos:
+
+**Los `.env` no viajan con el código.** Están en `.gitignore`. Las variables de producción se configuran en el panel de Vercel y en el de Render, no en el repo. Si agregas una variable nueva en local, hay que agregarla también allá.
+
+**Vite incrusta las variables al compilar.** Cambiar una variable en Vercel no afecta al sitio publicado hasta que se redespliega.
+
+**Algunas variables no se copian tal cual del entorno local:**
+
+| Variable | Local | Producción |
+|---|---|---|
+| `FRONTEND_URL` (backend) | `http://localhost:5173` | URL pública del frontend |
+| `VITE_API_URL` (frontend) | `http://localhost:3000` | `https://ferry-jogo.onrender.com` |
+| `JWT_SECRET` (backend) | cualquiera | Una cadena larga, aleatoria y **distinta** |
+
+`FRONTEND_URL` arma los enlaces de los correos de verificación y recuperación: si queda en `localhost`, los usuarios reciben enlaces que no llevan a ninguna parte.
+
+Y `JWT_SECRET` no puede ser el valor de desarrollo: está publicado en el repo, y en producción el backend **se niega a arrancar** con él.
+
+---
+
+## Frontend — Vercel
 
 | Ajuste | Valor |
 |---|---|
 | Repositorio | `Jersson001/ferry` |
 | Root Directory | `frontend` |
-| `VITE_API_URL` | `https://api.ferryapp.co` |
+| `VITE_API_URL` | `https://ferry-jogo.onrender.com` |
 | `VITE_GOOGLE_MAPS_API_KEY` | clave de Maps, **con** prefijo `VITE_` |
 | `VITE_WOMPI_PUBLIC_KEY` | llave pública, **con** prefijo `VITE_` |
 
+**Si cambias una variable**, hay que redesplegar a mano: *Deployments → ⋯ → Redeploy*, desmarcando *Use existing Build Cache*.
+
 Vercel advierte que las variables `VITE_` con formato de clave deberían ser privadas. Para estas dos **no hay que hacerle caso**: están hechas para el navegador y sin el prefijo quedan en `undefined`. El secreto de integridad de Wompi, en cambio, nunca va en el frontend.
 
-Para verificar un despliegue, lo más confiable es inspeccionar el bundle publicado: que la URL de la API sea la correcta y que no aparezca ningún secreto.
+La clave de Maps debe autorizar el dominio de Vercel en sus restricciones de referente HTTP, o Maps falla con `RefererNotAllowedMapError`.
 
 ---
 
-## Backend — VPS de Hostinger (en pausa)
+## Backend — Render
 
-> El VPS `2.25.68.84` no responde desde el 2026-09-16. Lo que sigue documenta cómo funcionaba, por si se reactiva; si el backend se muda a Render o Railway, esta sección queda obsoleta.
+| Ajuste | Valor |
+|---|---|
+| Modo | **Docker**, con `backend/Dockerfile` |
+| Root Directory | `backend` |
+| Docker Build Context Directory | **`.`** |
+| Dockerfile Path | `Dockerfile` |
+| Plan | Free |
 
-El backend **no tiene despliegue automático**: hacer `git push` no actualiza el servidor, que sigue con la versión anterior hasta que alguien la actualice a mano.
+Variables: `DATABASE_URL`, `JWT_SECRET`, `GEMINI_API_KEY`, `FRONTEND_URL`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_SECURE`, `MAIL_USER`, `MAIL_PASSWORD` y `MAIL_FROM`.
 
----
+Tres particularidades del plan gratuito:
 
-## Antes de empezar
+- **Duerme tras 15 minutos sin tráfico.** La primera petición tarda 30–50 s mientras despierta.
+- **El disco es efímero.** Lo que se guarde en `uploads/` se pierde en cada despliegue.
+- **`SIGTERM` en los logs no es un error.** Es Render durmiendo el servicio o reemplazándolo por uno nuevo.
 
-Dos cosas que causan casi todos los despliegues fallidos:
-
-**Los `.env` no viajan con el código.** Están en `.gitignore`, así que el servidor tiene los suyos y `git pull` no los toca. Si cambiaste una clave en local, hay que cambiarla también allá.
-
-**Vite compila las variables dentro del bundle.** Todo lo `VITE_` se congela al hacer `npm run build`. Cambiar el `.env` del frontend sin reconstruir no surte ningún efecto.
-
----
-
-## Diferencias entre local y producción
-
-Estas variables **no** deben copiarse tal cual desde el entorno local:
-
-| Variable | Local | Producción |
-|---|---|---|
-| `FRONTEND_URL` (backend) | `http://localhost:5173` | La URL pública |
-| `VITE_API_URL` (frontend) | `http://localhost:3000` | La URL pública del backend |
-| `JWT_SECRET` (backend) | cualquiera | Una cadena larga y distinta |
-| `UPLOADS_BASE_URL` (backend) | — | La URL pública de `/uploads` |
-
-`FRONTEND_URL` es la más delicada: arma los enlaces de los correos de verificación y recuperación. Si queda en `localhost`, los usuarios reciben enlaces que no llevan a ninguna parte.
-
-También hay que revisar, del lado de Google Cloud, que la clave de Maps tenga el **dominio de producción** en sus restricciones de referente HTTP. Si solo autoriza `localhost:5173`, en el servidor falla con `RefererNotAllowedMapError`.
+El servicio se creó como *Web Service* y no como *Blueprint*, así que Render **no aplica** el `render.yaml` del repo. Ese archivo queda como referencia de la configuración.
 
 ---
 
-## Procedimiento
+## Base de datos — Supabase
 
-### 1. Traer el código
+Se configura solo con `DATABASE_URL` en Render. Usar la cadena del **Session pooler**:
 
-```bash
-cd /ruta/del/proyecto/ferry && git pull origin main
+```
+postgresql://postgres.<proyecto>:<clave>@aws-0-us-east-2.pooler.supabase.com:5432/postgres
 ```
 
-### 2. Revisar si cambiaron las variables de entorno
+- No el *transaction pooler* de puerto 6543: es para serverless y no soporta prepared statements.
+- La contraseña no debe tener `?`, `@`, `#`, `/` ni `%`, que rompen la URL.
 
-Compara los `.env.example` con los `.env` del servidor. Si el despliegue agrega variables nuevas, aparecerán ahí:
+TypeORM crea y ajusta el esquema solo al arrancar, por `synchronize: true`.
 
-```bash
-diff <(cut -d= -f1 backend/.env.example | sort) <(cut -d= -f1 backend/.env | sort)
-```
+---
 
-### 3. Backend
+## Verificar un despliegue
 
-```bash
-docker compose up -d --build backend
-```
-
-Reconstruye la imagen y recrea el contenedor. La base de datos no se toca.
-
-### 4. Frontend
-
-Ya no se construye en el servidor: lo publica Vercel. Ver la sección de arriba.
-
-### 5. Verificar
+**Backend:**
 
 ```bash
-curl -i https://TU-DOMINIO/api/
+curl https://ferry-jogo.onrender.com/
 ```
 
-Debe responder `200` con `Hello World!`. Y en los logs:
+Debe responder `Hello World!`. Si tarda medio minuto, estaba dormido; es normal.
 
-```bash
-docker compose logs --tail 30 backend
-```
+**Frontend:** lo más confiable es inspeccionar el bundle publicado, no el panel de Vercel. Descarga la página, busca el archivo `index-*.js` que referencia y verifica que la URL de la API sea la de Render y que no aparezca ningún secreto.
 
-Busca `Nest application successfully started`. Si aparece un error de TypeORM, el backend no alcanzó la base de datos.
+**Punta a punta:** iniciar sesión en el sitio publicado. Si funciona, las tres piezas están conectadas.
 
 ---
 
 ## Si algo sale mal
 
-Para volver a la versión anterior:
+Tanto Vercel como Render guardan los despliegues anteriores y permiten volver a uno con un clic: *Rollback* en Vercel, *Rollback* en los eventos del servicio en Render.
 
-```bash
-git log --oneline -5
-```
-
-```bash
-git checkout <commit-anterior> && docker compose up -d --build backend
-```
-
-Ojo con una cosa: TypeORM corre con `synchronize: true`, así que **altera el esquema automáticamente al arrancar**. Un rollback de código no revierte los cambios que ya hizo en la base. Es la razón principal para migrar a migraciones explícitas antes de tener datos que importen.
+Ojo: TypeORM corre con `synchronize: true`, así que **altera el esquema de la base al arrancar**. Volver a una versión anterior del código no revierte esos cambios en la base. Es la razón principal para pasar a migraciones explícitas antes de tener datos reales.
 
 ---
 
@@ -124,21 +121,20 @@ Ojo con una cosa: TypeORM corre con `synchronize: true`, así que **altera el es
 
 | Síntoma | Causa |
 |---|---|
+| Render busca `.../backend/backend` | `backend` puesto a la vez en Root Directory y en Docker Build Context |
+| Render construye un commit viejo | Los cambios se subieron a `origin` y no a `jersson` |
+| `FATAL: JWT_SECRET tiene el valor de desarrollo` | Se copió el `.env` local a Render; poner un secreto propio |
+| `npm error ... signal SIGTERM` | Apagado normal de Render, no un fallo |
+| El frontend no ve un cambio de variable | Falta redesplegar en Vercel |
+| El frontend llama a `localhost` | `VITE_API_URL` mal puesta al compilar |
 | El enlace del correo lleva al entorno equivocado | `FRONTEND_URL` con el valor de otro entorno |
-| `RefererNotAllowedMapError` | La clave de Maps no autoriza el dominio de producción |
-| El frontend no ve los cambios | Falta `npm run build`, o el servidor web sirve un `dist/` viejo |
-| El frontend llama a `localhost:3000` | `VITE_API_URL` mal al momento de compilar |
-| `exec format error` en el contenedor | Imagen de otra arquitectura, o datos de Docker corruptos — reconstruir con `--no-cache` |
+| `RefererNotAllowedMapError` | La clave de Maps no autoriza el dominio de Vercel |
+| `password authentication failed` | Contraseña de Supabase equivocada, o con caracteres que rompen la URL |
 
 Para los errores de Gemini y de Maps, la tabla de diagnóstico está en [PROYECTO.md](PROYECTO.md).
 
 ---
 
-## Pendiente
+## Infraestructura anterior
 
-Este proceso es manual y frágil. Lo que más lo mejoraría, en orden:
-
-1. **CI/CD**: un workflow que despliegue al hacer push a `main`, y que el frontend se publique solo.
-2. **Migraciones de TypeORM** en lugar de `synchronize: true`.
-3. **Los `uploads/` viven en el disco del servidor.** Sobreviven a reinicios del contenedor por el volumen del compose, pero no hay respaldo. Conviene moverlos a almacenamiento de objetos.
-4. **Documentar cómo se sirve el frontend**, que hoy no está en el repositorio.
+Hasta el 2026-09-16 el backend y la base vivían en un VPS de Hostinger (`2.25.68.84`), que dejó de responder. El DNS de `api.ferryapp.co` todavía apunta ahí y conviene borrarlo o reapuntarlo. La configuración de nginx con HTTPS que se preparó para ese servidor está en `deploy/nginx/`, sin uso.

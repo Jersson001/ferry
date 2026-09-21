@@ -13,10 +13,10 @@ Documento de referencia del proyecto: stack, cómo levantarlo en local, estado d
 | Herramienta | Uso |
 |---|---|
 | NestJS 11 | Framework HTTP, corre en `:3000` |
-| PostgreSQL 15 | Base de datos, en contenedor Docker |
+| PostgreSQL | Base de datos: Supabase en producción, contenedor Docker en local |
 | TypeORM 0.3 | ORM, con `synchronize: true` (solo desarrollo) |
 | Passport + JWT | Autenticación; contraseñas con bcrypt |
-| `@google/generative-ai` | Gemini (`gemini-2.5-flash`) para los flujos de IA |
+| `@google/generative-ai` | Gemini (`gemini-3.6-flash`) para los flujos de IA |
 | Nodemailer | Correos de verificación y recuperación, vía SMTP de Gmail |
 | Multer + Sharp | Subida y procesamiento de imágenes |
 | `@nestjs/schedule` | Tareas programadas |
@@ -41,7 +41,9 @@ Vistas principales: `HomeView`, `MaterialFlow` (lista de materiales), `UserQuote
 ### Otros
 
 - `app/` en la raíz del repositorio: módulo Android (Kotlin + Gradle), independiente del monolito web.
-- `ferry/docker-compose.yml`: Postgres y el backend en contenedores.
+- `ferry/docker-compose.yml`: Postgres y el backend en contenedores, para desarrollo local.
+- `ferry/render.yaml`: blueprint de Render, de referencia.
+- `ferry/deploy/nginx/`: proxy HTTPS preparado para el VPS, hoy sin uso.
 
 > **Ferry no usa Firebase.** Lo usó en versiones anteriores y migró a NestJS + PostgreSQL + JWT. El proyecto de Google Cloud se llama `gen-lang-client-...` porque se creó vía Firebase/AI Studio, pero solo aloja las claves de Gemini y Maps.
 
@@ -80,79 +82,86 @@ Dos advertencias que cuestan tiempo si se pasan por alto:
 
 ---
 
-## Estado actual — 2026-09-16
+## Producción — estado al 2026-09-21
 
-> Migración de infraestructura **a medio camino**. Leer esta sección antes de tocar nada.
+Ferry está en internet, con todo en planes gratuitos:
 
-| Pieza | Dónde | Estado |
-|---|---|---|
-| Frontend | Vercel, proyecto `frontend` | ✅ Desplegado y bien configurado — pero sin backend al cual llamar |
-| Backend | VPS Hostinger `2.25.68.84` | ❌ **Caído**: no responde en ningún puerto, ni SSH. Probable suspensión por falta de pago |
-| Base de datos | Postgres dentro del VPS | ❌ Caída junto con el VPS. Solo tenía datos de prueba |
-| Dominio | `ferryapp.co` en Hostinger, activo hasta mayo 2027 | ⚠️ `api` apunta al VPS; `@` y `www` siguen en el parking de Hostinger |
-| Entorno local | Tu equipo | ✅ Todo funciona |
+```
+Navegador ──► Vercel (frontend) ──► Render (backend NestJS) ──► Supabase (Postgres)
+                                          └──► Gemini, SMTP de Gmail
+```
 
-**Todo lo que había en producción eran pruebas**, así que perder el VPS no cuesta datos reales. El código del backend está completo en el repo y en el equipo local.
+| Pieza | Servicio | URL | Estado |
+|---|---|---|---|
+| Frontend | Vercel | `https://frontend-black-ten-37.vercel.app` | ✅ |
+| Backend | Render, modo Docker | `https://ferry-jogo.onrender.com` | ✅ |
+| Base de datos | Supabase | — | ✅ |
+| Login y sesión | — | — | ✅ Verificado de punta a punta |
+| Google Maps | — | — | ❌ Falta autorizar el dominio de Vercel en la clave |
+| IA | — | — | ⚠️ Conecta, pero desde Render Google respondió sobrecargado |
+
+La infraestructura anterior —un VPS de Hostinger con Postgres adentro— dejó de responder el 2026-09-16, probablemente por falta de pago. Solo tenía datos de prueba, así que no se perdió nada real.
 
 ### Repositorio
 
-El repo oficial pasó a ser **`Jersson001/ferry`**, que es el que ve Vercel. El anterior, `ingdanielacastaneda-bit/ferry`, quedó atrás: la cuenta de Vercel no tiene acceso a él.
+El repo oficial es **`Jersson001/ferry`**, el que usan Vercel y Render. El anterior, `ingdanielacastaneda-bit/ferry`, quedó atrás.
 
-En el clon local, `origin` **todavía apunta al repo viejo**; el nuevo está como remoto `jersson`. Pendiente: convertir `jersson` en `origin` y archivar el repo viejo, para que nadie siga subiendo cambios ahí.
+- ⚠️ **`Jersson001/ferry` es público.** Se revisó todo el historial: no expone ninguna credencial vigente. La única clave que aparece es una de Maps del proyecto de Google Cloud ya borrado, que está muerta. Aun así conviene volverlo privado: es el código del negocio.
+- En el clon local, `origin` todavía apunta al repo viejo; el nuevo es el remoto `jersson`. Hay que empujar con `git push jersson main`. Pendiente: convertir `jersson` en `origin` y archivar el viejo.
 
-### Frontend en Vercel
+### Frontend — Vercel
 
-- Equipo *Jersson Escobar's projects*, plan **Hobby** (uso no comercial según los términos de Vercel; para producción con pagos corresponde Pro).
-- Proyecto `frontend`, enlazado a `Jersson001/ferry` con **Root Directory = `frontend`**. Se despliega solo en cada push a `main`.
-- URL temporal: `frontend-black-ten-37.vercel.app`. Pendiente: renombrar el proyecto a `ferry` y conectar `ferryapp.co`.
+- Equipo *Jersson Escobar's projects*, plan **Hobby**. Sus términos lo limitan a uso no comercial; con pagos reales corresponde Pro.
+- Proyecto enlazado a `Jersson001/ferry` con **Root Directory = `frontend`**. Se despliega solo en cada push a `main`.
 - `frontend/vercel.json` reescribe todas las rutas a `index.html`. Sin eso, los enlaces de los correos a `/reset-password` y `/verify-email` dan 404.
-- Variables configuradas en Vercel: `VITE_API_URL=https://api.ferryapp.co`, `VITE_GOOGLE_MAPS_API_KEY`, `VITE_WOMPI_PUBLIC_KEY`. Verificado sobre el bundle publicado: las tres presentes, el secreto de integridad de Wompi ausente.
+- Variables: `VITE_API_URL=https://ferry-jogo.onrender.com`, `VITE_GOOGLE_MAPS_API_KEY`, `VITE_WOMPI_PUBLIC_KEY`. Verificado sobre el bundle publicado: las tres presentes y el secreto de integridad de Wompi ausente.
+- El conector de Vercel usado para administrar no encuentra este proyecto por la API, aunque sí ve los demás. La forma confiable de verificar un despliegue es inspeccionar el bundle publicado.
 
-Dos trampas de Vercel que costaron redespliegues:
+Trampas que costaron redespliegues:
 
 - **Cambiar variables no redespliega.** Hay que hacer *Redeploy* a mano, porque Vite las incrusta al compilar.
-- Vercel advierte que las variables `VITE_` con formato de clave "deberían ser privadas". **Hay que ignorarlo** para la clave de Maps y la llave pública de Wompi: están hechas para el navegador. Quitar el prefijo las deja en `undefined` y rompe Maps y los pagos.
+- Vercel advierte que las variables `VITE_` con formato de clave "deberían ser privadas". **Hay que ignorarlo** para la clave de Maps y la llave pública de Wompi, que están hechas para el navegador: sin el prefijo quedan en `undefined`.
+- `VITE_API_URL` apuntando a `localhost` no sirve en producción: en el navegador de cada visitante, `localhost` es su propio equipo.
 
-La clave de Maps debe autorizar en sus restricciones de referente los dominios de Vercel y `ferryapp.co`, además de `localhost:5173`.
+Pendiente: renombrar el proyecto, conectar `ferryapp.co`, y borrar el proyecto viejo `ferry-001`, enlazado a un repo vacío.
 
-Existe además un proyecto viejo `ferry-001` enlazado a `Jersson001/ferry-1.2`, un repo sin contenido. No sirve; se puede borrar.
+### Backend — Render
 
-### Por qué el frontend todavía no funciona en línea
+- Plan **Free**, en modo **Docker**: usa `backend/Dockerfile`. El servicio no se creó como *Blueprint*, así que el `render.yaml` del repo sirve como referencia pero Render no lo aplica.
+- **Root Directory = `backend`** y **Docker Build Context Directory = `.`**. Si el contexto también dice `backend`, Render busca `backend/backend` y el build falla.
+- Se duerme tras 15 minutos sin tráfico: la primera petición tarda 30–50 s.
+- El disco es **efímero**: lo que se guarde en `uploads/` se pierde en cada despliegue o reinicio. Pendiente migrar el almacenamiento a Supabase Storage antes de tener usuarios.
+- Arranca con `node dist/main`, no con `npm run start:prod`: npm reportaba el apagado normal de Render como `npm error ... signal SIGTERM`. Un `SIGTERM` en los logs de Render es Render durmiendo o reemplazando la instancia, no un fallo.
+- Variables: `DATABASE_URL`, `JWT_SECRET`, `GEMINI_API_KEY`, `FRONTEND_URL` y las `MAIL_*`. `JWT_SECRET` debe ser propio: en producción el backend **se niega a arrancar** con el valor de desarrollo, que está publicado en el repo.
 
-Vercel sirve todo por HTTPS, y los navegadores **bloquean** que una página HTTPS llame a una API por HTTP. El backend solo respondía por `http://2.25.68.84:3000`, así que necesita un dominio con certificado. Se preparó `deploy/nginx/api.ferryapp.co.conf` para eso, pero no llegó a instalarse porque el VPS se cayó antes.
+### Base de datos — Supabase
 
-### Decisión pendiente: dónde correr el backend
+- Plan **Free**: 500 MB de base, 1 GB de archivos, y **se pausa tras una semana sin uso**.
+- Se usa **solo como Postgres**. Autenticación, cotizaciones, pagos y suscripciones siguen en NestJS: reescribirlos sobre Supabase habría sido una migración enorme sin beneficio claro.
+- Conexión por el **Session pooler** (puerto 5432, host `*.pooler.supabase.com`, usuario `postgres.<proyecto>`). No el transaction pooler de 6543, que es para serverless y no soporta prepared statements; no la conexión directa, que depende de IPv6 o de un complemento pago.
+- La contraseña de la base no debe tener `?`, `@`, `#`, `/` ni `%`: rompen la URL de conexión.
+- TypeORM crea el esquema solo con `synchronize: true`.
 
-El plan conversado es dejar el VPS y usar servicios administrados, conservando el backend NestJS tal como está:
+⚠️ **Hoy el backend local y el de producción comparten esta base**, porque el `.env` local también tiene `DATABASE_URL`. Mientras sean pruebas no importa; antes de tener usuarios reales, el local debe volver al Postgres de Docker comentando esa línea.
 
-- **Base de datos → Supabase**, pero **solo como Postgres y almacenamiento de archivos**. No su autenticación ni sus políticas RLS: reescribir auth, cotizaciones, pagos y suscripciones sobre Supabase sería una migración enorme sin beneficio claro. TypeORM se conecta a Supabase como a cualquier Postgres.
-- **Backend → Render o Railway.** Supabase no ejecuta un servidor NestJS.
-
-Costos revisados el 2026-09-16:
+### Costos
 
 | Servicio | Gratis | Siempre encendido |
 |---|---|---|
-| Render | Free: se apaga tras 15 min sin uso, ~1 min en despertar | Starter, $7/mes |
-| Railway | $1/mes de uso, no alcanza para un backend encendido | Hobby, $5/mes |
-| Supabase | 500 MB de base, 1 GB de archivos, se pausa tras 1 semana sin uso | Pro, desde $25/mes |
+| Render | Free: duerme tras 15 min | Starter, $7/mes |
+| Railway (alternativa) | $1/mes de uso, no alcanza | Hobby, $5/mes |
+| Supabase | 500 MB, se pausa tras 1 semana sin uso | Pro, desde $25/mes |
 
-Recomendación: **Render Free + Supabase Free mientras sean pruebas** ($0), y pasar a Render Starter o Railway Hobby (~$5–7/mes) cuando haya usuarios. Con Render Free, la primera petición tras un rato de inactividad se suma a los 15–35 s que ya tarda Gemini: aceptable para probar, no para usuarios.
-
-Cambios de código que implicaría:
-
-1. Cadena de conexión de TypeORM apuntando a Supabase.
-2. `uploads/` en disco no sobrevive en Render ni Railway (disco efímero): migrar `storage` a Supabase Storage.
-3. Pasar de `synchronize: true` a migraciones, antes de tener datos reales.
-4. `FRONTEND_URL` del backend con la URL de Vercel o `ferryapp.co`, y actualizar `VITE_API_URL` en Vercel con la URL del backend nuevo.
+Con usuarios reales, lo mínimo razonable es Render Starter: unos $7 al mes.
 
 ---
 
 ## Servicios externos
 
-| Servicio | Dónde | Estado al 2026-09-16 |
+| Servicio | Dónde | Estado al 2026-09-21 |
 |---|---|---|
-| Google Maps + Places | `VITE_GOOGLE_MAPS_API_KEY` (frontend) | ✅ Funcionando en local y en el bundle de Vercel |
-| Gemini | `GEMINI_API_KEY` (backend) | ⚠️ Funciona, pero en **nivel gratuito: 20 peticiones al día** |
+| Google Maps + Places | `VITE_GOOGLE_MAPS_API_KEY` (frontend) | ✅ Local — ❌ en Vercel: `RefererNotAllowedMapError` |
+| Gemini | `GEMINI_API_KEY` (backend) | ⚠️ Nivel gratuito, 20 peticiones al día; `503` intermitentes desde Render |
 | SMTP Gmail | `MAIL_*` (backend) | ✅ Funcionando en local |
 | Wompi | `VITE_WOMPI_PUBLIC_KEY` (frontend) + firma en backend | Sin verificar |
 
@@ -235,6 +244,16 @@ Ferry **no** usa Cloud Vision: el análisis de fotos va por Gemini (`analyzeImag
 
 Detalle a favor del diseño actual: `ai.controller.ts` descuenta los créditos **después** de que la IA responde, así que estos fallos no le queman créditos a la ferretería.
 
+### Backend en Render con Supabase — 2026-09-21
+
+- **Base en Supabase.** `app.module.ts` acepta `DATABASE_URL` con TLS y cae a los campos sueltos del docker-compose si no está, así el mismo código sirve en local y en producción. Primero se probó desde el equipo local: TypeORM creó las 13 tablas y registro y login funcionaron contra Supabase.
+- **Backend en Render**, modo Docker. Dos tropiezos de configuración: un despliegue construyó un commit viejo porque faltaba subir los cambios, y otro buscó `backend/backend` por tener la carpeta en dos campos que se suman.
+- **`JWT_SECRET` público cerrado.** El valor por defecto estaba escrito en el repo, que es público: con él cualquiera podía firmar sesiones de cualquier usuario. Se eliminó el valor por defecto y en producción el backend se niega a arrancar con ese valor.
+  Al arreglarlo apareció un bug escondido: `JwtModule.register` leía el secreto al importar el archivo, antes de que se cargara el `.env`. En local los tokens se firmaban con el valor por defecto y se verificaban con el del `.env`, y funcionaba solo porque ambos coincidían. Ahora usa `registerAsync` y lee el secreto con la configuración ya cargada.
+- **`docker-compose.yml`** vacía `DATABASE_URL` para que el contenedor local use su Postgres y no Supabase.
+- **Apagado limpio.** El contenedor arranca con `node dist/main` y Nest cierra las conexiones al recibir `SIGTERM`.
+- **Frontend reapuntado** a `https://ferry-jogo.onrender.com`. Verificado en el navegador: login funcionando de punta a punta.
+
 ### Migración a Vercel y caída del VPS — 2026-09-16
 
 - **Contenedor del backend reparado.** Quedaba en bucle con `exec format error`. No era la arquitectura: el disco virtual de Docker Desktop estaba corrupto y extraía las imágenes con archivos en 0 bytes, incluso una imagen oficial recién descargada. `npm install` y `npm run build` "pasaban" sin hacer nada porque ejecutar un archivo vacío devuelve éxito. Se resolvió con *Troubleshoot → Clean / Purge data* (solo WSL 2) y reconstrucción con `--no-cache`. La base local se recreó vacía.
@@ -277,6 +296,13 @@ Verificado: `POST /auth/forgot-password` deja en el log `Email enviado`, sin `EA
 
 ## Deuda técnica conocida
 
+Ordenada por urgencia antes de tener usuarios reales:
+
+- **`uploads/` se pierde en Render.** El disco de Render es efímero: fotos de perfil, portafolio y catálogos desaparecen en cada despliegue. Hay que mover el módulo `storage` a Supabase Storage.
+- **`synchronize: true`** en TypeORM altera el esquema de producción automáticamente al arrancar, y un rollback de código no lo revierte. Hay que pasar a migraciones explícitas.
+- **Local y producción comparten la base de Supabase** mientras el `.env` local tenga `DATABASE_URL`.
+- **Gemini en nivel gratuito**, 20 peticiones al día, y sin reintento ante los `503` de sobrecarga.
+- **El repo `Jersson001/ferry` es público.**
 - **`node_modules` está versionado** en `backend/`, lo que hace lentas las operaciones de git. Debería ir al `.gitignore` y removerse del índice.
 - **`VITE_WOMPI_INTEGRITY_SECRET`** está en el `.env` del frontend. Es un secreto de firma y el prefijo `VITE_` lo incrustaría en el bundle. Ningún código lo usa —la firma se calcula en el backend—, así que la línea debería borrarse.
 - **`frontend/src/env`** es un archivo suelto con variables `VITE_` que Vite no lee. Induce a error al editar configuración; conviene borrarlo.
