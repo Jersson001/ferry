@@ -22,11 +22,24 @@ import { ScheduleModule } from '@nestjs/schedule';
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRoot({
       type: 'postgres',
-      host: process.env.DATABASE_HOST || 'localhost',
-      port: parseInt(process.env.DATABASE_PORT || '5432', 10),
-      username: process.env.DATABASE_USER || 'root',
-      password: process.env.DATABASE_PASSWORD || 'rootpassword',
-      database: process.env.DATABASE_NAME || 'ferry_db',
+      // Los proveedores administrados (Supabase, Neon, Render) entregan la
+      // conexión como una sola URL. Si está DATABASE_URL se usa esa; si no,
+      // los campos sueltos del docker-compose local.
+      ...(process.env.DATABASE_URL
+        ? {
+            url: process.env.DATABASE_URL,
+            // Supabase exige TLS, con certificado que Node no valida por
+            // defecto. rejectUnauthorized:false es lo que documenta Supabase
+            // para clientes que no cargan su CA.
+            ssl: { rejectUnauthorized: false },
+          }
+        : {
+            host: process.env.DATABASE_HOST || 'localhost',
+            port: parseInt(process.env.DATABASE_PORT || '5432', 10),
+            username: process.env.DATABASE_USER || 'root',
+            password: process.env.DATABASE_PASSWORD || 'rootpassword',
+            database: process.env.DATABASE_NAME || 'ferry_db',
+          }),
       autoLoadEntities: true,
       synchronize: true, // Solo desarrollo — en producción usar migraciones
     }),

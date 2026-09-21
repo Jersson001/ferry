@@ -1,0 +1,56 @@
+# Blueprint de Render para el backend de Ferry.
+# Render lo detecta al conectar el repositorio: Dashboard → New → Blueprint.
+#
+# La base de datos NO se define aquí: vive en Supabase. La conexión entra
+# por DATABASE_URL, que se pega a mano en el panel de Render.
+#
+# Ojo con el plan free: el servicio se apaga tras 15 minutos sin tráfico y
+# tarda alrededor de un minuto en despertar. Además el disco es efímero, así
+# que lo que se guarde en uploads/ se pierde en cada despliegue o reinicio.
+
+services:
+  - type: web
+    name: ferry-backend
+    runtime: node
+    plan: free
+    region: oregon
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: npm run start:prod
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+
+      # Conexión a Supabase: usar el connection string del **Session pooler**
+      # (puerto 5432, host *.pooler.supabase.com, usuario postgres.<proyecto>).
+      # No el transaction pooler de 6543: ese es para serverless y no soporta
+      # prepared statements. La conexión directa serviría, pero depende de
+      # IPv6 o del complemento de IPv4, que es pago.
+      - key: DATABASE_URL
+        sync: false
+
+      # Secreto de firma de los JWT. Que lo genere Render.
+      - key: JWT_SECRET
+        generateValue: true
+
+      # URL pública del frontend en Vercel: arma los enlaces de los correos
+      # de verificación y recuperación.
+      - key: FRONTEND_URL
+        sync: false
+
+      - key: GEMINI_API_KEY
+        sync: false
+
+      - key: MAIL_HOST
+        value: smtp.gmail.com
+      - key: MAIL_PORT
+        value: "587"
+      - key: MAIL_SECURE
+        value: "false"
+      - key: MAIL_USER
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_FROM
+        sync: false
