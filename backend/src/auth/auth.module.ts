@@ -4,6 +4,7 @@ import { AuthController } from './auth.controller';
 import { UsersModule } from '../users/users.module';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
+import { ConfigService } from '@nestjs/config';
 import { JwtStrategy } from './jwt.strategy';
 import { MailModule } from '../mail/mail.module';
 
@@ -12,10 +13,17 @@ import { MailModule } from '../mail/mail.module';
     UsersModule,
     MailModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
-    JwtModule.register({
+    // registerAsync y no register: con register, process.env.JWT_SECRET se lee
+    // al importar este archivo, antes de que ConfigModule cargue el .env. En
+    // local eso firmaba con un valor distinto al que usa JwtStrategy para
+    // verificar. Con la fábrica, el secreto se lee ya con la config cargada.
+    JwtModule.registerAsync({
       global: true,
-      secret: process.env.JWT_SECRET || 'ferry-super-secret-key-cambiar-en-produccion',
-      signOptions: { expiresIn: '7d' },
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        secret: config.getOrThrow<string>('JWT_SECRET'),
+        signOptions: { expiresIn: '7d' },
+      }),
     }),
   ],
   providers: [AuthService, JwtStrategy],

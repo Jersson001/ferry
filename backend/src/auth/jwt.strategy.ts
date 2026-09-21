@@ -17,6 +17,18 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         'La aplicación no puede iniciarse sin un secreto JWT seguro.',
       );
     }
+    // Este valor estuvo publicado en el repositorio como default de desarrollo.
+    // Quien lo conozca puede firmar tokens válidos para cualquier usuario, así
+    // que fuera de desarrollo se rechaza aunque esté configurado.
+    if (
+      process.env.NODE_ENV === 'production' &&
+      secret === 'ferry-super-secret-key-cambiar-en-produccion'
+    ) {
+      throw new Error(
+        'FATAL: JWT_SECRET tiene el valor de desarrollo que es público. ' +
+        'Configura un secreto propio y aleatorio.',
+      );
+    }
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
