@@ -42,6 +42,12 @@ services:
       - key: GEMINI_API_KEY
         sync: false
 
+      # Supabase Storage para las fotos: el disco de Render es efímero.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+
       - key: MAIL_HOST
         value: smtp.gmail.com
       - key: MAIL_PORT

@@ -91,8 +91,8 @@ export class PortfolioService {
 
     await this.portfolioRepository.remove(item);
 
-    if (item.type !== 'link' && item.url.includes('/uploads/')) {
-      this.storageService.deleteFile(item.url);
+    if (item.type !== 'link' && this.storageService.isStoredFile(item.url)) {
+      await this.storageService.deleteFile(item.url);
     }
   }
 }
