@@ -106,8 +106,8 @@ La infraestructura anterior —un VPS de Hostinger con Postgres adentro— dejó
 
 El repo oficial es **`Jersson001/ferry`**, el que usan Vercel y Render. El anterior, `ingdanielacastaneda-bit/ferry`, quedó atrás.
 
-- ⚠️ **`Jersson001/ferry` es público.** Se revisó todo el historial: no expone ninguna credencial vigente. La única clave que aparece es una de Maps del proyecto de Google Cloud ya borrado, que está muerta. Aun así conviene volverlo privado: es el código del negocio.
-- En el clon local, `origin` todavía apunta al repo viejo; el nuevo es el remoto `jersson`. Hay que empujar con `git push jersson main`. Pendiente: convertir `jersson` en `origin` y archivar el viejo.
+- **`Jersson001/ferry` es privado** desde el 2026-09-22. Estuvo público unos días; se revisó todo el historial y no expuso ninguna credencial vigente, solo una clave de Maps de un proyecto de Google Cloud ya borrado. El `JWT_SECRET` de desarrollo sí estaba en el código, pero producción ya no lo acepta.
+- En el clon local, `origin` es `Jersson001/ferry` desde el 2026-09-22, y el repo viejo quedó como remoto `viejo`. Pendiente: archivarlo en GitHub para que nadie siga subiendo cambios ahí.
 
 ### Frontend — Vercel
 
@@ -130,7 +130,7 @@ Pendiente: renombrar el proyecto, conectar `ferryapp.co`, y borrar el proyecto v
 - Plan **Free**, en modo **Docker**: usa `backend/Dockerfile`. El servicio no se creó como *Blueprint*, así que el `render.yaml` del repo sirve como referencia pero Render no lo aplica.
 - **Root Directory = `backend`** y **Docker Build Context Directory = `.`**. Si el contexto también dice `backend`, Render busca `backend/backend` y el build falla.
 - Se duerme tras 15 minutos sin tráfico: la primera petición tarda 30–50 s.
-- El disco es **efímero**: lo que se guarde en `uploads/` se pierde en cada despliegue o reinicio. Pendiente migrar el almacenamiento a Supabase Storage antes de tener usuarios.
+- El disco es **efímero**: se borra en cada despliegue o reinicio. Por eso las fotos y videos van a **Supabase Storage**, bucket público `uploads`, activado por las variables `SUPABASE_URL` y `SUPABASE_SECRET_KEY`. Si faltan, el backend guarda en disco sin avisar como error: confirmar que el log de arranque diga *"Archivos en Supabase Storage"* y no *"Archivos en disco local"*.
 - Arranca con `node dist/main`, no con `npm run start:prod`: npm reportaba el apagado normal de Render como `npm error ... signal SIGTERM`. Un `SIGTERM` en los logs de Render es Render durmiendo o reemplazando la instancia, no un fallo.
 - Variables: `DATABASE_URL`, `JWT_SECRET`, `GEMINI_API_KEY`, `FRONTEND_URL` y las `MAIL_*`. `JWT_SECRET` debe ser propio: en producción el backend **se niega a arrancar** con el valor de desarrollo, que está publicado en el repo.
 
@@ -252,6 +252,13 @@ Ferry **no** usa Cloud Vision: el análisis de fotos va por Gemini (`analyzeImag
 
 Detalle a favor del diseño actual: `ai.controller.ts` descuenta los créditos **después** de que la IA responde, así que estos fallos no le queman créditos a la ferretería.
 
+### Fotos en Supabase Storage y ajustes de IA — 2026-09-22
+
+- **Fotos y videos en Supabase Storage.** Antes se guardaban en el disco de Render, que se borra en cada despliegue. `StorageService` sube a Supabase si están sus variables y cae al disco local si no, sin cambiar su interfaz: portafolio, proyectos y catálogo no se tocaron. El bucket se crea solo, como público, en la primera subida. Verificado en producción: una foto subida por Render queda en Supabase, es accesible por su URL y se guarda comprimida a WebP.
+- **Reintento automático en Gemini** ante sobrecarga (`503`) o límites por minuto, con máximo 3 intentos. No reintenta lo que esperar no arregla: cuota diaria, saldo agotado, clave o permisos.
+- **Saldo de Gemini agotado** ahora ofrece la captura manual. Google pasó a devolverlo como `402` y llegaba al usuario como error genérico.
+- **Repo privado**, y `Jersson001/ferry` pasó a ser `origin` en el clon local.
+
 ### Backend en Render con Supabase — 2026-09-21
 
 - **Base en Supabase.** `app.module.ts` acepta `DATABASE_URL` con TLS y cae a los campos sueltos del docker-compose si no está, así el mismo código sirve en local y en producción. Primero se probó desde el equipo local: TypeORM creó las 13 tablas y registro y login funcionaron contra Supabase.
@@ -306,11 +313,9 @@ Verificado: `POST /auth/forgot-password` deja en el log `Email enviado`, sin `EA
 
 Ordenada por urgencia antes de tener usuarios reales:
 
-- **`uploads/` se pierde en Render.** El disco de Render es efímero: fotos de perfil, portafolio y catálogos desaparecen en cada despliegue. Hay que mover el módulo `storage` a Supabase Storage.
 - **`synchronize: true`** en TypeORM altera el esquema de producción automáticamente al arrancar, y un rollback de código no lo revierte. Hay que pasar a migraciones explícitas.
 - **Local y producción comparten la base de Supabase** mientras el `.env` local tenga `DATABASE_URL`.
 - **Gemini en nivel gratuito**, 20 peticiones al día, y sin reintento ante los `503` de sobrecarga.
-- **El repo `Jersson001/ferry` es público.**
 - **`node_modules` está versionado** en `backend/`, lo que hace lentas las operaciones de git. Debería ir al `.gitignore` y removerse del índice.
 - **`VITE_WOMPI_INTEGRITY_SECRET`** está en el `.env` del frontend. Es un secreto de firma y el prefijo `VITE_` lo incrustaría en el bundle. Ningún código lo usa —la firma se calcula en el backend—, así que la línea debería borrarse.
 - **`frontend/src/env`** es un archivo suelto con variables `VITE_` que Vite no lee. Induce a error al editar configuración; conviene borrarlo.

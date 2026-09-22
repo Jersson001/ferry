@@ -3,14 +3,14 @@
 Ferry se despliega **solo**: cada push a `main` en `Jersson001/ferry` actualiza el frontend en Vercel y el backend en Render. No hay servidor que administrar a mano.
 
 ```
-git push jersson main
+git push origin main
         │
         ├──► Vercel  construye frontend/  → https://frontend-black-ten-37.vercel.app
         └──► Render  construye backend/   → https://ferry-jogo.onrender.com
                                                   └──► Supabase (Postgres)
 ```
 
-> **Ojo con el remoto.** En el clon local, `origin` todavía apunta al repo viejo `ingdanielacastaneda-bit/ferry`, que no despliega nada. El que usan Vercel y Render es el remoto **`jersson`**. Un `git push` a secas no publica.
+> **El remoto.** `origin` es `Jersson001/ferry`, privado, el que usan Vercel y Render. Desde el 2026-09-22; antes `origin` era el repo viejo `ingdanielacastaneda-bit/ferry`, que quedó como remoto `viejo` y no despliega nada. En clones hechos antes de esa fecha, revisar con `git remote -v`.
 
 El estado detallado de cada pieza está en [PROYECTO.md](PROYECTO.md), sección *Producción*.
 
@@ -132,7 +132,7 @@ Ojo: TypeORM corre con `synchronize: true`, así que **altera el esquema de la b
 | Síntoma | Causa |
 |---|---|
 | Render busca `.../backend/backend` | `backend` puesto a la vez en Root Directory y en Docker Build Context |
-| Render construye un commit viejo | Los cambios se subieron a `origin` y no a `jersson` |
+| Render construye un commit viejo | Los cambios no llegaron a `Jersson001/ferry`: el push no se hizo, o fue al remoto `viejo` |
 | `FATAL: JWT_SECRET tiene el valor de desarrollo` | Se copió el `.env` local a Render; poner un secreto propio |
 | Despliegue en `update_failed` pero el sitio responde | Render sigue sirviendo la versión anterior; ver logs del despliegue |
 | `npm error ... signal SIGTERM` | Apagado normal de Render, no un fallo |
