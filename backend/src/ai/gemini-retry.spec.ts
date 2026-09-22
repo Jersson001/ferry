@@ -53,6 +53,9 @@ describe('retryDelayMs', () => {
 
   it('no reintenta el saldo de prepago agotado', () => {
     expect(retryDelayMs(creditsDepleted(), 1, MAX)).toBeNull();
+    // Google pasó a devolverlo como 402.
+    const as402 = fetchError(402, '[402 Payment Required] Your prepayment credits are depleted.');
+    expect(retryDelayMs(as402, 1, MAX)).toBeNull();
   });
 
   it('no reintenta errores de configuración', () => {

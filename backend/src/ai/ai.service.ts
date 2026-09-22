@@ -204,6 +204,21 @@ ${JSON.stringify(storeCatalog, null, 2)}
     const errorMessage = error?.message?.toLowerCase() || '';
     const status = error?.status;
 
+    // Saldo de prepago agotado: es facturación, y esperar no lo resuelve. Va
+    // primero porque Google lo ha devuelto como 429 y hoy como 402; si cayera
+    // en la regla de cuota, al usuario se le diría que reintente en unos
+    // minutos. Como 503, el frontend le ofrece capturar los materiales a mano.
+    if (
+      status === 402 ||
+      errorMessage.includes('prepayment') ||
+      errorMessage.includes('credits are depleted')
+    ) {
+      throw new HttpException(
+        'El servicio de IA no está disponible por un problema de configuración. Puedes agregar los materiales a mano mientras se resuelve.',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+
     if (errorMessage.includes('quota') || errorMessage.includes('429') || errorMessage.includes('too many requests')) {
       throw new HttpException(
         'El servicio de IA está temporalmente saturado o sin cuota. Por favor, intenta de nuevo en unos minutos.',
