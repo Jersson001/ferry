@@ -1,6 +1,7 @@
 import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI, Schema, SchemaType } from '@google/generative-ai';
+import { withGeminiRetry } from './gemini-retry';
 
 @Injectable()
 export class AiService {
@@ -56,7 +57,7 @@ export class AiService {
 
       const prompt = `Analiza el siguiente texto y extrae una lista de artículos o materiales solicitados con su nombre, cantidad numérica y unidad de medida. IMPORTANTE: NO descartes NINGÚN artículo mencionado, incluso si no parece un material de construcción tradicional (ej: canecas, escobas, herramientas, elementos de limpieza, misceláneos). Todo lo que el usuario pida debe incluirse. Texto: "${text}"`;
 
-      const result = await model.generateContent(prompt);
+      const result = await withGeminiRetry(() => model.generateContent(prompt), { logger: this.logger });
       const response = await result.response;
       const jsonText = response.text();
       
@@ -119,7 +120,7 @@ export class AiService {
         }
       };
 
-      const result = await model.generateContent([prompt, imagePart]);
+      const result = await withGeminiRetry(() => model.generateContent([prompt, imagePart]), { logger: this.logger });
       const jsonText = result.response.text();
       
       const parsedItems = JSON.parse(jsonText);
@@ -189,7 +190,7 @@ Catálogo de tu Ferretería:
 ${JSON.stringify(storeCatalog, null, 2)}
 `;
 
-      const result = await model.generateContent(prompt);
+      const result = await withGeminiRetry(() => model.generateContent(prompt), { logger: this.logger });
       const jsonText = result.response.text();
       return JSON.parse(jsonText);
       
