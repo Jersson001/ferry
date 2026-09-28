@@ -6,7 +6,7 @@ Plataforma que conecta constructores con ferreterías. El constructor arma una l
 
 - **Backend:** NestJS 11 + PostgreSQL 15 (TypeORM), autenticación JWT.
 - **Frontend:** React 18 + TypeScript, Vite y Tailwind CSS.
-- **Servicios externos:** Gemini para interpretar las listas de materiales, Google Maps/Places para direcciones, Wompi para pagos y SMTP para los correos transaccionales.
+- **Servicios externos:** Gemini para interpretar las listas de materiales, Google Maps/Places para direcciones, Wompi para pagos y Resend para los correos transaccionales.
 
 ## Arranque rápido
 

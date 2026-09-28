@@ -5,12 +5,12 @@ Ferry se despliega **solo**: cada push a `main` en `Jersson001/ferry` actualiza 
 ```
 git push origin main
         │
-        ├──► Vercel  construye frontend/  → https://frontend-black-ten-37.vercel.app
+        ├──► Vercel  construye frontend/  → https://www.ferryapp.co
         └──► Render  construye backend/   → https://ferry-jogo.onrender.com
                                                   └──► Supabase (Postgres)
 ```
 
-> **El remoto.** `origin` es `Jersson001/ferry`, privado, el que usan Vercel y Render. Desde el 2026-09-22; antes `origin` era el repo viejo `ingdanielacastaneda-bit/ferry`, que quedó como remoto `viejo` y no despliega nada. En clones hechos antes de esa fecha, revisar con `git remote -v`.
+> **El remoto.** `origin` es `Jersson001/ferry`, el que usan Vercel y Render. Desde el 2026-09-22; antes `origin` era el repo viejo `ingdanielacastaneda-bit/ferry`, que quedó como remoto `viejo` y no despliega nada. En clones hechos antes de esa fecha, revisar con `git remote -v`.
 
 El estado detallado de cada pieza está en [PROYECTO.md](PROYECTO.md), sección *Producción*.
 
@@ -28,7 +28,7 @@ Tres cosas que causaron casi todos los despliegues fallidos:
 
 | Variable | Local | Producción |
 |---|---|---|
-| `FRONTEND_URL` (backend) | `http://localhost:5173` | URL pública del frontend |
+| `FRONTEND_URL` (backend) | `http://localhost:5173` | `https://www.ferryapp.co` |
 | `VITE_API_URL` (frontend) | `http://localhost:3000` | `https://ferry-jogo.onrender.com` |
 | `JWT_SECRET` (backend) | cualquiera | Una cadena larga, aleatoria y **distinta** |
 
@@ -44,6 +44,7 @@ Y `JWT_SECRET` no puede ser el valor de desarrollo: está publicado en el repo, 
 |---|---|
 | Repositorio | `Jersson001/ferry` |
 | Root Directory | `frontend` |
+| Dominio | `www.ferryapp.co`, con `ferryapp.co` redirigiendo ahí |
 | `VITE_API_URL` | `https://ferry-jogo.onrender.com` |
 | `VITE_GOOGLE_MAPS_API_KEY` | clave de Maps, **con** prefijo `VITE_` |
 | `VITE_WOMPI_PUBLIC_KEY` | llave pública, **con** prefijo `VITE_` |
@@ -52,7 +53,9 @@ Y `JWT_SECRET` no puede ser el valor de desarrollo: está publicado en el repo, 
 
 Vercel advierte que las variables `VITE_` con formato de clave deberían ser privadas. Para estas dos **no hay que hacerle caso**: están hechas para el navegador y sin el prefijo quedan en `undefined`. El secreto de integridad de Wompi, en cambio, nunca va en el frontend.
 
-La clave de Maps debe autorizar el dominio de Vercel en sus restricciones de referente HTTP, o Maps falla con `RefererNotAllowedMapError`.
+La clave de Maps debe autorizar **cada dominio desde el que se sirva el sitio** en sus restricciones de referente HTTP, o Maps falla con `RefererNotAllowedMapError`. Hoy faltan `https://www.ferryapp.co/*` y `https://ferryapp.co/*`.
+
+El DNS del dominio vive en Hostinger: `A` de `@` a `216.198.79.1` y `CNAME` de `www` a `cname.vercel-dns.com`. Si el sitio responde por HTTP pero da error de TLS, el certificado no se emitió: fuerza la emisión con *Refresh* en Vercel → Settings → Domains.
 
 ---
 
@@ -66,7 +69,9 @@ La clave de Maps debe autorizar el dominio de Vercel en sus restricciones de ref
 | Dockerfile Path | `Dockerfile` |
 | Plan | Free |
 
-Variables: `DATABASE_URL`, `JWT_SECRET`, `GEMINI_API_KEY`, `FRONTEND_URL`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_SECURE`, `MAIL_USER`, `MAIL_PASSWORD` y `MAIL_FROM`.
+Variables: `DATABASE_URL`, `JWT_SECRET`, `GEMINI_API_KEY`, `FRONTEND_URL`, `RESEND_API_KEY` y `MAIL_FROM`.
+
+Los correos salen por la API de Resend, no por SMTP, porque **Render bloquea los puertos SMTP salientes**. `MAIL_FROM` debe usar el dominio verificado en Resend, que es el subdominio `mail.ferryapp.co`: con el dominio raíz la API responde `403 domain is not verified`.
 
 Tres particularidades del plan gratuito:
 
@@ -103,7 +108,7 @@ curl https://ferry-jogo.onrender.com/
 
 Debe responder `Hello World!`. Si tarda medio minuto, estaba dormido; es normal.
 
-**Frontend:** lo más confiable es inspeccionar el bundle publicado, no el panel de Vercel. Descarga la página, busca el archivo `index-*.js` que referencia y verifica que la URL de la API sea la de Render y que no aparezca ningún secreto.
+**Frontend:** `curl -I https://www.ferryapp.co/` debe responder 200. Para el contenido, lo más confiable es inspeccionar el bundle publicado, no el panel de Vercel. Descarga la página, busca el archivo `index-*.js` que referencia y verifica que la URL de la API sea la de Render y que no aparezca ningún secreto.
 
 **Punta a punta:** iniciar sesión en el sitio publicado. Si funciona, las tres piezas están conectadas.
 
@@ -139,7 +144,10 @@ Ojo: TypeORM corre con `synchronize: true`, así que **altera el esquema de la b
 | El frontend no ve un cambio de variable | Falta redesplegar en Vercel |
 | El frontend llama a `localhost` | `VITE_API_URL` mal puesta al compilar |
 | El enlace del correo lleva al entorno equivocado | `FRONTEND_URL` con el valor de otro entorno |
-| `RefererNotAllowedMapError` | La clave de Maps no autoriza el dominio de Vercel |
+| `ETIMEDOUT` con `command: 'CONN'` al enviar correo | Alguien volvió a poner SMTP; Render lo bloquea, usar la API de Resend |
+| `403 domain is not verified` de Resend | `MAIL_FROM` usa `ferryapp.co` en vez de `mail.ferryapp.co` |
+| El dominio responde por HTTP pero no por HTTPS | Falta emitir el certificado en Vercel |
+| `RefererNotAllowedMapError` | La clave de Maps no autoriza ese dominio |
 | `password authentication failed` | Contraseña de Supabase equivocada, o con caracteres que rompen la URL |
 
 Para los errores de Gemini y de Maps, la tabla de diagnóstico está en [PROYECTO.md](PROYECTO.md).
@@ -148,4 +156,4 @@ Para los errores de Gemini y de Maps, la tabla de diagnóstico está en [PROYECT
 
 ## Infraestructura anterior
 
-Hasta el 2026-09-16 el backend y la base vivían en un VPS de Hostinger (`2.25.68.84`), que dejó de responder. El DNS de `api.ferryapp.co` todavía apunta ahí y conviene borrarlo o reapuntarlo. La configuración de nginx con HTTPS que se preparó para ese servidor está en `deploy/nginx/`, sin uso.
+Hasta el 2026-09-16 el backend y la base vivían en un VPS de Hostinger (`2.25.68.84`), que dejó de responder. El DNS de `api.ferryapp.co` **todavía apunta ahí**, comprobado el 2026-09-28, y conviene borrarlo: el backend se quedó en `ferry-jogo.onrender.com`, sin dominio propio. La configuración de nginx con HTTPS que se preparó para ese servidor está en `deploy/nginx/`, sin uso.

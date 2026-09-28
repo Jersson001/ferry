@@ -17,7 +17,7 @@ Documento de referencia del proyecto: stack, cómo levantarlo en local, estado d
 | TypeORM 0.3 | ORM, con `synchronize: true` (solo desarrollo) |
 | Passport + JWT | Autenticación; contraseñas con bcrypt |
 | `@google/generative-ai` | Gemini (`gemini-3.6-flash`) para los flujos de IA |
-| Nodemailer | Correos de verificación y recuperación, vía SMTP de Gmail |
+| Resend | Correos de verificación y recuperación, por su API HTTPS |
 | Multer + Sharp | Subida y procesamiento de imágenes |
 | `@nestjs/schedule` | Tareas programadas |
 
@@ -82,23 +82,24 @@ Dos advertencias que cuestan tiempo si se pasan por alto:
 
 ---
 
-## Producción — estado al 2026-09-21
+## Producción — estado al 2026-09-28
 
 Ferry está en internet, con todo en planes gratuitos:
 
 ```
 Navegador ──► Vercel (frontend) ──► Render (backend NestJS) ──► Supabase (Postgres)
-                                          └──► Gemini, SMTP de Gmail
+                                          └──► Gemini, Resend
 ```
 
 | Pieza | Servicio | URL | Estado |
 |---|---|---|---|
-| Frontend | Vercel | `https://frontend-black-ten-37.vercel.app` | ✅ |
-| Backend | Render, modo Docker | `https://ferry-jogo.onrender.com` | ✅ |
+| Frontend | Vercel | `https://www.ferryapp.co` | ✅ `ferryapp.co` redirige ahí con 308 |
+| Backend | Render, modo Docker | `https://ferry-jogo.onrender.com` | ✅ Sin dominio propio, por decisión |
 | Base de datos | Supabase | — | ✅ |
 | Login y sesión | — | — | ✅ Verificado de punta a punta |
-| Google Maps | — | — | ✅ Autocompletado verificado en producción |
-| IA | — | — | ⚠️ Conecta, pero desde Render Google respondió sobrecargado |
+| Google Maps | — | — | ⚠️ Falta autorizar el dominio nuevo en la clave |
+| IA | — | — | ✅ Verificado contra Render el 2026-09-28 |
+| Correos | Resend | — | ✅ Verificado contra Render el 2026-09-28 |
 
 La infraestructura anterior —un VPS de Hostinger con Postgres adentro— dejó de responder el 2026-09-16, probablemente por falta de pago. Solo tenía datos de prueba, así que no se perdió nada real.
 
@@ -106,13 +107,16 @@ La infraestructura anterior —un VPS de Hostinger con Postgres adentro— dejó
 
 El repo oficial es **`Jersson001/ferry`**, el que usan Vercel y Render. El anterior, `ingdanielacastaneda-bit/ferry`, quedó atrás.
 
-- **`Jersson001/ferry` es privado** desde el 2026-09-22. Estuvo público unos días; se revisó todo el historial y no expuso ninguna credencial vigente, solo una clave de Maps de un proyecto de Google Cloud ya borrado. El `JWT_SECRET` de desarrollo sí estaba en el código, pero producción ya no lo acepta.
+- **`Jersson001/ferry` es público.** Estuvo privado entre el 2026-09-22 y ese mismo día por la tarde. Antes de reabrirlo se revisó todo el historial: no expone ninguna credencial vigente, solo una clave de Maps de un proyecto de Google Cloud ya borrado. El `JWT_SECRET` de desarrollo sí está en el código, pero producción se niega a arrancar con él.
 - En el clon local, `origin` es `Jersson001/ferry` desde el 2026-09-22, y el repo viejo quedó como remoto `viejo`. Pendiente: archivarlo en GitHub para que nadie siga subiendo cambios ahí.
 
 ### Frontend — Vercel
 
 - Equipo *Jersson Escobar's projects*, plan **Hobby**. Sus términos lo limitan a uso no comercial; con pagos reales corresponde Pro.
 - Proyecto enlazado a `Jersson001/ferry` con **Root Directory = `frontend`**. Se despliega solo en cada push a `main`.
+- **Dominio propio desde el 2026-09-28.** El DNS vive en Hostinger: `A` de `@` a `216.198.79.1` y `CNAME` de `www` a `cname.vercel-dns.com`. Hubo que borrar el ALIAS de `@` que apuntaba a `connect.hostinger.com`, porque un ALIAS y un `A` no conviven en la raíz. Los `MX` de ImprovMX no se tocaron.
+- El certificado **no se emitió solo** al arreglar el DNS: el sitio respondía por HTTP pero daba error de TLS. Se resolvió pidiéndolo a mano, con *Refresh* en el panel o `issue_cert` por API.
+- Cuidado al verificar por API: en Vercel `verified: true` solo confirma que el dominio es tuyo. No dice que el DNS apunte bien. Para eso sirve el *Invalid Configuration* del panel, o una petición de verdad al dominio.
 - `frontend/vercel.json` reescribe todas las rutas a `index.html`. Sin eso, los enlaces de los correos a `/reset-password` y `/verify-email` dan 404.
 - Variables: `VITE_API_URL=https://ferry-jogo.onrender.com`, `VITE_GOOGLE_MAPS_API_KEY`, `VITE_WOMPI_PUBLIC_KEY`. Verificado sobre el bundle publicado: las tres presentes y el secreto de integridad de Wompi ausente.
 - El conector de Vercel usado para administrar no encuentra este proyecto por la API, aunque sí ve los demás. La forma confiable de verificar un despliegue es inspeccionar el bundle publicado.
@@ -123,7 +127,7 @@ Trampas que costaron redespliegues:
 - Vercel advierte que las variables `VITE_` con formato de clave "deberían ser privadas". **Hay que ignorarlo** para la clave de Maps y la llave pública de Wompi, que están hechas para el navegador: sin el prefijo quedan en `undefined`.
 - `VITE_API_URL` apuntando a `localhost` no sirve en producción: en el navegador de cada visitante, `localhost` es su propio equipo.
 
-Pendiente: renombrar el proyecto, conectar `ferryapp.co`, y borrar el proyecto viejo `ferry-001`, enlazado a un repo vacío.
+Pendiente: renombrar el proyecto y borrar el viejo `ferry-001`, enlazado a un repo vacío. También sigue vivo el registro `api.ferryapp.co`, que apunta al VPS muerto (`2.25.68.84`) y conviene borrar.
 
 ### Backend — Render
 
@@ -132,7 +136,7 @@ Pendiente: renombrar el proyecto, conectar `ferryapp.co`, y borrar el proyecto v
 - Se duerme tras 15 minutos sin tráfico: la primera petición tarda 30–50 s.
 - El disco es **efímero**: se borra en cada despliegue o reinicio. Por eso las fotos y videos van a **Supabase Storage**, bucket público `uploads`, activado por las variables `SUPABASE_URL` y `SUPABASE_SECRET_KEY`. Si faltan, el backend guarda en disco sin avisar como error: confirmar que el log de arranque diga *"Archivos en Supabase Storage"* y no *"Archivos en disco local"*.
 - Arranca con `node dist/main`, no con `npm run start:prod`: npm reportaba el apagado normal de Render como `npm error ... signal SIGTERM`. Un `SIGTERM` en los logs de Render es Render durmiendo o reemplazando la instancia, no un fallo.
-- Variables: `DATABASE_URL`, `JWT_SECRET`, `GEMINI_API_KEY`, `FRONTEND_URL` y las `MAIL_*`. `JWT_SECRET` debe ser propio: en producción el backend **se niega a arrancar** con el valor de desarrollo, que está publicado en el repo.
+- Variables: `DATABASE_URL`, `JWT_SECRET`, `GEMINI_API_KEY`, `FRONTEND_URL`, `RESEND_API_KEY` y `MAIL_FROM`. `JWT_SECRET` debe ser propio: en producción el backend **se niega a arrancar** con el valor de desarrollo, que está publicado en el repo. Las `MAIL_HOST`, `MAIL_PORT`, `MAIL_SECURE`, `MAIL_USER` y `MAIL_PASSWORD` quedaron sin uso al pasar de SMTP a Resend.
 
 ### Base de datos — Supabase
 
@@ -158,11 +162,11 @@ Con usuarios reales, lo mínimo razonable es Render Starter: unos $7 al mes.
 
 ## Servicios externos
 
-| Servicio | Dónde | Estado al 2026-09-21 |
+| Servicio | Dónde | Estado al 2026-09-28 |
 |---|---|---|
-| Google Maps + Places (New) | `VITE_GOOGLE_MAPS_API_KEY` (frontend) | ✅ Local y en Vercel |
-| Gemini | `GEMINI_API_KEY` (backend) | ⚠️ Nivel gratuito, 20 peticiones al día; `503` intermitentes desde Render |
-| SMTP Gmail | `MAIL_*` (backend) | ✅ Funcionando en local |
+| Google Maps + Places (New) | `VITE_GOOGLE_MAPS_API_KEY` (frontend) | ⚠️ Falta autorizar `www.ferryapp.co` en la clave |
+| Gemini | `GEMINI_API_KEY` (backend) | ✅ Verificado en producción |
+| Resend | `RESEND_API_KEY`, `MAIL_FROM` (backend) | ✅ Verificado en producción |
 | Wompi | `VITE_WOMPI_PUBLIC_KEY` (frontend) + firma en backend | Sin verificar |
 
 ### Gemini
@@ -184,7 +188,18 @@ Cómo distinguir los errores de Google, que es lo que más confusión generó al
 
 Una lección que costó varias horas: **una clave nueva en el mismo proyecto bloqueado no arregla nada.** `PERMISSION_DENIED` es un bloqueo de proyecto, no de credencial; hay que emitir la clave en un proyecto distinto y con facturación activa.
 
-**Cuota y latencia.** La clave actual está en **nivel gratuito: 20 peticiones diarias** para `gemini-3.6-flash` (métrica `generate_content_free_tier_requests`). El pago hecho en AI Studio no se está aplicando a esta clave. Con ese límite la app no es viable en producción, porque cada foto o lista de un usuario consume una petición. Revisar el nivel en [ai.dev/rate-limit](https://ai.dev/rate-limit).
+**Cuota y latencia.** La clave salió del nivel gratuito al pagar el saldo del proyecto. Revisar el nivel en [ai.dev/rate-limit](https://ai.dev/rate-limit).
+
+**Un bloqueo de proyecto tarda días en levantarse.** Entre el 21 y el 28 de septiembre de 2026 la IA devolvió `403 Your project has been denied access` en todas las llamadas. La causa fue un pago rechazado por fondos insuficientes, que dejó el proyecto restringido. Ni cambiar la clave ni redesplegar sirvieron, porque el bloqueo era del proyecto. Google reactivó la facturación, pero **el desbloqueo tardó varios días en llegar a la API**, aunque AI Studio ya mostrara el proyecto activo. Antes de dar una clave por perdida, conviene reprobar unos días después.
+
+Para aislar un fallo así sin pasar por la app, llamar a Google directo desde la terminal:
+
+```bash
+curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=TU_CLAVE" \
+  -H 'Content-Type: application/json' -d '{"contents":[{"parts":[{"text":"ping"}]}]}'
+```
+
+Si responde, el proyecto no está bloqueado y el problema está en la variable de Render.
 
 Tiempos medidos: `/ai/parse-materials` tardó 33, 14 y 22 s en tres intentos; la misma consulta directa a Google, 4,3 s. El modelo gasta más tokens razonando que respondiendo (426 de razonamiento contra 137 de salida). Mejoras posibles, por impacto:
 
@@ -193,27 +208,24 @@ Tiempos medidos: `/ai/parse-materials` tardó 33, 14 y 22 s en tres intentos; la
 3. Reintento con backoff para `503` y `429`; Google incluye `retryDelay` en la respuesta.
 4. Redimensionar las fotos antes de enviarlas (`sharp` ya es dependencia).
 
-### SMTP
+### Correos — Resend
 
-Gmail por SMTP (`smtp.gmail.com:587`, sin SSL directo). `MAIL_PASSWORD` es una **contraseña de aplicación**, no la contraseña de la cuenta.
+Los correos salen por la **API HTTPS de Resend** (`api.resend.com/emails`), no por SMTP. `mail.service.ts` hace un `fetch` directo: sin dependencias nuevas, porque `fetch` viene en Node 20 y `node_modules` está versionado en `backend/`.
 
-Requisitos para que Gmail acepte la autenticación:
+**Por qué no SMTP.** Render bloquea los puertos SMTP salientes. Nodemailer contra `smtp.gmail.com:587` fallaba con `Error: Connection timeout`, `code: 'ETIMEDOUT'`, `command: 'CONN'`, sin llegar a autenticarse, así que en producción no salía ningún correo mientras en local funcionaban todos. Ese síntoma es distinto del `535 EAUTH` de credenciales: si el error es `CONN`, el problema es de red y no de contraseña.
 
-- La contraseña de aplicación debe generarse desde la **misma cuenta** que está en `MAIL_USER`. Una generada desde otra cuenta da `535` aunque sea válida.
-- Esa cuenta necesita verificación en dos pasos activa; sin ella Google no emite contraseñas de aplicación.
-- Se pega en **16 caracteres seguidos, sin espacios**. Google la muestra en cuatro grupos de cuatro y los espacios hay que quitarlos; si quedan, Gmail recibe otra cadena y rechaza.
-- `MAIL_FROM` debe usar la misma dirección de `MAIL_USER`. Gmail suele rechazar remitentes distintos al autenticado.
+**El remitente va en el subdominio.** En Resend el dominio verificado es **`mail.ferryapp.co`**, no `ferryapp.co`. Usar el dominio raíz devuelve `403 The ferryapp.co domain is not verified`. Por eso `MAIL_FROM` es `Ferry <no-reply@mail.ferryapp.co>`. Los registros de verificación (`resend._domainkey.mail`, y los `CNAME` de `rsend.mail` y `send.mail`) viven en Hostinger y no chocan con los `MX` de ImprovMX de la raíz.
 
-Síntoma de que algo de lo anterior falla: `535-5.7.8 Username and Password not accepted` con `code: 'EAUTH'` en el log. Es de Google, no de Ferry — el código llegó a conectarse.
+La clave guardada en Render es de **solo envío**: no sirve para consultar dominios ni logs por API.
 
-Para probar el envío sin molestar a nadie, pide un reset con el usuario de prueba de dominio `.test`: el correo rebota, pero el log confirma si la autenticación pasó, que es lo que interesa.
+Para probar sin molestar a nadie, pide un reset con el usuario de prueba de dominio `.test` y busca en el log de Render `Email enviado a <correo>: <id>`. Si aparece, Resend aceptó el envío.
 
 ### Google Maps
 
 La clave de Maps es la **"Clave API 2"**, en el mismo proyecto de Google Cloud que Gemini. Necesita:
 
 - En el proyecto, **habilitadas** *Maps JavaScript API* y **Places API (New)** (*APIs y servicios → Biblioteca*).
-- En la clave, esas mismas dos en **Restricciones de API**, y en **Restricciones de aplicaciones → Sitios web**: `https://frontend-black-ten-37.vercel.app/*` y `http://localhost:5173/*`.
+- En la clave, esas mismas dos en **Restricciones de API**, y en **Restricciones de aplicaciones → Sitios web**: `https://frontend-black-ten-37.vercel.app/*` y `http://localhost:5173/*`. **Pendiente** agregar `https://www.ferryapp.co/*` y `https://ferryapp.co/*`; sin eso el autocompletado falla en el dominio nuevo.
 - Facturación activa en el proyecto.
 
 El autocompletado de direcciones usa **Places API (New)**, no la *legacy* `google.maps.places.Autocomplete`. Google dejó de ofrecer la legacy a proyectos creados desde marzo de 2025: en ellos falla con `LegacyApiNotActivatedMapError` y no hay forma de activarla. El código vive en `hooks/usePlacesAutocomplete.ts` y `components/PlaceSuggestionsDropdown.tsx`, y lo usan los tres campos de dirección.
@@ -236,7 +248,16 @@ Ferry **no** usa Cloud Vision: el análisis de fotos va por Gemini (`analyzeImag
 
 ---
 
-## Bitácora de cambios — 2026-09-02
+## Bitácora de cambios
+
+### Dominio propio, correos por Resend e IA de vuelta — 2026-09-28
+
+- **`www.ferryapp.co` sirve el frontend**, con `ferryapp.co` redirigiendo ahí. El DNS estaba apuntando al parking de Hostinger, no a Vercel, pese a que la API de Vercel marcara los dominios como `verified`. Se corrigieron los registros y hubo que pedir el certificado a mano. `FRONTEND_URL` en Render pasó a `https://www.ferryapp.co`, así que los correos ya enlazan al dominio bueno.
+- **Correos por la API de Resend.** Render bloquea SMTP saliente y en producción no salía ningún correo, ni de verificación ni de recuperación, aunque en local funcionaran. Ver la sección *Correos*.
+- **La IA volvió a funcionar.** El `403` de Google venía de un pago rechazado que dejó el proyecto restringido, y el desbloqueo tardó días en llegar a la API. Verificado con una llamada real a `/ai/parse-materials` contra Render.
+- **El repositorio volvió a ser público.**
+
+### 2026-09-02
 
 ### Correos: enlace roto y botón invisible
 
@@ -315,7 +336,7 @@ Ordenada por urgencia antes de tener usuarios reales:
 
 - **`synchronize: true`** en TypeORM altera el esquema de producción automáticamente al arrancar, y un rollback de código no lo revierte. Hay que pasar a migraciones explícitas.
 - **Local y producción comparten la base de Supabase** mientras el `.env` local tenga `DATABASE_URL`.
-- **Gemini en nivel gratuito**, 20 peticiones al día, y sin reintento ante los `503` de sobrecarga.
+- **La clave de Maps no autoriza todavía `www.ferryapp.co`**, así que el autocompletado de direcciones falla en el dominio nuevo.
 - **`node_modules` está versionado** en `backend/`, lo que hace lentas las operaciones de git. Debería ir al `.gitignore` y removerse del índice.
 - **`VITE_WOMPI_INTEGRITY_SECRET`** está en el `.env` del frontend. Es un secreto de firma y el prefijo `VITE_` lo incrustaría en el bundle. Ningún código lo usa —la firma se calcula en el backend—, así que la línea debería borrarse.
 - **`frontend/src/env`** es un archivo suelto con variables `VITE_` que Vite no lee. Induce a error al editar configuración; conviene borrarlo.
