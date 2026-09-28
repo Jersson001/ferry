@@ -97,7 +97,7 @@ Navegador ──► Vercel (frontend) ──► Render (backend NestJS) ──�
 | Backend | Render, modo Docker | `https://ferry-jogo.onrender.com` | ✅ Sin dominio propio, por decisión |
 | Base de datos | Supabase | — | ✅ |
 | Login y sesión | — | — | ✅ Verificado de punta a punta |
-| Google Maps | — | — | ⚠️ Falta autorizar el dominio nuevo en la clave |
+| Google Maps | — | — | ✅ Autocompletado verificado en `www.ferryapp.co` |
 | IA | — | — | ✅ Verificado contra Render el 2026-09-28 |
 | Correos | Resend | — | ✅ Verificado contra Render el 2026-09-28 |
 
@@ -127,7 +127,7 @@ Trampas que costaron redespliegues:
 - Vercel advierte que las variables `VITE_` con formato de clave "deberían ser privadas". **Hay que ignorarlo** para la clave de Maps y la llave pública de Wompi, que están hechas para el navegador: sin el prefijo quedan en `undefined`.
 - `VITE_API_URL` apuntando a `localhost` no sirve en producción: en el navegador de cada visitante, `localhost` es su propio equipo.
 
-Pendiente: renombrar el proyecto y borrar el viejo `ferry-001`, enlazado a un repo vacío. También sigue vivo el registro `api.ferryapp.co`, que apunta al VPS muerto (`2.25.68.84`) y conviene borrar.
+Pendiente: renombrar el proyecto y borrar el viejo `ferry-001`, enlazado a un repo vacío.
 
 ### Backend — Render
 
@@ -164,7 +164,7 @@ Con usuarios reales, lo mínimo razonable es Render Starter: unos $7 al mes.
 
 | Servicio | Dónde | Estado al 2026-09-28 |
 |---|---|---|
-| Google Maps + Places (New) | `VITE_GOOGLE_MAPS_API_KEY` (frontend) | ⚠️ Falta autorizar `www.ferryapp.co` en la clave |
+| Google Maps + Places (New) | `VITE_GOOGLE_MAPS_API_KEY` (frontend) | ✅ Verificado en el dominio nuevo |
 | Gemini | `GEMINI_API_KEY` (backend) | ✅ Verificado en producción |
 | Resend | `RESEND_API_KEY`, `MAIL_FROM` (backend) | ✅ Verificado en producción |
 | Wompi | `VITE_WOMPI_PUBLIC_KEY` (frontend) + firma en backend | Sin verificar |
@@ -225,7 +225,7 @@ Para probar sin molestar a nadie, pide un reset con el usuario de prueba de domi
 La clave de Maps es la **"Clave API 2"**, en el mismo proyecto de Google Cloud que Gemini. Necesita:
 
 - En el proyecto, **habilitadas** *Maps JavaScript API* y **Places API (New)** (*APIs y servicios → Biblioteca*).
-- En la clave, esas mismas dos en **Restricciones de API**, y en **Restricciones de aplicaciones → Sitios web**: `https://frontend-black-ten-37.vercel.app/*` y `http://localhost:5173/*`. **Pendiente** agregar `https://www.ferryapp.co/*` y `https://ferryapp.co/*`; sin eso el autocompletado falla en el dominio nuevo.
+- En la clave, esas mismas dos en **Restricciones de API**, y en **Restricciones de aplicaciones → Sitios web**: `https://www.ferryapp.co/*`, `https://ferryapp.co/*`, `https://frontend-black-ten-37.vercel.app/*` y `http://localhost:5173/*`. Cada dominio desde el que se sirva el sitio necesita su entrada, o Maps falla ahí con `RefererNotAllowedMapError`.
 - Facturación activa en el proyecto.
 
 El autocompletado de direcciones usa **Places API (New)**, no la *legacy* `google.maps.places.Autocomplete`. Google dejó de ofrecer la legacy a proyectos creados desde marzo de 2025: en ellos falla con `LegacyApiNotActivatedMapError` y no hay forma de activarla. El código vive en `hooks/usePlacesAutocomplete.ts` y `components/PlaceSuggestionsDropdown.tsx`, y lo usan los tres campos de dirección.
@@ -336,7 +336,6 @@ Ordenada por urgencia antes de tener usuarios reales:
 
 - **`synchronize: true`** en TypeORM altera el esquema de producción automáticamente al arrancar, y un rollback de código no lo revierte. Hay que pasar a migraciones explícitas.
 - **Local y producción comparten la base de Supabase** mientras el `.env` local tenga `DATABASE_URL`.
-- **La clave de Maps no autoriza todavía `www.ferryapp.co`**, así que el autocompletado de direcciones falla en el dominio nuevo.
 - **`node_modules` está versionado** en `backend/`, lo que hace lentas las operaciones de git. Debería ir al `.gitignore` y removerse del índice.
 - **`VITE_WOMPI_INTEGRITY_SECRET`** está en el `.env` del frontend. Es un secreto de firma y el prefijo `VITE_` lo incrustaría en el bundle. Ningún código lo usa —la firma se calcula en el backend—, así que la línea debería borrarse.
 - **`frontend/src/env`** es un archivo suelto con variables `VITE_` que Vite no lee. Induce a error al editar configuración; conviene borrarlo.

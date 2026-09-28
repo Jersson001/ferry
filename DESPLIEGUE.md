@@ -53,7 +53,7 @@ Y `JWT_SECRET` no puede ser el valor de desarrollo: está publicado en el repo, 
 
 Vercel advierte que las variables `VITE_` con formato de clave deberían ser privadas. Para estas dos **no hay que hacerle caso**: están hechas para el navegador y sin el prefijo quedan en `undefined`. El secreto de integridad de Wompi, en cambio, nunca va en el frontend.
 
-La clave de Maps debe autorizar **cada dominio desde el que se sirva el sitio** en sus restricciones de referente HTTP, o Maps falla con `RefererNotAllowedMapError`. Hoy faltan `https://www.ferryapp.co/*` y `https://ferryapp.co/*`.
+La clave de Maps debe autorizar **cada dominio desde el que se sirva el sitio** en sus restricciones de referente HTTP, o Maps falla con `RefererNotAllowedMapError`. Hoy tiene los dos del dominio propio, el de Vercel y el de `localhost`.
 
 El DNS del dominio vive en Hostinger: `A` de `@` a `216.198.79.1` y `CNAME` de `www` a `cname.vercel-dns.com`. Si el sitio responde por HTTP pero da error de TLS, el certificado no se emitió: fuerza la emisión con *Refresh* en Vercel → Settings → Domains.
 
@@ -156,4 +156,4 @@ Para los errores de Gemini y de Maps, la tabla de diagnóstico está en [PROYECT
 
 ## Infraestructura anterior
 
-Hasta el 2026-09-16 el backend y la base vivían en un VPS de Hostinger (`2.25.68.84`), que dejó de responder. El DNS de `api.ferryapp.co` **todavía apunta ahí**, comprobado el 2026-09-28, y conviene borrarlo: el backend se quedó en `ferry-jogo.onrender.com`, sin dominio propio. La configuración de nginx con HTTPS que se preparó para ese servidor está en `deploy/nginx/`, sin uso.
+Hasta el 2026-09-16 el backend y la base vivían en un VPS de Hostinger (`2.25.68.84`), que dejó de responder. Su registro `api.ferryapp.co` se borró el 2026-09-28: el backend se quedó en `ferry-jogo.onrender.com`, sin dominio propio. La configuración de nginx con HTTPS que se preparó para ese servidor está en `deploy/nginx/`, sin uso.
