@@ -1,22 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
-import * as nodemailer from 'nodemailer';
+
+// Resend por HTTPS y no por SMTP: Render bloquea los puertos SMTP salientes,
+// y nodemailer fallaba con ETIMEDOUT en CONN sin llegar a autenticarse.
+const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
-  private transporter: nodemailer.Transporter;
-
-  constructor() {
-    this.transporter = nodemailer.createTransport({
-      host: process.env.MAIL_HOST || 'smtp.resend.com',
-      port: parseInt(process.env.MAIL_PORT || '587', 10),
-      secure: process.env.MAIL_SECURE === 'true',
-      auth: {
-        user: process.env.MAIL_USER || 'resend',
-        pass: process.env.MAIL_PASSWORD,
-      },
-    });
-  }
 
   private get from() {
     return process.env.MAIL_FROM || 'Ferry <onboarding@resend.dev>';
@@ -149,13 +139,22 @@ export class MailService {
   // ── Helper interno ───────────────────────────────────────────────────────────
   private async send({ to, subject, html }: { to: string; subject: string; html: string }) {
     try {
-      const info = await this.transporter.sendMail({
-        from: this.from,
-        to,
-        subject,
-        html,
+      const response = await fetch(RESEND_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ from: this.from, to, subject, html }),
       });
-      this.logger.log(`Email enviado a ${to}: ${info.messageId}`);
+
+      const body = await response.json();
+
+      if (!response.ok) {
+        throw new Error(`Resend respondió ${response.status}: ${JSON.stringify(body)}`);
+      }
+
+      this.logger.log(`Email enviado a ${to}: ${body.id}`);
     } catch (error) {
       this.logger.error(`Error enviando email a ${to}:`, error);
       // No lanzamos el error para no bloquear el flujo principal
