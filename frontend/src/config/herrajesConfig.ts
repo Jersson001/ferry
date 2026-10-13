@@ -537,6 +537,9 @@ const getKnownTerms = () => {
     return _cachedTerms;
 };
 
+// Palabras reales a una edición de un término del catálogo (BROCHA -> BROCA): nunca se corrigen.
+const PALABRAS_PROTEGIDAS = new Set(['BROCHA', 'BROCHAS', 'MARTILLO', 'MARTILLOS', 'CLAVO', 'CLAVOS', 'CARPINTERO', 'CARPINTEROS']);
+
 /**
  * Encuentra el mejor match fuzzy para una palabra contra términos conocidos.
  * Retorna la corrección si la distancia es ≤ maxDist, o null si no hay match cercano.
@@ -544,11 +547,11 @@ const getKnownTerms = () => {
 const fuzzyMatchWord = (word: string, maxDist = 2): string | null => {
     if (word.length < 4) return null; // palabras muy cortas no se corrigen
     const upper = word.toUpperCase();
+    if (PALABRAS_PROTEGIDAS.has(upper)) return null;
     const terms = getKnownTerms();
-    
-    // Ajustar la distancia máxima permitida según la longitud de la palabra
-    // para evitar que palabras cortas cambien completamente (ej: TEJA -> PEÑA con dist=2)
-    const currentMaxDist = upper.length <= 5 ? 1 : maxDist;
+
+    // Con 2 ediciones palabras reales cambian de significado (MARTILLO -> AMARILLO, TEJA -> PEÑA)
+    const currentMaxDist = upper.length <= 8 ? 1 : maxDist;
     
     let bestMatch: string | null = null;
     let bestDist = currentMaxDist + 1;

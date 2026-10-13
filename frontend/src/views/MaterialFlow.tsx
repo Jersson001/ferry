@@ -614,7 +614,7 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
 
   // === FUNCIONES DE VALIDACIÓN (migrado de ferry_usuarios) ===
   const getEstadoProducto = (item: MaterialItem) => {
-    const nombreComercial = corregirNombreOCR((item.nombreComercial || item.name || '').trim());
+    const nombreComercial = (item.nombreComercial || item.name || '').trim();
     const nombreUC = nombreComercial.toUpperCase();
     const medidaNominal = (item.medidaNominal || '').trim();
     const caracteristica = (item.caracteristica || '').trim();
@@ -667,10 +667,10 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
     return { color: '#f59e0b', tipo: 'amarillo' as const }; // solo falta color
   };
 
-  const normalizarProductos = (productos: MaterialItem[]): MaterialItem[] => {
+  const normalizarProductos = (productos: MaterialItem[], corregirOCR = false): MaterialItem[] => {
     return productos.map(p => {
       const nombreRaw = (p.nombreComercial || p.name || '').trim();
-      const nombreComercial = corregirNombreOCR(nombreRaw);
+      const nombreComercial = corregirOCR ? corregirNombreOCR(nombreRaw) : nombreRaw;
       let medida = (p.medidaNominal || '').trim();
       const isModuleProduct = MODULE_PRODUCTS.some(mp => nombreComercial.toLowerCase().includes(mp));
       if (isModuleProduct) {
@@ -743,7 +743,7 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
 
   const saveEditModal = () => {
     if (editingIndex === null) return;
-    const nc = corregirNombreOCR((editValues.nombreComercial || editValues.nombre || '').trim());
+    const nc = (editValues.nombreComercial || editValues.nombre || '').trim();
     const mn = (editValues.medidaNominal || '').replace(/\s*\(falta[^)]*\)/gi, '').trim();
     const ca = (editValues.caracteristica || '').replace(/\s*\(falta[^)]*\)/gi, '').trim();
     let ncFinal = nc;
@@ -842,7 +842,7 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
 
       try {
         const recognizedItems = await analyzeMaterialImage(cleanBase64);
-        setItems(normalizarProductos(recognizedItems));
+        setItems(normalizarProductos(recognizedItems, true));
         setMode('EDITING');
       } catch (error: any) {
         if (!handleAiUnavailable(error)) {
@@ -1290,7 +1290,7 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
         .join(', ');
 
     const getDisplayName = (item: MaterialItem) => {
-      const nc = corregirNombreOCR((item.nombreComercial || item.name || '').replace(/\s*\(falta[^)]*\)/gi, '').trim());
+      const nc = (item.nombreComercial || item.name || '').replace(/\s*\(falta[^)]*\)/gi, '').trim();
       const mn = stripHints((item.medidaNominal || '').replace(/\s*\(falta[^)]*\)/gi, '').trim());
       const ca = stripHints((item.caracteristica || '').replace(/\s*\(falta[^)]*\)/gi, '').trim());
       const tipoCorr = item.tipoCorredera || '';
