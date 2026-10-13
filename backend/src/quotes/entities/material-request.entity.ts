@@ -47,6 +47,9 @@ export class MaterialRequest {
   @Column({ type: 'text' })
   deliveryAddress: string;
 
+  @Column({ type: 'text', nullable: true, name: 'image_url' })
+  imageUrl?: string | null;
+
   @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true })
   userLat: number;
 

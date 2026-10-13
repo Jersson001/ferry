@@ -25,6 +25,7 @@ export class QuotesService {
       category: data.category,
       items: data.items,
       deliveryAddress: data.deliveryAddress,
+      imageUrl: this.sanitizeImageUrl(data.imageUrl),
       userLat: data.userLat,
       userLng: data.userLng,
       publicationType: data.publicationType || PublicationType.FREE,
@@ -32,6 +33,14 @@ export class QuotesService {
       displayId: `REQ-${Math.floor(10000 + Math.random() * 90000)}`,
     });
     return this.requestRepository.save(request);
+  }
+
+  // La foto se sube antes por /storage/upload; aquí solo se acepta la URL que devolvió.
+  private sanitizeImageUrl(value: unknown): string | null {
+    if (typeof value !== 'string') return null;
+    const url = value.trim();
+    if (!url || url.length > 2048) return null;
+    return /^(https:\/\/|\/uploads\/)/.test(url) ? url : null;
   }
 
   async findOneById(quoteId: string): Promise<Quote | null> {

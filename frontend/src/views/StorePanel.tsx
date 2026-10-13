@@ -453,6 +453,13 @@ const QuoteResponseModal: React.FC<QuoteResponseModalProps> = ({ req, storeName,
             </div>
           )}
 
+          {req.imageUrl && (
+            <a href={req.imageUrl} target="_blank" rel="noopener noreferrer" className="block rounded-xl overflow-hidden border border-slate-200">
+              <img src={req.imageUrl} alt="Foto adjunta por el cliente" className="w-full max-h-56 object-cover" />
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide px-3 py-1.5 bg-slate-50">Foto del cliente · toca para ampliar</p>
+            </a>
+          )}
+
           {/* ── Total card con desglose ── */}
           <div className="rounded-2xl bg-slate-900 text-white px-5 py-4 space-y-2">
             {/* Subtotal bruto */}
@@ -1077,6 +1084,13 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
                         </div>
                       </div>
                     </>
+                  )}
+
+                  {req.imageUrl && (
+                    <a href={req.imageUrl} target="_blank" rel="noopener noreferrer" className="mx-4 mb-3 block rounded-xl overflow-hidden border border-slate-200">
+                      <img src={req.imageUrl} alt="Foto adjunta por el cliente" className="w-full max-h-40 object-cover" />
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide px-3 py-1.5 bg-slate-50">Foto del cliente · toca para ampliar</p>
+                    </a>
                   )}
 
                   {/* ── Dashed separator ── */}

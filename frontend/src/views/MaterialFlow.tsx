@@ -434,6 +434,9 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
     setDeliveryCoordinates({ lat: pick.lat, lng: pick.lng });
   };
   const [isSendingQuote, setIsSendingQuote] = useState(false);
+  const [attachedImageUrl, setAttachedImageUrl] = useState<string | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const attachInputRef = useRef<HTMLInputElement>(null);
   const [quoteSentSuccess, setQuoteSentSuccess] = useState(false);
   const [quoteTitle, setQuoteTitle] = useState('');
   const [deliveryAddress, setDeliveryAddress] = useState(() => localStorage.getItem('ferry_direccion_entrega') ?? '');
@@ -842,10 +845,34 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
     }
   }, [activeRequest]);
 
+  const uploadAttachment = async (file: File, avisarSiFalla: boolean) => {
+    setIsUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const token = localStorage.getItem('access_token');
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3000';
+      const res = await fetch(`${apiUrl}/storage/upload`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setAttachedImageUrl(data.url);
+    } catch (error) {
+      console.error('No se pudo subir la foto adjunta:', error);
+      if (avisarSiFalla) alert('No se pudo subir la foto. Revisa tu conexión e inténtalo de nuevo.');
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (!isGuest) void uploadAttachment(file, false);
     setIsAnalyzing(true);
     setMode('SCANNING');
 
@@ -979,6 +1006,7 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
         userLocation: resolvedLocation,
         title: finalTitle,
         deliveryAddress: deliveryAddress.trim(),
+        imageUrl: attachedImageUrl,
       });
     } catch (error) {
       console.error('Error al enviar cotización a Firestore:', error);
@@ -1006,6 +1034,7 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
       setItems([]);
       setQuoteTitle('');
       setDeliveryAddress('');
+      setAttachedImageUrl(null);
       setAddressError(false);
     }, 2500);
   };
@@ -1014,6 +1043,7 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
     if (mode === 'EDITING') {
       setMode('INITIAL');
       setItems([]);
+      setAttachedImageUrl(null);
     } else if (mode === 'PAYMENT') {
       setMode('QUOTES');
       setSelectedQuoteForPayment(null);
@@ -1491,6 +1521,53 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
           )}
         </div>
 
+        {!isGuest && !quoteSentSuccess && (
+          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/60 p-3">
+            {attachedImageUrl ? (
+              <div className="flex items-center gap-3">
+                <img src={attachedImageUrl} alt="Foto adjunta" className="w-16 h-16 rounded-lg object-cover border border-slate-200" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-slate-700">Foto adjunta</p>
+                  <p className="text-[11px] text-slate-500">Las ferreterías la verán junto a tu lista.</p>
+                </div>
+                <button
+                  onClick={() => attachInputRef.current?.click()}
+                  disabled={isUploadingImage}
+                  className="text-xs font-semibold text-ferry-600 hover:underline disabled:opacity-50"
+                >
+                  {isUploadingImage ? 'Subiendo…' : 'Cambiar'}
+                </button>
+                <button onClick={() => setAttachedImageUrl(null)} aria-label="Quitar foto" className="p-1 text-slate-400 hover:text-red-500">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <>
+                <button
+                  onClick={() => attachInputRef.current?.click()}
+                  disabled={isUploadingImage}
+                  className="w-full flex items-center justify-center gap-2 text-sm font-semibold text-slate-600 disabled:opacity-60"
+                >
+                  <Camera className="w-4 h-4" />
+                  {isUploadingImage ? 'Subiendo foto…' : 'Adjuntar foto (opcional)'}
+                </button>
+                <p className="text-[11px] text-slate-400 text-center mt-1">Una foto del material o de tu lista ayuda a que cotizen mejor.</p>
+              </>
+            )}
+            <input
+              ref={attachInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={e => {
+                const file = e.target.files?.[0];
+                if (file) void uploadAttachment(file, true);
+                e.target.value = '';
+              }}
+            />
+          </div>
+        )}
+
         <div className="space-y-2 pt-3 border-t border-slate-100">
           {/* Delivery address (required) — primero */}
           {!quoteSentSuccess && (
@@ -1546,7 +1623,7 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
           ) : (
             <Button
               onClick={() => submitRequest()}
-              disabled={items.length === 0 || isSendingQuote}
+              disabled={items.length === 0 || isSendingQuote || isUploadingImage}
               className="w-full shadow-lg shadow-ferry-200"
             >
               {isSendingQuote ? (

@@ -55,6 +55,7 @@ export interface QuoteRequestPayload {
   userLocation?: { lat: number; lng: number } | null;
   title?: string;
   deliveryAddress: string;
+  imageUrl?: string | null;
 }
 
 export interface IncomingQuoteRequest {
@@ -69,6 +70,7 @@ export interface IncomingQuoteRequest {
   title?: string;
   displayId?: string;
   deliveryAddress?: string;
+  imageUrl?: string | null;
 }
 
 export interface StoreCatalogEntry {
