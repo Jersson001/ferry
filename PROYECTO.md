@@ -263,6 +263,15 @@ Ferry **no** usa Cloud Vision: el análisis de fotos va por Gemini (`analyzeImag
 
 ## Bitácora de cambios
 
+### Rango de cobertura, topes de cotizaciones, autocompletado y avisos push — 2026-10-13 (sin desplegar)
+
+- **Rango estilo "Tinder":** el cliente fija hasta dónde quiere cotizaciones con un deslizador (2 a 50 km, por defecto 10) y ve cuántas ferreterías alcanza (`GET /stores/coverage`, público, devuelve solo el número). La solicitud guarda `radioKm`; la bandeja de la ferretería solo muestra las que la alcanzan, con su distancia. Una ferretería o una obra sin coordenadas no se excluye: la distancia no se puede medir y se prefiere una cotización de más a una tienda sin servicio (`quotes/ubicacion.ts`).
+- **Ubicación de la obra:** antes no se guardaba, porque el frontend mandaba `userLocation` y el backend leía `userLat/userLng`. Ahora se aceptan ambos formatos y se validan los rangos.
+- **Coordenadas de la ferretería:** el registro usa el autocompletado de Google (como el flujo de solicitud) y guarda lat/lng al elegir una sugerencia. Las ferreterías anteriores no tienen coordenadas hasta que editen la dirección.
+- **Topes:** cada solicitud recibe como máximo 5 cotizaciones, gana quien responde primero (transacción con bloqueo de la solicitud) y la bandeja oculta las llenas. Una ferretería sin plan de pago envía máximo 5 cotizaciones por día (el día cambia a medianoche de Colombia, `quotes/cupos.ts`); con plan de pago activo no hay tope. No se puede cotizar dos veces la misma solicitud y se rechazan precios o cantidades negativas o no numéricas. Mientras no estén definidos los planes, todos usan los topes gratuitos.
+- **Autocompletado de precio y SKU:** al cotizar, el precio y el SKU se rellenan solos si la ferretería ya cotizó o tiene en su catálogo el mismo producto. Sin IA: el nombre debe coincidir (ignora tildes, mayúsculas, signos y orden de palabras); un precio equivocado es peor que un campo vacío. El campo queda marcado para que lo revise (`config/memoriaPrecios.ts`).
+- **Avisos push (gratis, Web Push):** al crearse una solicitud se avisa a las ferreterías de la categoría dentro del radio que activaron los avisos (`push/`). Necesita `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y `VAPID_SUBJECT` en Render; sin ellas queda apagado. **Funciona en navegador y app web instalada, no dentro del WebView de la app Android**: ahí haría falta Firebase Cloud Messaging con un proyecto de Firebase y cambios en la app nativa.
+
 ### Especialidad en el registro de la ferretería y cierre de un hueco de seguridad — 2026-10-13
 
 - **El registro de una ferretería no preguntaba su especialidad.** `CompleteProfileScreen` pedía "Breve descripción o especialidad" como texto libre, que no llena el campo `specialties`, y sin él el panel de la tienda muestra "Configura tu especialidad" y ninguna solicitud. Ahora hay una pregunta propia, obligatoria (al menos una de las 10 categorías), y la descripción pasó a ser opcional. Una ferretería ya existente sin especialidad vuelve a esa pantalla una vez, aunque su perfil estuviera marcado como completo.

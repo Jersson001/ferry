@@ -1,11 +1,18 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Optional, NotFoundException, ForbiddenException, BadRequestException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, MoreThanOrEqual } from 'typeorm';
 import { MaterialRequest, RequestStatus, PublicationType } from './entities/material-request.entity';
 import { Quote, QuoteStatus } from './entities/quote.entity';
 import { QuoteItem } from './entities/quote-item.entity';
 import { User } from '../users/user.entity';
 import { categoriasDeLaTienda, contactoPublico } from '../users/perfil';
+import { UserSubscription, SubscriptionStatus } from '../subscriptions/entities/user-subscription.entity';
+import { PushService } from '../push/push.service';
+import { leerUbicacion, leerRadioKm, estaEnRadio, distanciaKm, Punto } from './ubicacion';
+import { COTIZACIONES_POR_SOLICITUD, COTIZACIONES_DIARIAS_GRATIS, inicioDelDiaColombia, itemsDeCotizacionValidos } from './cupos';
+
+// Solicitudes que aún tienen cupo: las que ya recibieron todas sus cotizaciones salen de la bandeja.
+const CON_CUPO = '(SELECT COUNT(*) FROM quotes q WHERE q.request_id = request.id) < :cupoSolicitud';
 
 @Injectable()
 export class QuotesService {
@@ -15,12 +22,14 @@ export class QuotesService {
     @InjectRepository(Quote)
     private quoteRepository: Repository<Quote>,
     private dataSource: DataSource, // Para transacciones atómicas
+    @Optional() private push?: PushService,
   ) {}
 
   // ==========================================
   // CLIENTE: SOLICITUDES
   // ==========================================
   async createRequest(userId: string, data: any): Promise<MaterialRequest> {
+    const ubicacion = leerUbicacion(data);
     const request = this.requestRepository.create({
       userId,
       title: data.title,
@@ -28,13 +37,17 @@ export class QuotesService {
       items: data.items,
       deliveryAddress: data.deliveryAddress,
       imageUrl: this.sanitizeImageUrl(data.imageUrl),
-      userLat: data.userLat,
-      userLng: data.userLng,
+      userLat: ubicacion?.lat,
+      userLng: ubicacion?.lng,
+      radioKm: leerRadioKm(data.radioKm),
       publicationType: data.publicationType || PublicationType.FREE,
       status: RequestStatus.OPEN,
       displayId: `REQ-${Math.floor(10000 + Math.random() * 90000)}`,
     });
-    return this.requestRepository.save(request);
+    const guardada = await this.requestRepository.save(request);
+    // Sin await: el aviso no debe demorar ni romper la respuesta al cliente.
+    void this.push?.avisarSolicitud(guardada);
+    return guardada;
   }
 
   // La foto se sube antes por /storage/upload; aquí solo se acepta la URL que devolvió.
@@ -75,6 +88,22 @@ export class QuotesService {
     return categoriasDeLaTienda(tienda?.specialties);
   }
 
+  // Dónde está la ferretería, si se sabe.
+  private async ubicacionDeLaTienda(storeId: string): Promise<Punto | null> {
+    const tienda = await this.dataSource.getRepository(User).findOne({ where: { uid: storeId }, select: ['uid', 'location'] });
+    return leerUbicacion({ userLocation: tienda?.location });
+  }
+
+  // Deja solo las solicitudes dentro del radio que fijó el cliente y anota la distancia a la tienda.
+  private dentroDelRadio(solicitudes: MaterialRequest[], tienda: Punto | null): any[] {
+    return solicitudes
+      .filter(r => estaEnRadio(tienda, leerUbicacion(r), r.radioKm ?? 10))
+      .map(r => {
+        const obra = leerUbicacion(r);
+        return tienda && obra ? { ...r, distanceKm: Math.round(distanciaKm(tienda, obra) * 10) / 10 } : r;
+      });
+  }
+
   async getPendingRequests(storeId: string): Promise<MaterialRequest[]> {
     const categorias = await this.categoriasDeLaTienda(storeId);
     if (categorias.length === 0) return [];
@@ -90,34 +119,19 @@ export class QuotesService {
     // No se carga el usuario que pidió: la tienda no lo necesita y esa fila trae su contraseña y sus tokens.
     const query = this.requestRepository.createQueryBuilder('request')
       .where('request.status = :status', { status: RequestStatus.OPEN })
-      .andWhere('request.category IN (:...categorias)', { categorias });
+      .andWhere('request.category IN (:...categorias)', { categorias })
+      .andWhere(CON_CUPO, { cupoSolicitud: COTIZACIONES_POR_SOLICITUD });
 
     if (quotedRequestIds.length > 0) {
       query.andWhere('request.id NOT IN (:...quotedRequestIds)', { quotedRequestIds });
     }
 
-    return query.orderBy('request.createdAt', 'DESC').getMany();
+    const solicitudes = await query.orderBy('request.createdAt', 'DESC').getMany();
+    return this.dentroDelRadio(solicitudes, await this.ubicacionDeLaTienda(storeId));
   }
 
   async getPendingRequestsCount(storeId: string): Promise<number> {
-    const categorias = await this.categoriasDeLaTienda(storeId);
-    if (categorias.length === 0) return 0;
-
-    const existingQuotes = await this.quoteRepository.find({
-      where: { storeId },
-      select: ['requestId']
-    });
-    const quotedRequestIds = existingQuotes.map(q => q.requestId);
-
-    const query = this.requestRepository.createQueryBuilder('request')
-      .where('request.status = :status', { status: RequestStatus.OPEN })
-      .andWhere('request.category IN (:...categorias)', { categorias });
-
-    if (quotedRequestIds.length > 0) {
-      query.andWhere('request.id NOT IN (:...quotedRequestIds)', { quotedRequestIds });
-    }
-
-    return query.getCount();
+    return (await this.getPendingRequests(storeId)).length;
   }
 
   async getSentQuotes(storeId: string): Promise<any[]> {
@@ -162,6 +176,19 @@ export class QuotesService {
   // ==========================================
   // FERRETERÍA: CREAR COTIZACIÓN (EL MOTOR CORE)
   // ==========================================
+  // Una ferretería sin plan de pago activo tiene un tope de cotizaciones por día; con plan de pago no hay tope.
+  async getCupoDiario(storeId: string): Promise<{ limite: number | null; usadas: number }> {
+    const usadas = await this.quoteRepository.count({
+      where: { storeId, createdAt: MoreThanOrEqual(inicioDelDiaColombia()) },
+    });
+    const planPago = await this.dataSource.getRepository(UserSubscription).findOne({
+      where: { userId: storeId, status: SubscriptionStatus.ACTIVE },
+      relations: ['plan'],
+    });
+    const conPlanDePago = !!planPago?.plan && planPago.plan.priceInCents > 0;
+    return { limite: conPlanDePago ? null : COTIZACIONES_DIARIAS_GRATIS, usadas };
+  }
+
   async createQuote(storeId: string, requestId: string, data: any): Promise<Quote> {
     const request = await this.requestRepository.findOne({ where: { id: requestId } });
     if (!request) throw new NotFoundException('Solicitud no encontrada');
@@ -171,6 +198,18 @@ export class QuotesService {
     const categorias = await this.categoriasDeLaTienda(storeId);
     if (!categorias.includes(request.category)) {
       throw new ForbiddenException('Esta solicitud no es de tu especialidad');
+    }
+
+    const itemsInvalidos = itemsDeCotizacionValidos(data?.items);
+    if (itemsInvalidos) throw new BadRequestException(itemsInvalidos);
+
+    if (await this.quoteRepository.count({ where: { requestId, storeId } }) > 0) {
+      throw new ConflictException('Ya cotizaste esta solicitud');
+    }
+
+    const cupo = await this.getCupoDiario(storeId);
+    if (cupo.limite !== null && cupo.usadas >= cupo.limite) {
+      throw new ForbiddenException(`Llegaste al máximo de ${cupo.limite} cotizaciones por día. Mañana se reinicia, o suscríbete para cotizar sin límite.`);
     }
 
     // 1. Calcular totales desde el servidor (INMUTABILIDAD FINANCIERA)
@@ -222,7 +261,16 @@ export class QuotesService {
       items,
     });
 
-    return this.quoteRepository.save(quote);
+    // Gana quien responde primero: se bloquea la solicitud para contar y guardar sin que dos tiendas
+    // tomen a la vez el último cupo.
+    return this.dataSource.transaction(async (manager) => {
+      await manager.findOne(MaterialRequest, { where: { id: requestId }, lock: { mode: 'pessimistic_write' } });
+      const recibidas = await manager.count(Quote, { where: { requestId } });
+      if (recibidas >= COTIZACIONES_POR_SOLICITUD) {
+        throw new ConflictException('Esta solicitud ya recibió el máximo de cotizaciones');
+      }
+      return manager.save(Quote, quote);
+    });
   }
 
   // ==========================================

@@ -99,6 +99,12 @@ export class QuotesController {
     return this.quotesService.getSentQuotes(req.user.uid);
   }
 
+  @Get('responses/cupo')
+  async getCupoDiario(@Req() req: RequestWithUser) {
+    if (req.user.role !== 'STORE') throw new ForbiddenException('Solo tiendas');
+    return this.quotesService.getCupoDiario(req.user.uid);
+  }
+
   @Post('responses')
   async createResponse(@Req() req: RequestWithUser, @Body() data: any) {
     if (req.user.role !== 'STORE') throw new ForbiddenException('Solo tiendas');

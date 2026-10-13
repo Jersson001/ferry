@@ -53,6 +53,7 @@ export interface QuoteRequestPayload {
   category: string;
   items: MaterialItem[];
   userLocation?: { lat: number; lng: number } | null;
+  radioKm?: number;
   title?: string;
   deliveryAddress: string;
   imageUrl?: string | null;
@@ -356,6 +357,33 @@ export const saveStorePriceCatalog = async (
     method: 'POST',
     body: JSON.stringify({ catalog }),
   });
+};
+
+// Cuántas ferreterías cubren una obra con este radio. Ruta pública: el rango también se usa sin cuenta.
+export const getCoberturaTiendas = async (
+  categoria: string,
+  ubicacion: { lat: number; lng: number } | null,
+  radioKm: number,
+): Promise<number | null> => {
+  try {
+    const q = new URLSearchParams({ category: categoria, radioKm: String(radioKm) });
+    if (ubicacion) { q.set('lat', String(ubicacion.lat)); q.set('lng', String(ubicacion.lng)); }
+    const res = await fetch(`${API_URL}/stores/coverage?${q}`);
+    if (!res.ok) return null;
+    return (await res.json()).count as number;
+  } catch {
+    return null;
+  }
+};
+
+export interface CupoDiario { limite: number | null; usadas: number; }
+
+export const getCupoDiario = async (): Promise<CupoDiario | null> => {
+  try {
+    return await apiRequest<CupoDiario>('/quotes/responses/cupo');
+  } catch {
+    return null;
+  }
 };
 
 export const getStorePriceCatalog = async (): Promise<Record<string, StoreCatalogEntry>> => {

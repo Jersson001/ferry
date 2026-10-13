@@ -56,6 +56,10 @@ export class MaterialRequest {
   @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true })
   userLng: number;
 
+  // Hasta dónde quiere el cliente que le coticen, en km desde la obra.
+  @Column({ type: 'integer', default: 10 })
+  radioKm: number;
+
   @CreateDateColumn()
   createdAt: Date;
 }

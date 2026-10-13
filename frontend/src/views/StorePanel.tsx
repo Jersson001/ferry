@@ -2,9 +2,11 @@
 import React, { useState, useEffect } from 'react';
 import { MaterialRequest, RequestStatus, UserProfile } from '../types';
 import { Package, Clock, Truck, CheckCircle2, Store, AlertCircle, X, Inbox, RefreshCw, FileText, MapPin, Send, Trash2, RotateCcw, Eye } from 'lucide-react';
-import { getPendingRequestsForStore, formatRelativeTime, IncomingQuoteRequest, submitQuoteResponse, getStorePriceCatalog, saveStorePriceCatalog, StoreCatalogEntry, rejectQuoteRequest, updateQuoteLogisticStatus, getStoreSentQuotes, StoreSentQuote, FERRY_MARKUP } from '../services/quoteService';
+import { getPendingRequestsForStore, formatRelativeTime, IncomingQuoteRequest, submitQuoteResponse, getStorePriceCatalog, saveStorePriceCatalog, getCupoDiario, CupoDiario, StoreCatalogEntry, rejectQuoteRequest, updateQuoteLogisticStatus, getStoreSentQuotes, StoreSentQuote, FERRY_MARKUP } from '../services/quoteService';
 import { getStoreCatalogProducts } from '../services/catalogService';
 import { useApi } from '../hooks/useApi';
+import { construirIndice, buscarEnIndice } from '../config/memoriaPrecios';
+import { usePushAvisos } from '../hooks/usePushAvisos';
 
 interface Props {
   requests: MaterialRequest[];
@@ -46,20 +48,28 @@ const QuoteResponseModal: React.FC<QuoteResponseModalProps> = ({ req, storeName,
       return next;
     });
 
-  // ── Pre-fill prices & SKUs from store's price memory ──────────────────────
+  // ── Pre-fill prices & SKUs: lo que la tienda cotizó antes y su catálogo cargado ──────────────
+  const [autocompletados, setAutocompletados] = useState<Set<number>>(new Set());
   useEffect(() => {
-    getStorePriceCatalog().then(catalog => {
+    Promise.all([
+      getStorePriceCatalog(),
+      storeId ? getStoreCatalogProducts(storeId).catch(() => []) : Promise.resolve([]),
+    ]).then(([memoria, catalogo]) => {
+      const indice = construirIndice(memoria, catalogo);
       const newPrices: Record<number, string> = {};
       const newSkus: Record<number, string> = {};
+      const marcados = new Set<number>();
       req.items.forEach((item, idx) => {
-        const entry = catalog[item.name.toLowerCase().trim()];
-        if (entry) {
-          if (entry.price > 0) newPrices[idx] = String(entry.price);
-          if (entry.sku) newSkus[idx] = entry.sku;
-        }
+        const entry = buscarEnIndice(indice, item);
+        if (!entry) return;
+        newPrices[idx] = String(entry.price);
+        if (entry.sku) newSkus[idx] = entry.sku;
+        marcados.add(idx);
       });
-      if (Object.keys(newPrices).length > 0) setPrices(newPrices);
-      if (Object.keys(newSkus).length > 0) setSkus(newSkus);
+      // Si la tienda ya escribió algo mientras cargaba, lo suyo manda.
+      setPrices(prev => ({ ...newPrices, ...prev }));
+      setSkus(prev => ({ ...newSkus, ...prev }));
+      setAutocompletados(marcados);
     }).catch(() => {}); // silently ignore network errors
   }, [req.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -161,8 +171,8 @@ const QuoteResponseModal: React.FC<QuoteResponseModalProps> = ({ req, storeName,
         message,
       });
       onSuccess(req.id);
-    } catch {
-      setSubmitError('No se pudo enviar la cotización. Verifica tu conexión e intenta de nuevo.');
+    } catch (err) {
+      setSubmitError(err instanceof Error && err.message && err.message !== 'Error en la petición' ? err.message : 'No se pudo enviar la cotización. Verifica tu conexión e intenta de nuevo.');
     } finally {
       setIsSubmitting(false);
     }
@@ -356,7 +366,10 @@ const QuoteResponseModal: React.FC<QuoteResponseModalProps> = ({ req, storeName,
                         step="100"
                         placeholder="0"
                         value={prices[idx] ?? ''}
-                        onChange={e => setPrices(prev => ({ ...prev, [idx]: e.target.value }))}
+                        onChange={e => {
+                          setPrices(prev => ({ ...prev, [idx]: e.target.value }));
+                          setAutocompletados(prev => { const n = new Set(prev); n.delete(idx); return n; });
+                        }}
                         className="w-full pl-7 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-right outline-none focus:ring-2 focus:ring-ferry-500 focus:border-ferry-400 transition-shadow"
                       />
                     </div>
@@ -366,6 +379,9 @@ const QuoteResponseModal: React.FC<QuoteResponseModalProps> = ({ req, storeName,
                       </span>
                     )}
                   </div>
+                )}
+                {!isDiscarded && autocompletados.has(idx) && (
+                  <p className="text-[10px] text-ferry-600 mt-1.5">Autocompletado con tu último precio: revísalo antes de enviar.</p>
                 )}
               </div>
             );
@@ -570,6 +586,8 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
   // --- INBOX STATE ---
   const [inboxRequests, setInboxRequests] = useState<IncomingQuoteRequest[]>([]);
   const [isLoadingInbox, setIsLoadingInbox] = useState(false);
+  const [cupo, setCupo] = useState<CupoDiario | null>(null);
+  const avisos = usePushAvisos();
   const [inboxError, setInboxError] = useState<string | null>(null);
   // Which request the store is currently quoting (opens QuoteResponseModal)
   const [quotingInboxRequest, setQuotingInboxRequest] = useState<IncomingQuoteRequest | null>(null);
@@ -700,6 +718,7 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
       ]);
       setInboxRequests(results);
       setStoreCatalog(catalog);
+      getCupoDiario().then(setCupo);
     } catch (err: any) {
       setInboxError('No se pudo cargar la bandeja. Verifica tu conexión.');
     } finally {
@@ -902,6 +921,34 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
         {/* --- INBOX TAB --- */}
         {activeTab === 'INBOX' && (
           <div className="space-y-3 animate-in fade-in slide-in-from-left-4 duration-300">
+
+            {cupo && cupo.limite !== null && (
+              <div className={`rounded-xl border px-3 py-2 text-xs ${cupo.usadas >= cupo.limite ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
+                {cupo.usadas >= cupo.limite
+                  ? `Ya enviaste tus ${cupo.limite} cotizaciones de hoy. Mañana se reinicia, o suscríbete para cotizar sin límite.`
+                  : `Cotizaciones de hoy: ${cupo.usadas} de ${cupo.limite}. Cada solicitud recibe máximo 5 cotizaciones: gana quien responde primero.`}
+              </div>
+            )}
+
+            {avisos.estado !== 'no-soportado' && (
+              <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 flex items-center justify-between gap-3">
+                <span>
+                  {avisos.estado === 'activo' && 'Avisos activados: te avisamos cuando llegue una solicitud de tu zona.'}
+                  {avisos.estado === 'inactivo' && 'Recibe un aviso apenas llegue una solicitud de tu zona y responde primero.'}
+                  {avisos.estado === 'bloqueado' && 'Bloqueaste los avisos en el navegador. Actívalos desde los permisos del sitio.'}
+                </span>
+                {avisos.estado !== 'bloqueado' && (
+                  <button
+                    type="button"
+                    disabled={avisos.trabajando}
+                    onClick={avisos.estado === 'activo' ? avisos.desactivar : avisos.activar}
+                    className="shrink-0 px-3 py-1.5 rounded-lg font-bold bg-ferry-50 text-ferry-700 border border-ferry-100 hover:bg-ferry-100 disabled:opacity-50"
+                  >
+                    {avisos.estado === 'activo' ? 'Desactivar' : 'Activar'}
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Header row */}
             <div className="flex items-center justify-between px-1">

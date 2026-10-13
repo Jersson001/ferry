@@ -5,6 +5,9 @@ import { CatalogProduct } from './entities/catalog-product.entity';
 import { UsersService } from '../users/users.service';
 import { sanitizarPerfil, perfilPropio } from '../users/perfil';
 import { Quote } from '../quotes/entities/quote.entity';
+import { contarTiendasQueCubren } from './cobertura';
+import { Punto } from '../quotes/ubicacion';
+import { User } from '../users/user.entity';
 import { ordenarTiendasPorCalificacion, TiendaTop, FilaCalificacion } from './top-stores';
 
 @Injectable()
@@ -34,6 +37,15 @@ export class StoresService {
       .groupBy('s.uid')
       .getRawMany<FilaCalificacion>();
     return ordenarTiendasPorCalificacion(filas, limite);
+  }
+
+  // Ferreterías que recibirían una solicitud con esta categoría y este radio: solo el número, nunca quiénes son.
+  async contarCobertura(categoria: string, obra: Punto | null, radioKm: number): Promise<number> {
+    const tiendas = await this.dataSource.getRepository(User).find({
+      where: { role: 'STORE' as any },
+      select: ['uid', 'specialties', 'location'],
+    });
+    return contarTiendasQueCubren(tiendas, categoria, obra, radioKm);
   }
 
   async getPriceMemory(storeId: string): Promise<Record<string, any>> {

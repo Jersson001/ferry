@@ -10,6 +10,7 @@ import { MessageSquareText, FileText } from 'lucide-react';
 import { getConfigProducto, inferirMedidaNominal, inferirCaracteristica, corregirNombreOCR, MODULE_PRODUCTS } from '../config/herrajesConfig';
 import { usePlacesAutocomplete, PlacePick } from '../hooks/usePlacesAutocomplete';
 import { PlaceSuggestionsDropdown } from '../components/PlaceSuggestionsDropdown';
+import { RangoCobertura } from '../components/RangoCobertura';
 
 interface Props {
   onRequestCreate: (req: MaterialRequest) => void;
@@ -438,6 +439,7 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
   const [quoteSentSuccess, setQuoteSentSuccess] = useState(false);
   const [quoteTitle, setQuoteTitle] = useState('');
   const [deliveryAddress, setDeliveryAddress] = useState(() => localStorage.getItem('ferry_direccion_entrega') ?? '');
+  const [radioKm, setRadioKm] = useState(10);
   const [deliveryCoordinates, setDeliveryCoordinates] = useState<{ lat: number; lng: number } | null>(null);
   const [savedAddresses, setSavedAddresses] = useState<string[]>(() => {
     const saved = localStorage.getItem('ferry_saved_addresses');
@@ -1002,6 +1004,7 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
         category: selectedCategory || 'General',
         items: itemsLimpios,
         userLocation: resolvedLocation,
+        radioKm,
         title: finalTitle,
         deliveryAddress: deliveryAddress.trim(),
         imageUrl: attachedImageUrl,
@@ -1599,6 +1602,9 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
                 </p>
               )}
             </div>
+          )}
+          {!quoteSentSuccess && (
+            <RangoCobertura radioKm={radioKm} onChange={setRadioKm} categoria={selectedCategory} ubicacion={deliveryCoordinates ?? userLocation ?? null} />
           )}
           {/* GPS error banner */}
           {gpsError && !quoteSentSuccess && (

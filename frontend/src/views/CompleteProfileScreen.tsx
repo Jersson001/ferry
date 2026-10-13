@@ -18,6 +18,8 @@ import {
   Hammer,
 } from 'lucide-react';
 import ferryLogo from '../assets/logo.svg';
+import { usePlacesAutocomplete, PlacePick } from '../hooks/usePlacesAutocomplete';
+import { PlaceSuggestionsDropdown } from '../components/PlaceSuggestionsDropdown';
 import { ESPECIALIDADES } from '../config/especialidades';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -57,6 +59,12 @@ export const CompleteProfileScreen: React.FC<Props> = ({ profile, onComplete }) 
 
   const [name,        setName]        = useState(profile.displayName && profile.displayName !== 'Usuario' && profile.displayName !== 'Mi Ferretería' && profile.displayName !== 'Mi Ferretera' ? profile.displayName : '');
   const [address,     setAddress]     = useState(profile.location?.address ?? '');
+  // Coordenadas de la dirección: solo existen si la tienda eligió una sugerencia de Google. Si escribe a mano
+  // se descartan, porque ya no corresponden al texto.
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
+    profile.location && Number.isFinite(profile.location.lat) && Number.isFinite(profile.location.lng) && profile.location.address
+      ? { lat: profile.location.lat, lng: profile.location.lng } : null);
+  const places = usePlacesAutocomplete();
   const [description, setDescription] = useState(profile.description ?? '');
   const [specialties, setSpecialties] = useState<string[]>(profile.specialties ?? []);
   const [loading,     setLoading]     = useState(false);
@@ -91,6 +99,7 @@ export const CompleteProfileScreen: React.FC<Props> = ({ profile, onComplete }) 
         patch['location'] = {
           ...(profile.location ?? {}),
           address: address.trim(),
+          ...(coords ?? {}),
         };
         patch['specialties'] = specialties;
       }
@@ -253,7 +262,12 @@ export const CompleteProfileScreen: React.FC<Props> = ({ profile, onComplete }) 
                   id="profile-address"
                   placeholder="Ej. Cra. 15 # 93-47, Bogotá, Chapinero"
                   value={address}
-                  onChange={(e) => setAddress(e.target.value.replace(/\n/g, ''))}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\n/g, '');
+                    setAddress(val);
+                    setCoords(null);
+                    places.search(val);
+                  }}
                   maxLength={150}
                   rows={2}
                   className={`w-full pl-12 pr-4 py-4 rounded-2xl border-2 bg-slate-50 text-slate-800
@@ -264,9 +278,21 @@ export const CompleteProfileScreen: React.FC<Props> = ({ profile, onComplete }) 
                       : 'border-slate-200 focus:border-slate-400 focus:bg-white'
                     }`}
                 />
+                <PlaceSuggestionsDropdown
+                  predictions={places.predictions}
+                  onPickPrediction={async (prediction) => {
+                    const pick: PlacePick | null = await places.select(prediction);
+                    if (!pick) return;
+                    setAddress(pick.address.slice(0, 150));
+                    setCoords({ lat: pick.lat, lng: pick.lng });
+                  }}
+                />
               </div>
 
               <p className="text-xs text-slate-400 ml-1 leading-snug">
+                {coords
+                  ? 'Ubicación confirmada: las solicitudes cercanas te llegarán primero.'
+                  : 'Elige tu dirección de la lista que aparece para que podamos ubicarte en el mapa.'}{' '}
                 Esta dirección ayuda a los contratistas a calcular la distancia y el tiempo de entrega.
               </p>
             </div>
