@@ -1,6 +1,7 @@
 import { Controller, Put, Body, UseGuards, Request } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/jwt.guard';
+import { sanitizarPerfil } from './perfil';
 
 @Controller('users')
 export class UsersController {
@@ -9,11 +10,11 @@ export class UsersController {
   @UseGuards(JwtAuthGuard)
   @Put('profile')
   async updateProfile(@Request() req: any, @Body() body: any) {
-    const { profileComplete, ...updates } = body;
-    
+    const { profileComplete } = body ?? {};
+
     // Mapeamos el campo del frontend al de la base de datos
     const finalUpdates = {
-      ...updates,
+      ...sanitizarPerfil(body ?? {}),
       isProfileComplete: profileComplete ?? true
     };
 

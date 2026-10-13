@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { CatalogProduct } from './entities/catalog-product.entity';
 import { UsersService } from '../users/users.service';
+import { sanitizarPerfil } from '../users/perfil';
 
 @Injectable()
 export class StoresService {
@@ -114,17 +115,10 @@ export class StoresService {
   }
 
   async updateStoreProfile(storeId: string, profileData: any): Promise<any> {
-    // ── Whitelist de campos permitidos ────────────────────────────────────────
-    // NUNCA se permiten: role, email, password, isEmailVerified, uid, etc.
-    const ALLOWED_FIELDS = [
-      'displayName', 'description', 'photoURL', 'phoneNumber',
-      'location', 'specialties', 'rut', 'families', 'isProfileComplete',
-    ];
-    const safeData: Record<string, any> = {};
-    for (const key of ALLOWED_FIELDS) {
-      if (profileData[key] !== undefined) {
-        safeData[key] = profileData[key];
-      }
+    // Mismo filtro que el perfil de usuario: nunca role, email, password, isEmailVerified, uid, etc.
+    const safeData: Record<string, any> = sanitizarPerfil(profileData ?? {});
+    if (typeof profileData?.isProfileComplete === 'boolean') {
+      safeData.isProfileComplete = profileData.isProfileComplete;
     }
     if (Object.keys(safeData).length === 0) {
       return this.usersService.findOne(storeId);
@@ -132,4 +126,3 @@ export class StoresService {
     return this.usersService.update(storeId, safeData);
   }
 }
-

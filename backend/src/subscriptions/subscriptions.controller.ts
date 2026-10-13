@@ -1,5 +1,6 @@
-import { Controller, Get, Post, Param, UseGuards, Req, Query, Body, NotFoundException, Inject, forwardRef } from '@nestjs/common';
+import { Controller, Get, Post, Param, UseGuards, Req, Query, Body, NotFoundException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { SubscriptionsService } from './subscriptions.service';
+import { SubscriptionStatus } from './entities/user-subscription.entity';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { Request } from 'express';
 import { PaymentsService } from '../payments/payments.service';
@@ -37,7 +38,16 @@ export class SubscriptionsController {
   @UseGuards(JwtAuthGuard)
   @Post('purchase/:planId')
   async purchasePlan(@Param('planId') planId: string, @Req() req: RequestWithUser) {
-    // Para MVP, simula la compra y asigna los créditos (ahora usado para planes gratuitos)
+    // Esta ruta no verifica ningún pago, así que solo activa planes gratuitos. Los de pago los activa el pago
+    // verificado de Wompi (webhook y /wompi/verify), que llaman al servicio directamente.
+    const plan = (await this.subscriptionsService.getPlans()).find(p => p.id === planId);
+    if (!plan) throw new NotFoundException('Plan no encontrado');
+    if (plan.priceInCents > 0) throw new ForbiddenException('Este plan requiere pago');
+
+    // Activarlo otra vez, o alternar entre planes gratuitos, sumaría créditos cada vez
+    const actual = await this.subscriptionsService.getUserSubscription(req.user.uid);
+    if (actual.status === SubscriptionStatus.ACTIVE) return actual;
+
     return this.subscriptionsService.purchasePlan(req.user.uid, planId);
   }
 

@@ -421,9 +421,12 @@ export class QuotesService {
       quote.shippedAt = new Date();
     }
 
-    if (status === QuoteStatus.DELIVERED) {
-      quote.rating = (rating !== undefined && rating > 0) ? rating : null;
-      quote.reviewComment = (comment !== undefined && comment.trim() !== '') ? comment : null;
+    // Solo el cliente califica: si la tienda pudiera hacerlo, se calificaría a sí misma, y marcar el
+    // pedido como entregado no debe borrar la calificación que el cliente ya dejó.
+    if (status === QuoteStatus.DELIVERED && !isStore) {
+      const calificacionValida = Number.isInteger(rating) && rating! >= 1 && rating! <= 5;
+      quote.rating = calificacionValida ? rating! : null;
+      quote.reviewComment = (typeof comment === 'string' && comment.trim() !== '') ? comment : null;
     }
 
     return this.quoteRepository.save(quote);
