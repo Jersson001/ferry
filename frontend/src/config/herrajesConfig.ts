@@ -468,6 +468,140 @@ export const HERRAJES_CONFIG: Record<string, HerrajeConfig> = {
             },
         ],
     },
+    tornillo_drywall: {
+        keywords: ['tornillo drywall', 'tornillos drywall', 'tornillo para drywall', 'tornillos para drywall', 'tornillo de drywall'],
+        grupos: [
+            { label: 'Largo', campo: 'medidaNominal', opciones: ['1"', '1 1/4"', '1 5/8"', '2"'] },
+            { label: 'Punta', campo: 'caracteristica', opciones: ['PUNTA FINA', 'PUNTA BROCA'], defaultValue: 'PUNTA FINA' },
+        ],
+    },
+    cinta_drywall: {
+        keywords: ['cinta de papel', 'cinta papel', 'cinta drywall', 'cinta de drywall', 'cinta para drywall', 'cinta malla', 'cinta de malla'],
+        grupos: [
+            { label: 'Tipo', campo: 'caracteristica', opciones: ['PAPEL', 'MALLA'] },
+        ],
+    },
+    masilla: {
+        keywords: ['masilla', 'super mastic', 'supermastic', 'super mastick', 'supermastick'],
+        grupos: [
+            { label: 'Presentación', campo: 'medidaNominal', opciones: ['1 GL', '5 GL'] },
+        ],
+    },
+
+    // ── OBRA GRIS / ESTRUCTURA ───────────────────────────────────────────────
+    cemento: {
+        keywords: ['cemento', 'cementos'],
+        grupos: [
+            { label: 'Tipo', campo: 'caracteristica', opciones: ['USO GENERAL', 'ESTRUCTURAL', 'BLANCO'], defaultValue: 'USO GENERAL' },
+            { label: 'Presentación', campo: 'medidaNominal', opciones: ['25 KG', '50 KG'], defaultValue: '50 KG' },
+        ],
+    },
+    yeso: {
+        keywords: ['yeso', 'yesos'],
+        grupos: [
+            { label: 'Presentación', campo: 'medidaNominal', opciones: ['5 KG', '10 KG', '25 KG'] },
+        ],
+    },
+    pegante_ceramica: {
+        keywords: [
+            'pegacor', 'pegante ceramica', 'pegante para ceramica', 'adhesivo ceramica',
+            'pegante porcelanato', 'pegante para porcelanato',
+        ],
+        grupos: [
+            { label: 'Tipo', campo: 'caracteristica', opciones: ['GRIS', 'BLANCO', 'PORCELANATO'], defaultValue: 'GRIS' },
+            { label: 'Presentación', campo: 'medidaNominal', opciones: ['5 KG', '25 KG'], defaultValue: '25 KG' },
+        ],
+    },
+    akronal: {
+        keywords: ['akronal', 'acronal', 'aditivo'],
+        grupos: [
+            { label: 'Presentación', campo: 'medidaNominal', opciones: ['1/4 GL', '1/2 GL', '1 GL', '5 GL'] },
+        ],
+    },
+    varilla: {
+        keywords: ['varilla', 'varillas', 'hierro corrugado'],
+        grupos: [
+            { label: 'Diámetro', campo: 'medidaNominal', opciones: ['1/4"', '3/8"', '1/2"', '5/8"', '3/4"', '7/8"', '1"'] },
+            { label: 'Tipo', campo: 'caracteristica', opciones: ['CORRUGADA', 'LISA'], defaultValue: 'CORRUGADA' },
+        ],
+    },
+    varilla_roscada: {
+        keywords: ['varilla roscada', 'varillas roscadas', 'esparrago'],
+        grupos: [
+            { label: 'Diámetro', campo: 'medidaNominal', opciones: ['1/4"', '5/16"', '3/8"', '1/2"', '5/8"', '3/4"'] },
+        ],
+    },
+    malla_electrosoldada: {
+        keywords: ['malla electrosoldada', 'electrosoldada'],
+        grupos: [
+            { label: 'Diámetro y separación', campo: 'medidaNominal', opciones: ['4MM 15x15', '4MM 25x25', '5MM 15x15', '6MM 15x15', '6MM 20x20'] },
+            { label: 'Formato', campo: 'caracteristica', opciones: ['PANEL', 'ROLLO'], defaultValue: 'PANEL' },
+        ],
+    },
+    alambre: {
+        keywords: ['alambre', 'alambres'],
+        grupos: [
+            { label: 'Calibre', campo: 'medidaNominal', opciones: ['12', '14', '16', '18', '20'] },
+            { label: 'Tipo', campo: 'caracteristica', opciones: ['NEGRO RECOCIDO', 'GALVANIZADO', 'DE PÚAS'], defaultValue: 'NEGRO RECOCIDO' },
+        ],
+    },
+    puntilla: {
+        keywords: ['puntilla', 'puntillas', 'clavo', 'clavos'],
+        grupos: [
+            { label: 'Largo', campo: 'medidaNominal', opciones: ['1"', '1 1/2"', '2"', '2 1/2"', '3"', '4"', '5"'] },
+            { label: 'Cabeza', campo: 'caracteristica', opciones: ['CON CABEZA', 'SIN CABEZA'], defaultValue: 'CON CABEZA' },
+        ],
+    },
+    bloque: {
+        keywords: [' bloque ', ' bloques '],
+        grupos: [
+            { label: 'Número', campo: 'medidaNominal', opciones: ['No. 4', 'No. 5', 'No. 6', 'No. 8', 'No. 10', 'No. 12'] },
+            { label: 'Material', campo: 'caracteristica', opciones: ['ARCILLA', 'CEMENTO'] },
+        ],
+    },
+    ladrillo: {
+        keywords: ['ladrillo', 'ladrillos', 'tolete'],
+        grupos: [
+            { label: 'Tipo', campo: 'caracteristica', opciones: ['TOLETE', 'FAROL', 'PRENSADO'] },
+        ],
+    },
+    gravilla: {
+        keywords: ['gravilla', 'grava', 'triturado', 'balasto'],
+        grupos: [
+            { label: 'Tamaño', campo: 'medidaNominal', opciones: ['1/2"', '3/4"', '1"'] },
+            { label: 'Presentación', campo: 'caracteristica', opciones: ['M³', 'SACO'], defaultValue: 'M³' },
+        ],
+    },
+    recebo: {
+        keywords: ['recebo', 'ripio'],
+        grupos: [
+            { label: 'Presentación', campo: 'medidaNominal', opciones: ['M³', 'SACO'], defaultValue: 'M³' },
+        ],
+    },
+
+    // ── HERRAMIENTA DE ACABADOS ──────────────────────────────────────────────
+    brocha: {
+        keywords: ['brocha', 'brochas'],
+        grupos: [
+            { label: 'Tamaño', campo: 'medidaNominal', opciones: ['1"', '1 1/2"', '2"', '2 1/2"', '3"', '4"'] },
+        ],
+    },
+    lija: {
+        keywords: [' lija ', ' lijas '],
+        grupos: [
+            { label: 'Grano', campo: 'medidaNominal', opciones: ['60', '80', '100', '120', '150', '180', '220', '240', '320', '400'], scroll: true },
+            { label: 'Tipo', campo: 'caracteristica', opciones: ['AGUA', 'MADERA', 'HIERRO'], defaultValue: 'AGUA' },
+        ],
+    },
+
+    // ── TUBERÍA ──────────────────────────────────────────────────────────────
+    tuberia_pvc: {
+        keywords: ['tubo pvc', 'tubos pvc', 'tuberia pvc', 'tuberias pvc', 'tuberia', 'tuberias'],
+        grupos: [
+            { label: 'Diámetro', campo: 'medidaNominal', opciones: ['1/2"', '3/4"', '1"', '1 1/4"', '1 1/2"', '2"', '3"', '4"', '6"'] },
+            { label: 'Tipo', campo: 'caracteristica', opciones: ['SANITARIA', 'PRESIÓN', 'CONDUIT'] },
+        ],
+    },
 };
 
 // Productos que requieren información complementaria (medida + característica)
@@ -509,6 +643,10 @@ const levenshteinDistance = (a: string, b: string): number => {
     return dp[m][n];
 };
 
+// Palabras comunes que nunca son destino de una corrección: están a una letra de otras palabras reales
+// (GRAPA -> GRAVA, LIMA -> LISA, LISA -> LIJA, PUNTO -> PUNTA, SANITARIO -> SANITARIA).
+const TERMINOS_NO_CORREGIBLES = ['LISA', 'LIJA', 'FINA', 'PUNTA', 'AGUA', 'ROLLO', 'GRAVA', 'SANITARIA'];
+
 /**
  * Recopila todos los términos conocidos del config de herrajes (keywords + opciones)
  */
@@ -528,6 +666,7 @@ const getAllKnownTerms = (): string[] => {
     }
     // Agregar keywords de productos complementarios
     PRODUCTOS_INFO_COMPLEMENTARIA.forEach(p => p.keywords.forEach(k => { if (k.length >= 4) terms.add(k.toUpperCase()); }));
+    TERMINOS_NO_CORREGIBLES.forEach(t => terms.delete(t));
     return Array.from(terms);
 };
 
@@ -616,26 +755,66 @@ export const corregirNombreOCR = (nombre: string): string => {
 /**
  * Busca la configuración de un producto por su nombre comercial (con fuzzy matching)
  */
+const quitarTildes = (s: string): string => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+const escaparRegex = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// Minúsculas, sin tildes y rodeado de espacios, para que una keyword con espacios (' lija ') solo case palabras completas.
+const prepararTexto = (texto: string): string =>
+    ` ${quitarTildes(texto.toLowerCase()).replace(/[^\p{L}\p{N}/.]+/gu, ' ')} `;
+
+let _keywordsNormalizadas: Array<{ config: HerrajeConfig; keyword: string }> | null = null;
+const getKeywordsNormalizadas = () => {
+    if (!_keywordsNormalizadas) {
+        _keywordsNormalizadas = Object.values(HERRAJES_CONFIG).flatMap(config =>
+            config.keywords.map(k => ({ config, keyword: quitarTildes(k.toLowerCase()) })));
+    }
+    return _keywordsNormalizadas;
+};
+
+// Gana la keyword más larga: así 'tornillo drywall' vence a 'tornillo' y 'yeso laminado' a 'yeso'.
+const buscarConfigPorKeyword = (texto: string): HerrajeConfig | null => {
+    let mejor: HerrajeConfig | null = null;
+    let largo = 0;
+    for (const { config, keyword } of getKeywordsNormalizadas()) {
+        if (keyword.length > largo && texto.includes(keyword)) {
+            mejor = config;
+            largo = keyword.length;
+        }
+    }
+    return mejor;
+};
+
 export const getConfigProducto = (nombreComercial: string): HerrajeConfig | null => {
     if (!nombreComercial) return null;
-    const nombre = nombreComercial.toLowerCase();
-    // Primero búsqueda exacta
-    for (const config of Object.values(HERRAJES_CONFIG)) {
-        if (config.keywords.some(k => nombre.includes(k))) {
-            return config;
-        }
-    }
+    const nombre = prepararTexto(nombreComercial);
+    const directo = buscarConfigPorKeyword(nombre);
+    if (directo) return directo;
     // Fallback: buscar con nombre corregido
-    const corregido = corregirNombreOCR(nombreComercial).toLowerCase();
-    if (corregido !== nombre) {
-        for (const config of Object.values(HERRAJES_CONFIG)) {
-            if (config.keywords.some(k => corregido.includes(k))) {
-                return config;
-            }
-        }
-    }
-    return null;
+    const corregido = prepararTexto(corregirNombreOCR(nombreComercial));
+    return corregido !== nombre ? buscarConfigPorKeyword(corregido) : null;
 };
+
+// Números del texto, con fracciones y mixtos: "1 1/2" es un solo número y "1/2" no es "1" ni "2".
+const REGEX_NUMERO = /\d+\s+\d+\/\d+|\d+\/\d+|\d+(?:[.,]\d+)?/g;
+
+const normalizarNumero = (n: string): string => n.replace(/\s+/g, ' ').replace(',', '.');
+
+const numerosDelTexto = (texto: string): Set<string> => {
+    // "TIPO 2" / "TP 1" es la categoría del producto, no una medida
+    const limpio = texto.replace(/\b(?:tipo|tp)\s*\d+\b/gi, ' ');
+    const numeros = new Set<string>();
+    for (const m of limpio.match(REGEX_NUMERO) || []) {
+        const n = normalizarNumero(m);
+        numeros.add(n);
+        // "2 1/2" también puede ser "2" seguido de "1/2" (ej: "TIPO 2 1/2 GL")
+        if (n.includes(' ')) n.split(' ').forEach(parte => numeros.add(parte));
+    }
+    return numeros;
+};
+
+// Opción hecha solo de número y unidad ('5/8"', '2.44 m'): se compara por el número, no por el texto
+const OPCION_NUMERICA = /^[\d\s./"'x-]+(?:MM|CM|M|KG|GL|W)?$/;
 
 /**
  * Intenta inferir la medida nominal de un producto basándose en su nombre
@@ -648,15 +827,28 @@ export const inferirMedidaNominal = (nombreComercial: string, medidaNominalActua
     if (!config) return medidaNominalActual;
     const grupoMedida = config.grupos.find(g => g.campo === 'medidaNominal');
     if (!grupoMedida) return medidaNominalActual;
-    // Extraer todos los números del nombre (ej: "cal 22" → ["22"], "2.44 m" → ["2","44"])
-    const nombresNums: string[] = nombreComercial.match(/\d+/g) || [];
-    if (nombresNums.length === 0) return grupoMedida.defaultValue || medidaNominalActual;
-    const opcionEncontrada = grupoMedida.opciones.find(op => {
-        const numsOpcion: string[] = op.match(/\d+/g) || [];
-        // Basta con que cualquier número del nombre aparezca en la opción
-        return numsOpcion.some(n => nombresNums.includes(n));
-    });
-    return opcionEncontrada || grupoMedida.defaultValue || medidaNominalActual;
+
+    const numerosNombre = numerosDelTexto(nombreComercial);
+    if (numerosNombre.size === 0) return grupoMedida.defaultValue || medidaNominalActual;
+
+    // Gana la opción con más coincidencias (1 1/2 pesa más que 1); si dos empatan no se adivina
+    let mejor: string | null = null;
+    let mejorPuntaje = 0;
+    let empate = false;
+    for (const op of grupoMedida.opciones) {
+        const sinNota = op.replace(/\s*[—(].*$/, '');
+        const numerosOpcion = new Set((sinNota.match(REGEX_NUMERO) || []).map(normalizarNumero));
+        let puntaje = 0;
+        numerosOpcion.forEach(n => { if (numerosNombre.has(n)) puntaje += n.length; });
+        if (puntaje > mejorPuntaje) {
+            mejor = op;
+            mejorPuntaje = puntaje;
+            empate = false;
+        } else if (puntaje > 0 && puntaje === mejorPuntaje) {
+            empate = true;
+        }
+    }
+    return (!empate && mejor) || grupoMedida.defaultValue || medidaNominalActual;
 };
 
 /**
@@ -672,25 +864,30 @@ export const inferirCaracteristica = (nombreComercial: string, caracteristicaAct
     if (!gruposCaracteristica.length) return caracteristicaActual;
     // Buscar con nombre corregido para capturar typos del OCR
     const nombreCorregido = corregirNombreOCR(nombreComercial);
-    const nombreUpper = nombreCorregido.toUpperCase();
+    const nombreUpper = quitarTildes(nombreCorregido.toUpperCase());
+    const numerosNombre = numerosDelTexto(nombreCorregido);
+    // Un valor por grupo: el que aparece en el nombre o, si no aparece, el valor por defecto del grupo
+    const partes: string[] = [];
     for (const grupo of gruposCaracteristica) {
         const opcionEncontrada = grupo.opciones.find(op => {
+            const opUpper = quitarTildes(op.toUpperCase());
             // Match exacto contra el texto completo de la opción
-            if (nombreUpper.includes(op.toUpperCase())) return true;
+            if (nombreUpper.includes(opUpper)) return true;
+            const nucleo = opUpper.replace(/\s*[—(].*$/, '').trim();
+            if (OPCION_NUMERICA.test(nucleo)) {
+                const numerosOpcion = (nucleo.match(REGEX_NUMERO) || []).map(normalizarNumero);
+                return numerosOpcion.length > 0 && numerosOpcion.every(n => numerosNombre.has(n));
+            }
             // Match por palabra clave: primera parte antes del paréntesis (ej: "VERDE" de "VERDE (nivel 3...)")
-            const keyword = op.replace(/\s*\(.*$/, '').trim().toUpperCase();
+            const keyword = opUpper.replace(/\s*\(.*$/, '').trim();
             if (keyword.length >= 3) {
-                return new RegExp(`\\b${keyword}\\b`).test(nombreUpper);
+                return new RegExp(`\\b${escaparRegex(keyword)}\\b`).test(nombreUpper);
             }
             return false;
         });
-        if (opcionEncontrada) return opcionEncontrada;
+        if (opcionEncontrada) partes.push(opcionEncontrada);
+        else if (grupo.defaultValue) partes.push(grupo.defaultValue);
     }
-    // Si ningún grupo tiene match en el nombre, combinar todos los defaultValue disponibles
-    const defaults = gruposCaracteristica
-        .filter(g => g.defaultValue)
-        .map(g => g.defaultValue!);
-    if (defaults.length > 0) return defaults.join(', ');
-    return caracteristicaActual;
+    return partes.length > 0 ? partes.join(', ') : caracteristicaActual;
 };
 

@@ -744,8 +744,9 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
   const saveEditModal = () => {
     if (editingIndex === null) return;
     const nc = (editValues.nombreComercial || editValues.nombre || '').trim();
-    const mn = (editValues.medidaNominal || '').replace(/\s*\(falta[^)]*\)/gi, '').trim();
-    const ca = (editValues.caracteristica || '').replace(/\s*\(falta[^)]*\)/gi, '').trim();
+    // Lo que el usuario dejó vacío se completa con la misma lógica que las listas de texto y de foto
+    const mn = inferirMedidaNominal(nc, (editValues.medidaNominal || '').replace(/\s*\(falta[^)]*\)/gi, '').trim());
+    const ca = inferirCaracteristica(nc, (editValues.caracteristica || '').replace(/\s*\(falta[^)]*\)/gi, '').trim());
     let ncFinal = nc;
     const tipoCorr = (editValues.tipoCorredera || '').trim();
     if (tipoCorr && nc.toLowerCase().includes('corredera') && !nc.toUpperCase().includes(tipoCorr)) {
