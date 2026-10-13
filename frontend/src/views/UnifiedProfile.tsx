@@ -5,6 +5,7 @@ import { User, MapPin, Shield, LogOut, Edit2, Camera, Briefcase, Star, CheckCirc
 
 import { UserProfile, UserRole, PortfolioItem } from '../types';
 import { useApi } from '../hooks/useApi';
+import { ESPECIALIDADES } from '../config/especialidades';
 import { AddPortfolioItemModal } from '../components/AddPortfolioItemModal';
 import { PortfolioLightbox } from '../components/PortfolioLightbox';
 import { Crown, Sparkles } from 'lucide-react';
@@ -133,7 +134,7 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
     setShowStoreMap(true);
   };
 
-  const AVAILABLE_SPECIALTIES = ['Plomería', 'Eléctricos', 'Depósito', 'Pintura', 'Carpintería', 'Iluminación', 'Cerrajería', 'Gas', 'Estructural'];
+  const AVAILABLE_SPECIALTIES = ESPECIALIDADES;
 
   const handleSaveDescription = async () => {
     if (!profile) return;

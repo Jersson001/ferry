@@ -18,6 +18,7 @@ import {
   Hammer,
 } from 'lucide-react';
 import ferryLogo from '../assets/logo.svg';
+import { ESPECIALIDADES } from '../config/especialidades';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -31,6 +32,9 @@ interface Props {
 // ─── Helper: determina si el perfil está incompleto ───────────────────────────
 
 export function isProfileIncomplete(profile: UserProfile): boolean {
+  // Sin especialidad una ferretería no recibe solicitudes: se le pide aunque el perfil ya estuviera marcado como completo
+  if (profile.role === UserRole.STORE && !profile.specialties?.length) return true;
+
   // Si el backend ya marcó el perfil como completo, respetarlo
   if ((profile as any).isProfileComplete === true) return false;
 
@@ -54,6 +58,7 @@ export const CompleteProfileScreen: React.FC<Props> = ({ profile, onComplete }) 
   const [name,        setName]        = useState(profile.displayName && profile.displayName !== 'Usuario' && profile.displayName !== 'Mi Ferretería' && profile.displayName !== 'Mi Ferretera' ? profile.displayName : '');
   const [address,     setAddress]     = useState(profile.location?.address ?? '');
   const [description, setDescription] = useState(profile.description ?? '');
+  const [specialties, setSpecialties] = useState<string[]>(profile.specialties ?? []);
   const [loading,     setLoading]     = useState(false);
   const [error,   setError]   = useState<string | null>(null);
   const [done,    setDone]    = useState(false);
@@ -61,7 +66,11 @@ export const CompleteProfileScreen: React.FC<Props> = ({ profile, onComplete }) 
   // ── Validación ──
   const nameOk    = name.trim().length >= 3;
   const addressOk = isStore ? address.trim().length >= 5 : true;
-  const canSubmit = nameOk && addressOk && !loading;
+  const specialtiesOk = isStore ? specialties.length > 0 : true;
+  const canSubmit = nameOk && addressOk && specialtiesOk && !loading;
+
+  const toggleSpecialty = (spec: string) =>
+    setSpecialties(prev => (prev.includes(spec) ? prev.filter(s => s !== spec) : [...prev, spec]));
 
   const { updateUserProfile, logoutUser } = useApi();
 
@@ -83,6 +92,7 @@ export const CompleteProfileScreen: React.FC<Props> = ({ profile, onComplete }) 
           ...(profile.location ?? {}),
           address: address.trim(),
         };
+        patch['specialties'] = specialties;
       }
 
       // ── Actualizar via API REST ──
@@ -262,13 +272,45 @@ export const CompleteProfileScreen: React.FC<Props> = ({ profile, onComplete }) 
             </div>
           )}
 
+          {/* ── Especialidades (solo STORE) ── */}
+          {isStore && (
+            <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <p className="block text-xs font-bold text-slate-500 uppercase tracking-wide">
+                ¿En qué se especializa tu ferretería?
+              </p>
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Especialidades de la ferretería">
+                {ESPECIALIDADES.map(spec => {
+                  const activa = specialties.includes(spec);
+                  return (
+                    <button
+                      key={spec}
+                      type="button"
+                      onClick={() => toggleSpecialty(spec)}
+                      aria-pressed={activa}
+                      className={`px-3.5 py-2 rounded-full text-xs font-bold border-2 transition-all duration-200 ${
+                        activa
+                          ? 'bg-amber-50 border-amber-400 text-amber-700'
+                          : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                      }`}
+                    >
+                      {spec}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-slate-400 ml-1 leading-snug">
+                Elige al menos una. Es lo que ven los clientes y lo que te habilita para recibir solicitudes.
+              </p>
+            </div>
+          )}
+
           {/* ── Descripción (Bio) ── */}
           <div className="space-y-2">
             <label
               htmlFor="profile-bio"
               className="block text-xs font-bold text-slate-500 uppercase tracking-wide"
             >
-              Breve descripción o especialidad
+              {isStore ? 'Breve descripción (opcional)' : 'Breve descripción o especialidad'}
             </label>
             <div className="relative">
               <textarea
@@ -309,7 +351,7 @@ export const CompleteProfileScreen: React.FC<Props> = ({ profile, onComplete }) 
               </p>
               <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
                 {isStore
-                  ? 'Los contratistas verán tu nombre y dirección para enviarte solicitudes de cotización y calcular el envío.'
+                  ? 'Los contratistas verán tu nombre, dirección y especialidades para enviarte solicitudes de cotización y calcular el envío.'
                   : 'Las ferreterías lo usarán para personalizar tu cotización y confirmar el pedido.'}
               </p>
             </div>

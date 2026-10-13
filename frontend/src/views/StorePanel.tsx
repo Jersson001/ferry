@@ -910,7 +910,10 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
                   <Inbox className="w-4 h-4 text-ferry-600" /> Nuevas — Por Cotizar
                 </h3>
                 {storeCategory && (
-                  <p className="text-xs text-slate-400 mt-0.5">Categoría: <span className="font-semibold text-ferry-600">{storeCategory}</span></p>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {(profile?.specialties?.length ?? 0) > 1 ? 'Categorías' : 'Categoría'}:{' '}
+                    <span className="font-semibold text-ferry-600">{profile?.specialties?.join(', ')}</span>
+                  </p>
                 )}
               </div>
               <button
