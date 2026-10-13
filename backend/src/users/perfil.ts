@@ -7,6 +7,16 @@ export const ESPECIALIDADES = [
 const esTexto = (v: unknown): v is string => typeof v === 'string';
 const esNumero = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
+const sinTildes = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+
+// Categorías de ESPECIALIDADES que cubre una tienda. Tolera tildes y mayúsculas de datos guardados antes
+// de que existiera la validación.
+export function categoriasDeLaTienda(especialidades: unknown): string[] {
+  if (!Array.isArray(especialidades)) return [];
+  const propias = especialidades.filter(esTexto).map(sinTildes);
+  return ESPECIALIDADES.filter(e => propias.includes(sinTildes(e)));
+}
+
 // Lo que otra cuenta puede ver de un usuario cuando el pedido ya se pagó: contacto y presentación, nunca
 // la contraseña, los tokens ni la lista de precios privada.
 export function contactoPublico(usuario: any) {

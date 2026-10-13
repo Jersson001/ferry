@@ -4,7 +4,8 @@ import { Repository, DataSource } from 'typeorm';
 import { MaterialRequest, RequestStatus, PublicationType } from './entities/material-request.entity';
 import { Quote, QuoteStatus } from './entities/quote.entity';
 import { QuoteItem } from './entities/quote-item.entity';
-import { contactoPublico } from '../users/perfil';
+import { User } from '../users/user.entity';
+import { categoriasDeLaTienda, contactoPublico } from '../users/perfil';
 
 @Injectable()
 export class QuotesService {
@@ -65,7 +66,19 @@ export class QuotesService {
   // ==========================================
   // FERRETERÍA: VER SOLICITUDES
   // ==========================================
+  // Categorías de solicitud que la tienda tiene habilitadas. Sin especialidades no recibe ninguna.
+  private async categoriasDeLaTienda(storeId: string): Promise<string[]> {
+    const tienda = await this.dataSource.getRepository(User).findOne({
+      where: { uid: storeId },
+      select: ['uid', 'specialties'],
+    });
+    return categoriasDeLaTienda(tienda?.specialties);
+  }
+
   async getPendingRequests(storeId: string): Promise<MaterialRequest[]> {
+    const categorias = await this.categoriasDeLaTienda(storeId);
+    if (categorias.length === 0) return [];
+
     // 1. Obtener los IDs de las solicitudes que esta tienda ya cotizó
     const existingQuotes = await this.quoteRepository.find({
       where: { storeId },
@@ -73,10 +86,11 @@ export class QuotesService {
     });
     const quotedRequestIds = existingQuotes.map(q => q.requestId);
 
-    // 2. Retornar las solicitudes ABIERTAS que NO han sido cotizadas por la tienda.
+    // 2. Retornar las solicitudes ABIERTAS de sus categorías que NO han sido cotizadas por la tienda.
     // No se carga el usuario que pidió: la tienda no lo necesita y esa fila trae su contraseña y sus tokens.
     const query = this.requestRepository.createQueryBuilder('request')
-      .where('request.status = :status', { status: RequestStatus.OPEN });
+      .where('request.status = :status', { status: RequestStatus.OPEN })
+      .andWhere('request.category IN (:...categorias)', { categorias });
 
     if (quotedRequestIds.length > 0) {
       query.andWhere('request.id NOT IN (:...quotedRequestIds)', { quotedRequestIds });
@@ -86,6 +100,9 @@ export class QuotesService {
   }
 
   async getPendingRequestsCount(storeId: string): Promise<number> {
+    const categorias = await this.categoriasDeLaTienda(storeId);
+    if (categorias.length === 0) return 0;
+
     const existingQuotes = await this.quoteRepository.find({
       where: { storeId },
       select: ['requestId']
@@ -93,7 +110,8 @@ export class QuotesService {
     const quotedRequestIds = existingQuotes.map(q => q.requestId);
 
     const query = this.requestRepository.createQueryBuilder('request')
-      .where('request.status = :status', { status: RequestStatus.OPEN });
+      .where('request.status = :status', { status: RequestStatus.OPEN })
+      .andWhere('request.category IN (:...categorias)', { categorias });
 
     if (quotedRequestIds.length > 0) {
       query.andWhere('request.id NOT IN (:...quotedRequestIds)', { quotedRequestIds });
@@ -148,6 +166,12 @@ export class QuotesService {
     const request = await this.requestRepository.findOne({ where: { id: requestId } });
     if (!request) throw new NotFoundException('Solicitud no encontrada');
     if (request.status !== RequestStatus.OPEN) throw new ForbiddenException('La solicitud ya no está abierta');
+
+    // Solo cotiza quien tiene la categoría habilitada: la bandeja ya la filtra, pero la ruta se puede llamar directo
+    const categorias = await this.categoriasDeLaTienda(storeId);
+    if (!categorias.includes(request.category)) {
+      throw new ForbiddenException('Esta solicitud no es de tu especialidad');
+    }
 
     // 1. Calcular totales desde el servidor (INMUTABILIDAD FINANCIERA)
     let storeBaseTotal = 0;

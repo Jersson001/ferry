@@ -1,3 +1,4 @@
+import { ForbiddenException } from '@nestjs/common';
 import { QuotesService } from './quotes.service';
 import { QuoteStatus } from './entities/quote.entity';
 
@@ -30,10 +31,49 @@ const armar = (opciones: { especialidades?: unknown; solicitud?: any } = {}) => 
 };
 
 describe('Solicitudes que ve cada ferretería', () => {
+  it('solo las de su especialidad', async () => {
+    const { service, qbSolicitudes } = armar({ especialidades: ['Iluminación'] });
+    await service.getPendingRequests('tienda-1');
+    expect(qbSolicitudes.andWhere).toHaveBeenCalledWith('request.category IN (:...categorias)', { categorias: ['Iluminación'] });
+  });
+
+  it('varias especialidades, varias categorías', async () => {
+    const { service, qbSolicitudes } = armar({ especialidades: ['Plomería', 'Gas'] });
+    await service.getPendingRequests('tienda-1');
+    expect(qbSolicitudes.andWhere).toHaveBeenCalledWith('request.category IN (:...categorias)', { categorias: ['Plomería', 'Gas'] });
+  });
+
+  it('tolera tildes y mayúsculas guardadas por versiones anteriores', async () => {
+    const { service, qbSolicitudes } = armar({ especialidades: ['iluminacion'] });
+    await service.getPendingRequests('tienda-1');
+    expect(qbSolicitudes.andWhere).toHaveBeenCalledWith('request.category IN (:...categorias)', { categorias: ['Iluminación'] });
+  });
+
+  it.each([[undefined], [null], [[]], [['Inventada']]])('sin especialidad válida (%p) no ve nada y ni consulta', async (valor) => {
+    const { service, requestRepository } = armar({ especialidades: valor });
+    expect(await service.getPendingRequests('tienda-1')).toEqual([]);
+    expect(await service.getPendingRequestsCount('tienda-1')).toBe(0);
+    expect(requestRepository.createQueryBuilder).not.toHaveBeenCalled();
+  });
+
+  it('el contador del panel filtra igual que la bandeja', async () => {
+    const { service, qbSolicitudes } = armar({ especialidades: ['Iluminación'] });
+    await service.getPendingRequestsCount('tienda-1');
+    expect(qbSolicitudes.andWhere).toHaveBeenCalledWith('request.category IN (:...categorias)', { categorias: ['Iluminación'] });
+  });
+
   it('no carga los datos de quien pidió: la ferretería no los necesita ni debe recibirlos', async () => {
     const { service, qbSolicitudes } = armar({ especialidades: ['Iluminación'] });
     await service.getPendingRequests('tienda-1');
     expect(qbSolicitudes.leftJoinAndSelect).not.toHaveBeenCalled();
+  });
+
+  it('no puede cotizar una solicitud de otra categoría', async () => {
+    const { service } = armar({
+      especialidades: ['Iluminación'],
+      solicitud: { id: 'r1', status: 'OPEN', category: 'Depósito' },
+    });
+    await expect(service.createQuote('tienda-1', 'r1', { items: [] })).rejects.toThrow(ForbiddenException);
   });
 });
 

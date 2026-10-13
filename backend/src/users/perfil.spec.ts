@@ -1,4 +1,4 @@
-import { contactoPublico, perfilPropio } from './perfil';
+import { categoriasDeLaTienda, contactoPublico, perfilPropio } from './perfil';
 
 const SECRETOS = ['password', 'emailVerificationToken', 'resetPasswordToken', 'resetPasswordExpiry', 'priceMemory', 'portfolio'];
 
@@ -24,6 +24,16 @@ const usuarioCompleto = {
   priceMemory: { cemento: 1 },
   portfolio: [{ url: 'x' }],
 };
+
+describe('categoriasDeLaTienda', () => {
+  it('devuelve las categorías en su forma canónica', () => {
+    expect(categoriasDeLaTienda(['iluminacion', 'GAS'])).toEqual(['Iluminación', 'Gas']);
+  });
+
+  it.each([[undefined], [null], ['Gas'], [42], [[]], [['Inventada', 7]]])('%p no habilita ninguna', valor => {
+    expect(categoriasDeLaTienda(valor)).toEqual([]);
+  });
+});
 
 describe('contactoPublico', () => {
   it('deja el contacto y quita contraseña, tokens y precios', () => {

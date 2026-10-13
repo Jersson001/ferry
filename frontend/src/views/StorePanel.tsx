@@ -968,7 +968,7 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
                 </div>
                 <p className="font-bold text-slate-600 text-sm">Sin solicitudes por ahora</p>
                 <p className="text-xs text-slate-400 mt-1.5 max-w-[220px] mx-auto leading-relaxed">
-                  Aún no hay solicitudes de cotización en tu zona. ¡Mantente atento!
+                  Aún no hay solicitudes de {profile?.specialties?.join(', ') || 'tu categoría'}. Solo ves las de las categorías que tienes activas. ¡Mantente atento!
                 </p>
                 <button
                   onClick={loadInbox}
