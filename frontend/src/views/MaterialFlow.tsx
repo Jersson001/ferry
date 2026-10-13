@@ -778,14 +778,27 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
     setEditingIndex(null);
   };
 
-  const handleAddNewItem = () => {
+  const openNewItemForm = (currentItems: MaterialItem[]) => {
     const newItem = { name: '', quantity: '1', unit: 'und', nombreComercial: '', medidaNominal: '', caracteristica: '' };
-    setItems(prev => [...prev, newItem]);
-    setEditingIndex(items.length);
+    setItems([...currentItems, newItem]);
+    setEditingIndex(currentItems.length);
     setEditValues({
       cantidad: '1', unidad: 'und', nombreComercial: '', medidaNominal: '', caracteristica: '',
       nombre: '', tipoCorredera: '', tipoSoporte: '', observacion: ''
     });
+  };
+
+  const handleAddNewItem = () => openNewItemForm(items);
+
+  // Un ítem nuevo sin nombre se descarta al cerrar el formulario, para no dejar filas vacías en rojo.
+  const closeEditModal = () => {
+    if (editingIndex !== null) {
+      const abierto = items[editingIndex];
+      if (abierto && !(abierto.nombreComercial || abierto.name || '').trim()) {
+        setItems(prev => prev.filter((_, i) => i !== editingIndex));
+      }
+    }
+    setEditingIndex(null);
   };
 
   /**
@@ -1173,7 +1186,7 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
           </div>
 
           <div className="mt-4">
-            <Card onClick={() => { setItems([]); setMode('EDITING'); }} className="flex items-center justify-center p-4 border-2 border-dashed border-slate-200 hover:border-slate-400 bg-white cursor-pointer">
+            <Card onClick={() => { openNewItemForm([]); setMode('EDITING'); }} className="flex items-center justify-center p-4 border-2 border-dashed border-slate-200 hover:border-slate-400 bg-white cursor-pointer">
               <Plus className="w-5 h-5 text-slate-400 mr-2" />
               <span className="font-semibold text-slate-700">Crear Manualmente</span>
             </Card>
@@ -1473,7 +1486,7 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
             );
           })}
           {items.length === 0 && (
-            <p className="text-center text-slate-400 py-10">Agrega ítems para comenzar</p>
+            <p className="text-center text-slate-400 py-10">Toca el + de arriba para agregar tu primer ítem</p>
           )}
         </div>
 
@@ -1626,11 +1639,13 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
 
         {/* === MODAL DE EDICIÓN DE PRODUCTO === */}
         {editingIndex !== null && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center" onClick={() => setEditingIndex(null)}>
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center" onClick={closeEditModal}>
             <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-md max-h-[85vh] overflow-y-auto p-5" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-bold text-lg text-slate-800">Editar Producto</h3>
-                <button onClick={() => setEditingIndex(null)} className="p-1 hover:bg-slate-100 rounded-full">
+                <h3 className="font-bold text-lg text-slate-800">
+                  {(items[editingIndex]?.nombreComercial || items[editingIndex]?.name) ? 'Editar Producto' : 'Agregar producto'}
+                </h3>
+                <button onClick={closeEditModal} className="p-1 hover:bg-slate-100 rounded-full">
                   <CloseIcon className="w-5 h-5 text-slate-400" />
                 </button>
               </div>
@@ -1654,12 +1669,13 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
                 })()}
                 onChange={(e) => setEditValues({ ...editValues, nombreComercial: e.target.value })}
                 className="w-full p-2.5 bg-slate-50 rounded-lg border border-slate-200 text-sm font-semibold text-slate-800 mt-1 mb-4 outline-none focus:ring-2 focus:ring-ferry-500"
-                placeholder="Ej: BISAGRA PARCHE"
+                placeholder="Ej: Cemento gris, Varilla 1/2, Bisagra parche"
+                autoFocus={!(editValues.nombreComercial || editValues.nombre)}
               />
 
               {/* Botones */}
               <div className="flex gap-3 mb-4">
-                <button onClick={() => setEditingIndex(null)} className="flex-1 py-2.5 bg-slate-200 hover:bg-slate-300 rounded-xl font-bold text-sm text-slate-600 transition-colors">
+                <button onClick={closeEditModal} className="flex-1 py-2.5 bg-slate-200 hover:bg-slate-300 rounded-xl font-bold text-sm text-slate-600 transition-colors">
                   Cancelar
                 </button>
                 <button onClick={saveEditModal} className="flex-1 py-2.5 bg-green-500 hover:bg-green-600 rounded-xl font-bold text-sm text-white transition-colors">
