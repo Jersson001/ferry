@@ -1,7 +1,7 @@
 import { Controller, Put, Body, UseGuards, Request } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/jwt.guard';
-import { sanitizarPerfil } from './perfil';
+import { sanitizarPerfil, perfilPropio } from './perfil';
 
 @Controller('users')
 export class UsersController {
@@ -18,6 +18,6 @@ export class UsersController {
       isProfileComplete: profileComplete ?? true
     };
 
-    return this.usersService.update(req.user.uid, finalUpdates);
+    return perfilPropio(await this.usersService.update(req.user.uid, finalUpdates));
   }
 }

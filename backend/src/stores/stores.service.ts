@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { CatalogProduct } from './entities/catalog-product.entity';
 import { UsersService } from '../users/users.service';
-import { sanitizarPerfil } from '../users/perfil';
+import { sanitizarPerfil, perfilPropio } from '../users/perfil';
 
 @Injectable()
 export class StoresService {
@@ -121,8 +121,8 @@ export class StoresService {
       safeData.isProfileComplete = profileData.isProfileComplete;
     }
     if (Object.keys(safeData).length === 0) {
-      return this.usersService.findOne(storeId);
+      return perfilPropio(await this.usersService.findOne(storeId));
     }
-    return this.usersService.update(storeId, safeData);
+    return perfilPropio(await this.usersService.update(storeId, safeData));
   }
 }

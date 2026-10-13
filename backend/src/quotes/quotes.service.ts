@@ -4,6 +4,7 @@ import { Repository, DataSource } from 'typeorm';
 import { MaterialRequest, RequestStatus, PublicationType } from './entities/material-request.entity';
 import { Quote, QuoteStatus } from './entities/quote.entity';
 import { QuoteItem } from './entities/quote-item.entity';
+import { contactoPublico } from '../users/perfil';
 
 @Injectable()
 export class QuotesService {
@@ -72,9 +73,9 @@ export class QuotesService {
     });
     const quotedRequestIds = existingQuotes.map(q => q.requestId);
 
-    // 2. Retornar las solicitudes ABIERTAS que NO han sido cotizadas por la tienda
+    // 2. Retornar las solicitudes ABIERTAS que NO han sido cotizadas por la tienda.
+    // No se carga el usuario que pidió: la tienda no lo necesita y esa fila trae su contraseña y sus tokens.
     const query = this.requestRepository.createQueryBuilder('request')
-      .leftJoinAndSelect('request.user', 'user')
       .where('request.status = :status', { status: RequestStatus.OPEN });
 
     if (quotedRequestIds.length > 0) {
@@ -114,8 +115,14 @@ export class QuotesService {
 
       const isPaidOrLater = [QuoteStatus.PAID, QuoteStatus.PREPARING, QuoteStatus.SHIPPED, QuoteStatus.DELIVERED].includes(q.status);
 
+      // La solicitud trae al cliente completo (correo, contraseña, tokens): solo se expone nombre y teléfono, y
+      // únicamente cuando ya pagó. La tienda tampoco necesita que se le devuelva su propio usuario.
+      const { request, store: _tienda, ...cotizacion } = q;
+      const { user: _cliente, ...solicitud } = (request ?? {}) as MaterialRequest;
+
       return {
-        ...q,
+        ...cotizacion,
+        request: request ? solicitud : undefined,
         status: mappedStatus,
         total: q.clientFinalTotal,
         storeTotal: q.storeBaseTotal + (q.transportCost || 0),
@@ -220,6 +227,8 @@ export class QuotesService {
 
       const mappedQuote = {
         ...quote,
+        // Solo contacto y presentación de la tienda: la fila completa trae su contraseña y su lista de precios
+        store: contactoPublico(quote.store),
         status: mappedStatus,
         total: quote.clientFinalTotal,
         storeName: quote.store?.displayName || quote.store?.email || 'Tienda',
