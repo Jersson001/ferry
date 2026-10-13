@@ -40,7 +40,7 @@ Vistas principales: `HomeView`, `MaterialFlow` (lista de materiales), `UserQuote
 
 ### Otros
 
-- `app/` en la raíz del repositorio: módulo Android (Kotlin + Gradle), independiente del monolito web.
+- App Android (`com.ferryapp.sas`), en `Ferry 2.0/app`, **fuera de este repositorio**: vive en la carpeta que contiene a `ferry/` y no está bajo ningún git. Ver la sección *App Android*.
 - `ferry/docker-compose.yml`: Postgres y el backend en contenedores, para desarrollo local.
 - `ferry/render.yaml`: blueprint de Render, de referencia.
 - `ferry/deploy/nginx/`: proxy HTTPS preparado para el VPS, hoy sin uso.
@@ -157,6 +157,19 @@ Pendiente: renombrar el proyecto y borrar el viejo `ferry-001`, enlazado a un re
 | Supabase | 500 MB, se pausa tras 1 semana sin uso | Pro, desde $25/mes |
 
 Con usuarios reales, lo mínimo razonable es Render Starter: unos $7 al mes.
+
+---
+
+## App Android
+
+`Ferry 2.0/app` (Kotlin + Gradle, `com.ferryapp.sas`) es un envoltorio: un `WebView` a pantalla completa que carga **`https://www.ferryapp.co`**. No tiene lógica propia. Cualquier cambio en la web se ve en la app sin publicar una versión nueva; solo hace falta un `.aab` nuevo si cambia el propio envoltorio.
+
+- **Versión actual: 1.4 (`versionCode` 5).** Cada subida a Play exige un `versionCode` mayor que el anterior.
+- **Compilar:** desde `Ferry 2.0`, `./gradlew :app:bundleRelease`. Sale en `app/build/outputs/bundle/release/app-release.aab`, **sin firmar**: el `build.gradle.kts` no tiene `signingConfig`.
+- **Firmar:** en Android Studio, *Build → Generate Signed App Bundle*, con el keystore `FerryKey.jks` de la raíz. La contraseña no está en ningún archivo del proyecto y no debe estarlo.
+- **No está bajo control de versiones.** El único repositorio es `ferry/`. Quien clone `Jersson001/ferry` no recibe la app. Si se versiona, el `FerryKey.jks`, `local.properties` y `node_modules` deben quedar fuera.
+- La carpeta `app/src/main/assets/` guarda una copia vieja de la web compilada que **no se usa**: el `WebView` carga la URL, no esos archivos.
+- Limitación conocida: el `WebView` usa un `WebChromeClient` básico, sin selector de archivos, así que el botón de subir foto de la lista puede no abrir la cámara ni la galería dentro de la app. Sin verificar en un celular.
 
 ---
 
