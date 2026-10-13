@@ -207,18 +207,6 @@ const App: React.FC = () => {
     { id: 'p2', storeId: 'store1', name: 'Tubo PVC Sanitario 4"', price: 42000, stock: 12, category: 'Plomería', description: 'Tubería certificada.', image: 'https://images.unsplash.com/photo-1596489397631-5079a491e7c5?auto=format&fit=crop&q=80&w=200', lat: 4.6584, lng: -74.0936 }
   ]);
 
-  const [stores] = useState<UserProfile[]>([
-    { uid: 'store1', displayName: 'Ferretería El Tornillo',   role: UserRole.STORE, createdAt: new Date(), location: { lat: 4.6097, lng: -74.0817, address: 'Centro, Bogotá' },         specialties: ['Depósito'] },
-    { uid: 'store2', displayName: 'Mundo Fontanero',          role: UserRole.STORE, createdAt: new Date(), location: { lat: 4.6584, lng: -74.0936, address: 'Chapinero, Bogotá' },      specialties: ['Plomería'] },
-    { uid: 'store3', displayName: 'Eléctricos del Norte',     role: UserRole.STORE, createdAt: new Date(), location: { lat: 4.7110, lng: -74.0721, address: 'Suba, Bogotá' },           specialties: ['Eléctricos'] },
-    { uid: 'store4', displayName: 'Luminaria & Diseño',       role: UserRole.STORE, createdAt: new Date(), location: { lat: 4.7485, lng: -74.0452, address: 'Usaquén, Bogotá' },        specialties: ['Iluminación'] },
-    { uid: 'store5', displayName: 'Carpintería La Madera',    role: UserRole.STORE, createdAt: new Date(), location: { lat: 4.6800, lng: -74.1100, address: 'Fontibón, Bogotá' },       specialties: ['Carpintería'] },
-    { uid: 'store6', displayName: 'Aceros Estructurales SAS', role: UserRole.STORE, createdAt: new Date(), location: { lat: 4.6300, lng: -74.1300, address: 'Puente Aranda, Bogotá' },  specialties: ['Estructural'] },
-    { uid: 'store7', displayName: 'Cerrajería Bogotá',        role: UserRole.STORE, createdAt: new Date(), location: { lat: 4.6450, lng: -74.0600, address: 'La Candelaria, Bogotá' },  specialties: ['Cerrajería'] },
-    { uid: 'store8', displayName: 'Pinturas y Color SAS',     role: UserRole.STORE, createdAt: new Date(), location: { lat: 4.6700, lng: -74.0850, address: 'Teusaquillo, Bogotá' },    specialties: ['Pintura'] },
-    { uid: 'store9', displayName: 'Gas & Redes Industriales', role: UserRole.STORE, createdAt: new Date(), location: { lat: 4.6950, lng: -74.1050, address: 'Engativá, Bogotá' },       specialties: ['Gas'] },
-  ]);
-
   const activeRequest = requests.find(r => r.id === activeRequestId);
   const ongoingRequest = requests.find(r => r.status === RequestStatus.PENDING_QUOTES || r.status === RequestStatus.QUOTED || r.status === RequestStatus.PAID);
   const currentUserRole = currentUserProfile?.role || UserRole.USER;
@@ -533,7 +521,6 @@ const App: React.FC = () => {
                   userName={currentUserProfile?.displayName || 'Usuario'}
                   ongoingRequest={ongoingRequest}
                   products={products}
-                  stores={stores}
                   onNavigate={(view) => setCurrentView(view)}
                   onOpenRequest={(id) => { setActiveRequestId(id); setCurrentView('SHOP'); }}
                   userLocation={userLocation || currentUserProfile?.location || null}
@@ -555,7 +542,6 @@ const App: React.FC = () => {
                   onRejectQuote={handleRejectQuote}
                   onBack={() => { setActiveRequestId(null); setCurrentView('HOME'); }}
                   onFinishOrder={handleFinishOrder}
-                  stores={stores}
                   userLocation={currentUserProfile?.location}
                   isGuest={isGuest}
                   onNeedsAuth={() => setShowAuthGate(true)}

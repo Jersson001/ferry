@@ -12,6 +12,12 @@ interface RequestWithUser extends Request {
 export class StoresController {
   constructor(private storesService: StoresService) {}
 
+  @Get('me/rating')
+  async getMyRating(@Req() req: RequestWithUser) {
+    if (req.user.role !== 'STORE') throw new ForbiddenException('Solo tiendas');
+    return this.storesService.getStoreRating(req.user.uid);
+  }
+
   @Get('catalog/prices')
   async getPrices(@Req() req: RequestWithUser) {
     if (req.user.role !== 'STORE') throw new ForbiddenException('Solo tiendas');

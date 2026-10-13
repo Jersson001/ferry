@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { StoresController } from './stores.controller';
+import { TopStoresController } from './top-stores.controller';
 import { StoresService } from './stores.service';
 import { CatalogController } from './catalog.controller';
 import { CatalogProduct } from './entities/catalog-product.entity';
@@ -13,7 +14,7 @@ import { StorageModule } from '../storage/storage.module';
     UsersModule,
     StorageModule,
   ],
-  controllers: [StoresController, CatalogController],
+  controllers: [StoresController, TopStoresController, CatalogController],
   providers: [StoresService],
   exports: [StoresService],
 })

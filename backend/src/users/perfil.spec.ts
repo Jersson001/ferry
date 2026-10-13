@@ -1,4 +1,5 @@
 import { categoriasDeLaTienda, contactoPublico, perfilPropio } from './perfil';
+import { StoresService } from '../stores/stores.service';
 
 const SECRETOS = ['password', 'emailVerificationToken', 'resetPasswordToken', 'resetPasswordExpiry', 'priceMemory', 'portfolio'];
 
@@ -53,5 +54,24 @@ describe('perfilPropio', () => {
     const propio = perfilPropio(usuarioCompleto) as Record<string, unknown>;
     expect(propio).toMatchObject({ uid: 'u1', email: 'a@b.com', role: 'STORE', specialties: ['Gas'], isProfileComplete: true });
     for (const secreto of SECRETOS) expect(propio).not.toHaveProperty(secreto);
+  });
+});
+
+describe('StoresService.getStoreRating', () => {
+  const armar = (fila: unknown) => {
+    const qb: any = {};
+    for (const m of ['select', 'addSelect', 'where', 'andWhere']) qb[m] = jest.fn(() => qb);
+    qb.getRawOne = jest.fn(async () => fila);
+    const dataSource: any = { getRepository: jest.fn(() => ({ createQueryBuilder: jest.fn(() => qb) })) };
+    return new StoresService({} as any, {} as any, dataSource);
+  };
+
+  it('devuelve el promedio redondeado y la cantidad de calificaciones', async () => {
+    expect(await armar({ average: '4.666666', reviews: '3' }).getStoreRating('t1')).toEqual({ rating: 4.7, reviews: 3 });
+  });
+
+  it('sin calificaciones devuelve null y no un 0 ni un número inventado', async () => {
+    expect(await armar({ average: null, reviews: '0' }).getStoreRating('t1')).toEqual({ rating: null, reviews: 0 });
+    expect(await armar(undefined).getStoreRating('t1')).toEqual({ rating: null, reviews: 0 });
   });
 });

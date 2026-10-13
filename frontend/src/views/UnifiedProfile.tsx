@@ -6,6 +6,7 @@ import { User, MapPin, Shield, LogOut, Edit2, Camera, Briefcase, Star, CheckCirc
 import { UserProfile, UserRole, PortfolioItem } from '../types';
 import { useApi } from '../hooks/useApi';
 import { ESPECIALIDADES } from '../config/especialidades';
+import { getMyStoreRating, StoreRating } from '../services/quoteService';
 import { AddPortfolioItemModal } from '../components/AddPortfolioItemModal';
 import { PortfolioLightbox } from '../components/PortfolioLightbox';
 import { Crown, Sparkles } from 'lucide-react';
@@ -41,6 +42,7 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
     !!(profile?.location?.lat != null && profile?.location?.lng != null && !isNaN(Number(profile.location.lat)) && !isNaN(Number(profile.location.lng)))
   );
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [myRating, setMyRating] = useState<StoreRating | null>(null);
   const [profileSaveStatus, setProfileSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [showBalance, setShowBalance] = useState(false);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
@@ -82,6 +84,13 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
       .then(sub => setSubscription(sub))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (profile?.role !== UserRole.STORE) return;
+    let cancelled = false;
+    getMyStoreRating().then(r => { if (!cancelled) setMyRating(r); });
+    return () => { cancelled = true; };
+  }, [profile?.role]);
 
   const handleSecuritySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -423,9 +432,16 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
             <Badge type={profile?.role === UserRole.STORE ? 'success' : 'info'}>
               {profile?.role === UserRole.STORE ? 'Ferretería Aliada' : 'Cliente Premium'}
             </Badge>
-            <div className="flex items-center gap-1 text-yellow-500 font-bold text-sm">
-              <Star className="w-4 h-4 fill-yellow-500" /> 4.9
-            </div>
+            {profile?.role === UserRole.STORE && myRating && (
+              myRating.rating !== null ? (
+                <div className="flex items-center gap-1 text-yellow-500 font-bold text-sm">
+                  <Star className="w-4 h-4 fill-yellow-500" /> {myRating.rating.toFixed(1)}
+                  <span className="text-xs font-normal text-slate-400">({myRating.reviews})</span>
+                </div>
+              ) : (
+                <span className="text-xs text-slate-400">Sin calificaciones aún</span>
+              )
+            )}
           </div>
         </div>
       </div>

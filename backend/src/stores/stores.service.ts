@@ -1,9 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, DataSource } from 'typeorm';
 import { CatalogProduct } from './entities/catalog-product.entity';
 import { UsersService } from '../users/users.service';
 import { sanitizarPerfil, perfilPropio } from '../users/perfil';
+import { Quote } from '../quotes/entities/quote.entity';
+import { ordenarTiendasPorCalificacion, TiendaTop, FilaCalificacion } from './top-stores';
 
 @Injectable()
 export class StoresService {
@@ -11,7 +13,28 @@ export class StoresService {
     @InjectRepository(CatalogProduct)
     private catalogRepository: Repository<CatalogProduct>,
     private usersService: UsersService,
+    private dataSource: DataSource,
   ) {}
+
+  // Ferreterías con calificaciones de clientes, de mejor a peor. Solo datos públicos de la tienda.
+  async getTopRatedStores(limite: number): Promise<TiendaTop[]> {
+    const filas = await this.dataSource
+      .getRepository(Quote)
+      .createQueryBuilder('q')
+      .innerJoin('q.store', 's')
+      .select('s.uid', 'id')
+      .addSelect('s.displayName', 'name')
+      .addSelect('s.photoURL', 'photoUrl')
+      .addSelect('s.specialties', 'specialties')
+      .addSelect('s.location', 'location')
+      .addSelect('AVG(q.rating)', 'average')
+      .addSelect('COUNT(q.rating)', 'reviews')
+      .where('q.rating BETWEEN 1 AND 5')
+      .andWhere('s.role = :role', { role: 'STORE' })
+      .groupBy('s.uid')
+      .getRawMany<FilaCalificacion>();
+    return ordenarTiendasPorCalificacion(filas, limite);
+  }
 
   async getPriceMemory(storeId: string): Promise<Record<string, any>> {
     const user = await this.usersService.findOne(storeId);
@@ -125,4 +148,20 @@ export class StoresService {
     }
     return perfilPropio(await this.usersService.update(storeId, safeData));
   }
+
+  // Calificación que los clientes le han dado a la tienda; null mientras nadie la haya calificado.
+  async getStoreRating(storeId: string): Promise<{ rating: number | null; reviews: number }> {
+    const fila = await this.dataSource
+      .getRepository(Quote)
+      .createQueryBuilder('q')
+      .select('AVG(q.rating)', 'average')
+      .addSelect('COUNT(q.rating)', 'reviews')
+      .where('q.storeId = :storeId', { storeId })
+      .andWhere('q.rating BETWEEN 1 AND 5')
+      .getRawOne<{ average: string | null; reviews: string }>();
+    const reviews = Number(fila?.reviews ?? 0);
+    const average = Number(fila?.average);
+    return { rating: reviews > 0 && Number.isFinite(average) ? Math.round(average * 10) / 10 : null, reviews };
+  }
 }
+

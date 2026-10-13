@@ -7,7 +7,6 @@ import { sendQuoteRequest } from '../services/quoteService';
 import { saveGuestCart, clearGuestCart, GuestCart } from '../hooks/useGuestCart';
 import { Button, Card, Badge, StarRating } from '../components/UIComponents';
 import { MessageSquareText, FileText } from 'lucide-react';
-import { UserProfile } from '../types';
 import { getConfigProducto, inferirMedidaNominal, inferirCaracteristica, corregirNombreOCR, MODULE_PRODUCTS } from '../config/herrajesConfig';
 import { usePlacesAutocomplete, PlacePick } from '../hooks/usePlacesAutocomplete';
 import { PlaceSuggestionsDropdown } from '../components/PlaceSuggestionsDropdown';
@@ -20,7 +19,6 @@ interface Props {
   onBack: () => void;
   onFinishOrder: (reqId: string, rating: number) => void;
   onNavigate?: (view: 'HOME' | 'SHOP' | 'HUB' | 'PROFILE' | 'QUOTES') => void;
-  stores?: UserProfile[];
   userLocation?: { lat: number; lng: number };
   // Guest mode
   isGuest?: boolean;

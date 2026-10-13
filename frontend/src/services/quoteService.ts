@@ -259,7 +259,45 @@ export const getStoreSentQuotes = async (): Promise<StoreSentQuote[]> => {
 
 export const getRecentPendingQuotes = async (_maxResults = 3): Promise<RecentPendingQuote[]> => {
   try {
-    return apiRequest<RecentPendingQuote[]>('/quotes/responses/received');
+    // Sin await, el rechazo se escapa del catch y aparece como error sin capturar (ej: invitados, sin sesión)
+    return await apiRequest<RecentPendingQuote[]>('/quotes/responses/received');
+  } catch {
+    return [];
+  }
+};
+
+// ─── Calificación de la propia tienda ────────────────────────────────────────
+
+export interface StoreRating {
+  rating: number | null;
+  reviews: number;
+}
+
+// null si no se pudo consultar; rating null si nadie ha calificado todavía
+export const getMyStoreRating = async (): Promise<StoreRating | null> => {
+  try {
+    return await apiRequest<StoreRating>('/stores/me/rating');
+  } catch {
+    return null;
+  }
+};
+
+// ─── Ferreterías mejor calificadas ───────────────────────────────────────────
+
+export interface TopStore {
+  id: string;
+  name: string;
+  photoUrl: string | null;
+  specialties: string[];
+  location: { lat: number; lng: number; address?: string } | null;
+  rating: number;
+  reviews: number;
+}
+
+// Público: también lo consultan los invitados. Si falla, la sección simplemente no se muestra.
+export const getTopRatedStores = async (limit = 50): Promise<TopStore[]> => {
+  try {
+    return await apiRequest<TopStore[]>(`/stores/top-rated?limit=${limit}`);
   } catch {
     return [];
   }

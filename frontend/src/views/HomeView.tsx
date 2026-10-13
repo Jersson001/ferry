@@ -1,41 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
-import { MaterialRequest, RequestStatus, Product, UserProfile } from '../types';
-import { Badge, Button, StarRating } from '../components/UIComponents';
+import { MaterialRequest, RequestStatus, Product } from '../types';
+import { Badge, Button } from '../components/UIComponents';
+import { TopStoresSection } from '../components/TopStoresSection';
 import { ShoppingBag, Briefcase, Store, TrendingUp, Percent, MapPin, FileText, Package, ChevronRight, UserCog, ArrowRight } from 'lucide-react';
 import { getRecentPendingQuotes, RecentPendingQuote } from '../services/quoteService';
-
-// Formato unificado de tienda para mostrar en UI
-type StoreDisplay = {
-  id: string;
-  name: string;
-  rating: number;
-  image: string;
-  category: string;
-  lat: number;
-  lng: number;
-  distance: number | null;
-};
-
-// Imágenes de respaldo para tiendas sin foto
-const STORE_IMAGES = [
-  'https://images.unsplash.com/photo-1581244277943-fe4a9c777189?auto=format&fit=crop&q=80&w=100',
-  'https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?auto=format&fit=crop&q=80&w=100',
-  'https://images.unsplash.com/photo-1534237710431-e2fc698436d0?auto=format&fit=crop&q=80&w=100',
-  'https://images.unsplash.com/photo-1565793298595-6a879b1d9492?auto=format&fit=crop&q=80&w=100',
-  'https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&q=80&w=100',
-  'https://images.unsplash.com/photo-1586864387967-d02ef85d93e8?auto=format&fit=crop&q=80&w=100',
-];
-
-// Fallback estático si no se pasa stores
-const TOP_STORES_STATIC: Omit<StoreDisplay, 'distance'>[] = [
-  { id: 's1', name: 'Ferretería El Tornillo',   rating: 4.8, image: STORE_IMAGES[0], category: 'Depósito',    lat: 4.6097, lng: -74.0817 },
-  { id: 's2', name: 'Mundo Fontanero',          rating: 4.9, image: STORE_IMAGES[1], category: 'Plomería',    lat: 4.6250, lng: -74.0650 },
-  { id: 's3', name: 'Eléctricos del Norte',     rating: 4.6, image: STORE_IMAGES[2], category: 'Eléctricos',  lat: 4.7110, lng: -74.0721 },
-  { id: 's4', name: 'Carpintería La Madera',    rating: 4.7, image: STORE_IMAGES[3], category: 'Carpintería', lat: 4.6800, lng: -74.1100 },
-  { id: 's5', name: 'Aceros Estructurales SAS', rating: 4.4, image: STORE_IMAGES[4], category: 'Estructural', lat: 4.6300, lng: -74.1300 },
-  { id: 's6', name: 'Pinturas y Color SAS',     rating: 4.5, image: STORE_IMAGES[5], category: 'Pintura',     lat: 4.6700, lng: -74.0850 },
-];
 
 const PROMO_PRODUCTS: Product[] = [
   {
@@ -57,17 +26,19 @@ const PROMO_PRODUCTS: Product[] = [
 // Notification feed hook
 // ---------------------------------------------------------------------------
 
-const useRecentQuotes = () => {
+const useRecentQuotes = (enabled: boolean) => {
   const [quotes, setQuotes] = useState<RecentPendingQuote[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
 
   useEffect(() => {
+    // Los invitados no tienen sesión: pedirlo solo devolvería un 401
+    if (!enabled) return;
     let cancelled = false;
     getRecentPendingQuotes(3)
       .then(data => { if (!cancelled) setQuotes(data); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [enabled]);
 
   return { quotes, loading };
 };
@@ -87,7 +58,6 @@ interface Props {
   userName: string;
   ongoingRequest?: MaterialRequest;
   products: Product[];
-  stores?: UserProfile[];
   onNavigate: (view: 'SHOP' | 'HUB' | 'QUOTES') => void;
   onOpenRequest: (reqId: string) => void;
   userLocation?: { lat: number; lng: number } | null;
@@ -97,43 +67,9 @@ interface Props {
 }
 
 export const HomeView: React.FC<Props> = ({
-  userName, ongoingRequest, products, stores, onNavigate, onOpenRequest, userLocation, calcularDistancia, isGuest = false, onRegister,
+  userName, ongoingRequest, products, onNavigate, onOpenRequest, userLocation, calcularDistancia, isGuest = false, onRegister,
 }) => {
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const { quotes: recentQuotes, loading: quotesLoading } = useRecentQuotes();
-
-  // --- Normalizar tiendas a formato unificado ---
-  const allStores: Omit<StoreDisplay, 'distance'>[] = stores?.length
-    ? stores
-        .filter(s => s.location?.lat != null && s.location?.lng != null)
-        .map((s, idx) => ({
-          id: s.uid,
-          name: s.displayName || 'Ferretería',
-          rating: 4.5,
-          image: s.photoURL || STORE_IMAGES[idx % STORE_IMAGES.length],
-          category: s.specialties?.[0] || 'General',
-          lat: s.location!.lat,
-          lng: s.location!.lng,
-        }))
-    : TOP_STORES_STATIC;
-
-  // Categorías únicas para los filtros pill
-  const categories = ['Todos', ...Array.from(new Set(allStores.map(s => s.category)))];
-
-  // Calcular distancia y aplicar filtros (radio 50km + categoría)
-  const displayStores: StoreDisplay[] = allStores
-    .map(store => {
-      const distance =
-        userLocation && calcularDistancia
-          ? calcularDistancia(userLocation.lat, userLocation.lng, store.lat, store.lng)
-          : null;
-      return { ...store, distance };
-    })
-    .filter(store => {
-      if (userLocation && calcularDistancia && store.distance !== null && store.distance > 50) return false;
-      if (selectedCategory && store.category !== selectedCategory) return false;
-      return true;
-    });
+  const { quotes: recentQuotes, loading: quotesLoading } = useRecentQuotes(!isGuest);
 
   // --- Productos con filtro de distancia ---
   const allProducts = [...PROMO_PRODUCTS, ...products.slice(0, 2)];
@@ -297,64 +233,8 @@ export const HomeView: React.FC<Props> = ({
         </div>
       )}
 
-      {/* Tiendas Cercanas con filtro de categoría */}
-      <div>
-        <div className="flex justify-between items-end mb-3 px-1">
-          <h3 className="font-bold text-slate-800 flex items-center gap-2">
-            <Store className="w-4 h-4 text-ferry-600" /> Tiendas Top
-          </h3>
-          <span className="text-xs text-ferry-600 font-semibold cursor-pointer">Ver todas</span>
-        </div>
-
-        {/* Filtros de categoría */}
-        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-3">
-          {categories.map(cat => (
-            <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat === 'Todos' ? null : cat)}
-              className={`whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-bold transition-all border ${
-                (cat === 'Todos' && !selectedCategory) || cat === selectedCategory
-                  ? 'bg-ferry-600 border-ferry-600 text-white shadow-sm shadow-ferry-200'
-                  : 'bg-white border-slate-200 text-slate-500 hover:border-ferry-300'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
-
-        {/* Lista de tiendas */}
-        {displayStores.length === 0 ? (
-          <div className="text-center py-8 text-slate-400 text-sm bg-slate-50 rounded-xl">
-            <MapPin className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-            No hay tiendas de <strong>{selectedCategory}</strong> en un radio de 50 km
-          </div>
-        ) : (
-          <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">
-            {displayStores.map(store => (
-              <div key={store.id} className="min-w-[140px] bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex flex-col items-center text-center">
-                <div className="w-12 h-12 rounded-full bg-slate-100 mb-2 overflow-hidden">
-                  <img src={store.image} alt={store.name} className="w-full h-full object-cover" />
-                </div>
-                <h4 className="font-bold text-xs text-slate-800 mb-1 line-clamp-1">{store.name}</h4>
-                <div className="flex items-center gap-1 mb-1">
-                  <span className="text-[10px] font-bold text-slate-600">{store.rating}</span>
-                  <div className="flex text-yellow-400 text-[8px]"><StarRating rating={5} /></div>
-                </div>
-                <span className="text-[10px] text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full">{store.category}</span>
-                {store.distance !== null && (
-                  <div className="flex items-center gap-0.5 mt-1.5 text-[9px] text-ferry-600 font-semibold">
-                    <MapPin className="w-2.5 h-2.5" />
-                    {store.distance < 1
-                      ? `${(store.distance * 1000).toFixed(0)} m`
-                      : `a ${store.distance.toFixed(1)} km`}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Mejor calificadas: calificaciones reales de clientes; sin datos, la sección no se muestra */}
+      <TopStoresSection userLocation={userLocation} calcularDistancia={calcularDistancia} />
 
       {/* Ofertas Flash */}
       <div>
