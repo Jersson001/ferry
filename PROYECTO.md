@@ -40,7 +40,7 @@ Vistas principales: `HomeView`, `MaterialFlow` (lista de materiales), `UserQuote
 
 ### Otros
 
-- App Android (`com.ferryapp.sas`), en `Ferry 2.0/app`, **fuera de este repositorio**: vive en la carpeta que contiene a `ferry/` y no está bajo ningún git. Ver la sección *App Android*.
+- App Android (`com.ferryapp.sas`), en `Ferry 2.0/app`, **fuera de este repositorio**: vive en la carpeta que contiene a `ferry/` y tiene su propio git, con remoto privado `Jersson001/Ferry-Android`. Ver la sección *App Android*.
 - `ferry/docker-compose.yml`: Postgres y el backend en contenedores, para desarrollo local.
 - `ferry/render.yaml`: blueprint de Render, de referencia.
 - `ferry/deploy/nginx/`: proxy HTTPS preparado para el VPS, hoy sin uso.
@@ -164,10 +164,10 @@ Con usuarios reales, lo mínimo razonable es Render Starter: unos $7 al mes.
 
 `Ferry 2.0/app` (Kotlin + Gradle, `com.ferryapp.sas`) es un envoltorio: un `WebView` a pantalla completa que carga **`https://www.ferryapp.co`**. No tiene lógica propia. Cualquier cambio en la web se ve en la app sin publicar una versión nueva; solo hace falta un `.aab` nuevo si cambia el propio envoltorio.
 
-- **Versión actual: 1.5 (`versionCode` 6).** Cada subida a Play exige un `versionCode` mayor que el anterior. La 1.3 cargaba el VPS muerto; la 1.4 apuntó al dominio actual pero nunca llegó a Play (se subió sin firmar); la 1.5 agrega el selector de archivos.
-- **Compilar:** desde `Ferry 2.0`, `./gradlew :app:bundleRelease`. Sale en `app/build/outputs/bundle/release/app-release.aab`, **sin firmar**: el `build.gradle.kts` no tiene `signingConfig`.
-- **Firmar:** en Android Studio, *Build → Generate Signed App Bundle*, con el keystore `FerryKey.jks` de la raíz. La contraseña no está en ningún archivo del proyecto y no debe estarlo.
-- **No está bajo control de versiones.** El único repositorio es `ferry/`. Quien clone `Jersson001/ferry` no recibe la app. Si se versiona, el `FerryKey.jks`, `local.properties` y `node_modules` deben quedar fuera.
+- **Versión actual: 1.6 (`versionCode` 7), firmada y lista para subir a Play (2026-10-14).** En Play, la pista de pruebas tenía la 1.4 (`versionCode` 5), que cargaba el VPS muerto y abría en blanco: los testers deben actualizar a la 1.6. (Historial: cada subida a Play exige un `versionCode` mayor que el anterior. Las versiones hasta la 1.4 cargaban el VPS muerto y abrían en blanco; la 1.5 apunta a `https://www.ferryapp.co` y agrega el selector de archivos, pero nunca se subió porque salió sin firmar; la 1.6 es la 1.5 con la firma configurada.)
+- **Compilar:** desde `Ferry 2.0`, `./gradlew :app:bundleRelease`. Si existe `keystore.properties` (fuera de git; plantilla en `keystore.properties.example`) el `build.gradle.kts` firma con esa clave; sin él sale **sin firmar** y Play lo rechaza.
+- **Firmar:** con `keystore.properties`, o en Android Studio, *Build → Generate Signed App Bundle*, con el keystore `FerryKey.jks` de la raíz (alias `key0`; Studio recuerda las contraseñas). Las contraseñas no están en ningún archivo versionado y no deben estarlo. **Guardar copia de `FerryKey.jks` fuera del equipo**: no está en el repositorio. El `.aab` 1.6 se verificó: firmado con `Ferry app 001`, carga `https://www.ferryapp.co`, sin rastro del VPS.
+- **Control de versiones:** la app tiene su propio git en `Ferry 2.0/` (commits `c2b8ab3` y `4a1b64d`), con remoto **privado** `https://github.com/Jersson001/Ferry-Android.git`. Quien clone `Jersson001/ferry` no recibe la app. Quedan fuera del repositorio `FerryKey.jks`, `keystore.properties`, `local.properties`, `node_modules`, `ferry/` y los `.aab`.
 - La carpeta `app/src/main/assets/` guarda una copia vieja de la web compilada que **no se usa**: el `WebView` carga la URL, no esos archivos.
 - **Selector de archivos (desde la 1.5).** `MainActivity.kt` implementa `onShowFileChooser`: abre el selector del sistema y, si la página acepta imágenes, ofrece también la cámara. La foto se guarda en un archivo temporal de `cacheDir/images` (se borran los de más de un día) y se entrega por un `FileProvider` declarado en el manifiesto, con su ruta en `res/xml/file_paths.xml`. **No se declara el permiso `CAMERA`**: con él, Android exigiría pedirlo en tiempo de ejecución y Play filtraría dispositivos sin cámara. Si algún día se declara, hay que pedir el permiso. Sin esto, "Sube tu Lista" y "Adjuntar foto" no hacen nada dentro de la app. **Sin probar en un celular**: el equipo no tiene emulador.
 
@@ -263,14 +263,14 @@ Ferry **no** usa Cloud Vision: el análisis de fotos va por Gemini (`analyzeImag
 
 ## Bitácora de cambios
 
-### Rango de cobertura, topes de cotizaciones, autocompletado y avisos push — 2026-10-13 (sin desplegar)
+### Rango de cobertura, topes de cotizaciones, autocompletado y avisos push — 2026-10-13 (desplegado)
 
 - **Rango estilo "Tinder":** el cliente fija hasta dónde quiere cotizaciones con un deslizador (2 a 50 km, por defecto 10) y ve cuántas ferreterías alcanza (`GET /stores/coverage`, público, devuelve solo el número). La solicitud guarda `radioKm`; la bandeja de la ferretería solo muestra las que la alcanzan, con su distancia. Una ferretería o una obra sin coordenadas no se excluye: la distancia no se puede medir y se prefiere una cotización de más a una tienda sin servicio (`quotes/ubicacion.ts`).
 - **Ubicación de la obra:** antes no se guardaba, porque el frontend mandaba `userLocation` y el backend leía `userLat/userLng`. Ahora se aceptan ambos formatos y se validan los rangos.
 - **Coordenadas de la ferretería:** el registro usa el autocompletado de Google (como el flujo de solicitud) y guarda lat/lng al elegir una sugerencia. Las ferreterías anteriores no tienen coordenadas hasta que editen la dirección.
 - **Topes:** cada solicitud recibe como máximo 5 cotizaciones, gana quien responde primero (transacción con bloqueo de la solicitud) y la bandeja oculta las llenas. Una ferretería sin plan de pago envía máximo 5 cotizaciones por día (el día cambia a medianoche de Colombia, `quotes/cupos.ts`); con plan de pago activo no hay tope. No se puede cotizar dos veces la misma solicitud y se rechazan precios o cantidades negativas o no numéricas. Mientras no estén definidos los planes, todos usan los topes gratuitos.
 - **Autocompletado de precio y SKU:** al cotizar, el precio y el SKU se rellenan solos si la ferretería ya cotizó o tiene en su catálogo el mismo producto. Sin IA: el nombre debe coincidir (ignora tildes, mayúsculas, signos y orden de palabras); un precio equivocado es peor que un campo vacío. El campo queda marcado para que lo revise (`config/memoriaPrecios.ts`).
-- **Avisos push (gratis, Web Push):** al crearse una solicitud se avisa a las ferreterías de la categoría dentro del radio que activaron los avisos (`push/`). Necesita `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y `VAPID_SUBJECT` en Render; sin ellas queda apagado. **Funciona en navegador y app web instalada, no dentro del WebView de la app Android**: ahí haría falta Firebase Cloud Messaging con un proyecto de Firebase y cambios en la app nativa.
+- **Avisos push (gratis, Web Push):** al crearse una solicitud se avisa a las ferreterías de la categoría dentro del radio que activaron los avisos (`push/`). Desplegado en el commit `8c250ef9`, con `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y `VAPID_SUBJECT` ya puestas en Render; sin ellas quedaría apagado. Ninguna ferretería está suscrita todavía: hace falta que active los avisos en su bandeja. **Funciona en navegador y app web instalada, no dentro del WebView de la app Android**: ahí haría falta Firebase Cloud Messaging con un proyecto de Firebase y cambios en la app nativa.
 
 ### Especialidad en el registro de la ferretería y cierre de un hueco de seguridad — 2026-10-13
 
