@@ -1,0 +1,21 @@
+name: Mantener activo
+
+# Supabase (plan gratuito) pausa el proyecto tras ~7 días sin actividad y el backend deja de poder iniciar sesión.
+# Esta tarea consulta la base cada 3 días a través del backend. De paso despierta a Render, que también duerme.
+on:
+  schedule:
+    - cron: '17 12 */3 * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Consultar el backend (toca la base de datos)
+        run: |
+          # --retry cubre el arranque en frío de Render (30-60 s). /stores/top-rated hace una consulta real a Postgres.
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 120 --retry 4 --retry-delay 15 --retry-all-errors \
+            'https://ferry-jogo.onrender.com/stores/top-rated?limit=1')
+          echo "Respuesta del backend: $code"
+          test "$code" = "200"
