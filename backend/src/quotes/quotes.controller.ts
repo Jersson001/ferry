@@ -77,6 +77,19 @@ export class QuotesController {
     return this.quotesService.updateQuoteStatus(id, status, req.user.uid, isStore, rating, comment);
   }
 
+  // Solo la tienda dueña del pedido responde, y una sola vez por opinión
+  @Post(':id/review-reply')
+  async replyToReview(@Param('id') id: string, @Body('text') text: string, @Req() req: RequestWithUser) {
+    if (req.user.role !== 'STORE') throw new ForbiddenException('Solo tiendas');
+    return this.quotesService.responderOpinion(id, req.user.uid, text);
+  }
+
+  @Post(':id/review-hidden')
+  async hideReview(@Param('id') id: string, @Body('hidden') hidden: boolean, @Req() req: RequestWithUser) {
+    if (req.user.role !== 'ADMIN') throw new ForbiddenException('Solo administradores');
+    return this.quotesService.ocultarOpinion(id, hidden !== false);
+  }
+
   // ==========================================
   // FERRETERÍA
   // ==========================================

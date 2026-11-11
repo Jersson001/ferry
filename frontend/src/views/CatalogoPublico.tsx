@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Package, Search, Store, ArrowRight } from 'lucide-react';
+import { OpinionesPublicas } from '../components/OpinionesDeTienda';
 import { getCatalogoPublico, CatalogoPublicoData } from '../services/catalogShareService';
 
 const pesos = (n: number) => `$${n.toLocaleString('es-CO')}`;
@@ -124,6 +125,8 @@ export const CatalogoPublico: React.FC<{ storeId: string }> = ({ storeId }) => {
               ))}
             </div>
           )}
+
+          <OpinionesPublicas storeId={storeId} />
         </div>
 
         <div className="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur border-t border-slate-100 p-3">

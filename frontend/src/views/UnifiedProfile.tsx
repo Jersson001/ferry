@@ -7,6 +7,7 @@ import { UserProfile, UserRole, PortfolioItem } from '../types';
 import { useApi } from '../hooks/useApi';
 import { ESPECIALIDADES } from '../config/especialidades';
 import { getMyStoreRating, StoreRating } from '../services/quoteService';
+import { MisOpiniones } from '../components/OpinionesDeTienda';
 import { AddPortfolioItemModal } from '../components/AddPortfolioItemModal';
 import { PortfolioLightbox } from '../components/PortfolioLightbox';
 import { Crown, Sparkles } from 'lucide-react';
@@ -445,6 +446,8 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
           </div>
         </div>
       </div>
+
+      {profile?.role === UserRole.STORE && <MisOpiniones />}
 
       {/* Tabs Switcher */}
       <div className="flex p-1 bg-slate-100 rounded-xl mx-2">

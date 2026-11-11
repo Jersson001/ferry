@@ -1,5 +1,6 @@
-import { Controller, Get, Header, Param, Query } from '@nestjs/common';
+import { Controller, Get, Header, NotFoundException, Param, Query } from '@nestjs/common';
 import { StoresService } from './stores.service';
+import { esIdValido } from './catalogo-publico';
 import { leerUbicacion, leerRadioKm } from '../quotes/ubicacion';
 
 // Público a propósito: la pantalla de inicio también la ven los invitados, y solo expone datos
@@ -20,6 +21,14 @@ export class TopStoresController {
   async getPromotions(@Query('limit') limit?: string) {
     const cantidad = Math.min(Math.max(parseInt(limit ?? '', 10) || 30, 1), 100);
     return this.storesService.getPromociones(cantidad);
+  }
+
+  @Get(':id/reviews')
+  @Header('Cache-Control', 'public, max-age=30')
+  async getReviews(@Param('id') id: string, @Query('limit') limit?: string) {
+    if (!esIdValido(id)) throw new NotFoundException('Ferretería no encontrada');
+    const cantidad = Math.min(Math.max(parseInt(limit ?? '', 10) || 10, 1), 50);
+    return this.storesService.getOpiniones(id, cantidad);
   }
 
   @Get(':id/public-catalog')

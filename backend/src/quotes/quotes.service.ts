@@ -7,6 +7,7 @@ import { QuoteItem } from './entities/quote-item.entity';
 import { User } from '../users/user.entity';
 import { categoriasDeLaTienda, contactoPublico } from '../users/perfil';
 import { UserSubscription, SubscriptionStatus } from '../subscriptions/entities/user-subscription.entity';
+import { limpiarTexto } from '../stores/opiniones';
 import { PushService } from '../push/push.service';
 import { leerUbicacion, leerRadioKm, estaEnRadio, distanciaKm, Punto } from './ubicacion';
 import { COTIZACIONES_POR_SOLICITUD, COTIZACIONES_DIARIAS_GRATIS, inicioDelDiaColombia, itemsDeCotizacionValidos } from './cupos';
@@ -507,9 +508,33 @@ export class QuotesService {
     if (status === QuoteStatus.DELIVERED && !isStore) {
       const calificacionValida = Number.isInteger(rating) && rating! >= 1 && rating! <= 5;
       quote.rating = calificacionValida ? rating! : null;
-      quote.reviewComment = (typeof comment === 'string' && comment.trim() !== '') ? comment : null;
+      quote.reviewComment = limpiarTexto(comment);
+      quote.reviewedAt = calificacionValida ? new Date() : null;
     }
 
     return this.quoteRepository.save(quote);
+  }
+
+  // La tienda responde una vez a la opinión de un cliente. No puede editarla ni borrarla.
+  async responderOpinion(quoteId: string, storeId: string, texto: unknown): Promise<{ reply: string }> {
+    const quote = await this.quoteRepository.findOne({ where: { id: quoteId } });
+    if (!quote || quote.storeId !== storeId) throw new NotFoundException('Opinión no encontrada');
+    if (quote.rating == null) throw new BadRequestException('Este pedido aún no tiene calificación');
+    if (quote.reviewReply) throw new ConflictException('Ya respondiste esta opinión');
+    const reply = limpiarTexto(texto);
+    if (!reply) throw new BadRequestException('Escribe tu respuesta');
+    quote.reviewReply = reply;
+    quote.reviewRepliedAt = new Date();
+    await this.quoteRepository.save(quote);
+    return { reply };
+  }
+
+  // Solo el administrador: oculta (o vuelve a mostrar) una opinión abusiva.
+  async ocultarOpinion(quoteId: string, oculta: boolean): Promise<{ hidden: boolean }> {
+    const quote = await this.quoteRepository.findOne({ where: { id: quoteId } });
+    if (!quote || quote.rating == null) throw new NotFoundException('Opinión no encontrada');
+    quote.reviewHidden = oculta;
+    await this.quoteRepository.save(quote);
+    return { hidden: oculta };
   }
 }

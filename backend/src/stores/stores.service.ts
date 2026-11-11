@@ -8,6 +8,7 @@ import { Quote } from '../quotes/entities/quote.entity';
 import { contarTiendasQueCubren } from './cobertura';
 import { Punto } from '../quotes/ubicacion';
 import { User } from '../users/user.entity';
+import { armarOpiniones, Opinion } from './opiniones';
 import { armarCatalogoPublico, esIdValido, ProductoPublico } from './catalogo-publico';
 import { armarPromociones, FilaPromocion, Promocion } from './promociones';
 import { ordenarTiendasPorCalificacion, TiendaTop, FilaCalificacion } from './top-stores';
@@ -35,6 +36,7 @@ export class StoresService {
       .addSelect('AVG(q.rating)', 'average')
       .addSelect('COUNT(q.rating)', 'reviews')
       .where('q.rating BETWEEN 1 AND 5')
+      .andWhere('q.reviewHidden = false')
       .andWhere('s.role = :role', { role: 'STORE' })
       .groupBy('s.uid')
       .getRawMany<FilaCalificacion>();
@@ -211,6 +213,31 @@ export class StoresService {
     return perfilPropio(await this.usersService.update(storeId, safeData));
   }
 
+  // Opiniones visibles de una tienda, de la más reciente a la más antigua. `propias` agrega el id para responder.
+  async getOpiniones(storeId: string, limite: number, propias = false): Promise<{ rating: number | null; reviews: number; items: Opinion[] }> {
+    const filas = await this.dataSource
+      .getRepository(Quote)
+      .createQueryBuilder('q')
+      .innerJoin('q.request', 'r')
+      .innerJoin('r.user', 'u')
+      .select('q.id', 'id')
+      .addSelect('q.rating', 'rating')
+      .addSelect('q.reviewComment', 'reviewComment')
+      .addSelect('q.reviewReply', 'reviewReply')
+      .addSelect('q.reviewedAt', 'reviewedAt')
+      .addSelect('q.reviewRepliedAt', 'reviewRepliedAt')
+      .addSelect('u.displayName', 'authorName')
+      .where('q.storeId = :storeId', { storeId })
+      .andWhere('q.rating BETWEEN 1 AND 5')
+      .andWhere('q.reviewHidden = false')
+      .orderBy('q.reviewedAt', 'DESC', 'NULLS LAST')
+      .addOrderBy('q.createdAt', 'DESC')
+      .limit(limite)
+      .getRawMany();
+    const resumen = await this.getStoreRating(storeId);
+    return { ...resumen, items: armarOpiniones(filas, propias) };
+  }
+
   // Calificación que los clientes le han dado a la tienda; null mientras nadie la haya calificado.
   async getStoreRating(storeId: string): Promise<{ rating: number | null; reviews: number }> {
     const fila = await this.dataSource
@@ -220,6 +247,7 @@ export class StoresService {
       .addSelect('COUNT(q.rating)', 'reviews')
       .where('q.storeId = :storeId', { storeId })
       .andWhere('q.rating BETWEEN 1 AND 5')
+      .andWhere('q.reviewHidden = false')
       .getRawOne<{ average: string | null; reviews: string }>();
     const reviews = Number(fila?.reviews ?? 0);
     const average = Number(fila?.average);

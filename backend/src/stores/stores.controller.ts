@@ -18,6 +18,13 @@ export class StoresController {
     return this.storesService.getStoreRating(req.user.uid);
   }
 
+  // Las opiniones de la propia tienda, con el id necesario para responderlas
+  @Get('me/reviews')
+  async getMyReviews(@Req() req: RequestWithUser) {
+    if (req.user.role !== 'STORE') throw new ForbiddenException('Solo tiendas');
+    return this.storesService.getOpiniones(req.user.uid, 50, true);
+  }
+
   @Get('catalog/prices')
   async getPrices(@Req() req: RequestWithUser) {
     if (req.user.role !== 'STORE') throw new ForbiddenException('Solo tiendas');

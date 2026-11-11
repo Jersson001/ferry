@@ -65,6 +65,21 @@ export class Quote {
   @Column({ type: 'text', nullable: true })
   reviewComment?: string | null;
 
+  // Cuándo calificó el cliente, para ordenar las opiniones
+  @Column({ type: 'timestamp', nullable: true })
+  reviewedAt?: Date | null;
+
+  // Respuesta de la tienda a la opinión (una sola; no puede borrar ni editar la opinión)
+  @Column({ type: 'text', nullable: true })
+  reviewReply?: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  reviewRepliedAt?: Date | null;
+
+  // Oculta por el administrador ante un abuso evidente; deja de contar en el promedio
+  @Column({ type: 'boolean', default: false })
+  reviewHidden: boolean;
+
   // Fecha en que la tienda marcó el pedido como enviado (para el cron de 72h)
   @Column({ type: 'timestamp', nullable: true })
   shippedAt?: Date;

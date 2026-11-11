@@ -304,6 +304,48 @@ export const getTopRatedStores = async (limit = 50): Promise<TopStore[]> => {
   }
 };
 
+// ─── Opiniones de las ferreterías ────────────────────────────────────────────
+
+export interface Opinion {
+  id?: string;
+  rating: number;
+  comment: string;
+  author: string;
+  date: string | null;
+  reply: string | null;
+  repliedAt: string | null;
+}
+
+export interface ResumenOpiniones {
+  rating: number | null;
+  reviews: number;
+  items: Opinion[];
+}
+
+// Público: lo ve quien abre el catálogo por QR. Si falla, la sección simplemente no se muestra.
+export const getOpiniones = async (storeId: string, limit = 10): Promise<ResumenOpiniones | null> => {
+  try {
+    return await apiRequest<ResumenOpiniones>(`/stores/${encodeURIComponent(storeId)}/reviews?limit=${limit}`);
+  } catch {
+    return null;
+  }
+};
+
+export const getMisOpiniones = async (): Promise<ResumenOpiniones | null> => {
+  try {
+    return await apiRequest<ResumenOpiniones>('/stores/me/reviews');
+  } catch {
+    return null;
+  }
+};
+
+export const responderOpinion = async (quoteId: string, text: string): Promise<void> => {
+  await apiRequest(`/quotes/${encodeURIComponent(quoteId)}/review-reply`, {
+    method: 'POST',
+    body: JSON.stringify({ text }),
+  });
+};
+
 // ─── Promociones de las ferreterías ──────────────────────────────────────────
 
 export interface Promocion {
