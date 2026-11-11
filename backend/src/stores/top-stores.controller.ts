@@ -15,6 +15,13 @@ export class TopStoresController {
     return this.storesService.getTopRatedStores(cantidad);
   }
 
+  @Get('promotions')
+  @Header('Cache-Control', 'public, max-age=60')
+  async getPromotions(@Query('limit') limit?: string) {
+    const cantidad = Math.min(Math.max(parseInt(limit ?? '', 10) || 30, 1), 100);
+    return this.storesService.getPromociones(cantidad);
+  }
+
   // Cuántas ferreterías cubren una obra: alimenta el deslizador de rango del cliente.
   @Get('coverage')
   @Header('Cache-Control', 'public, max-age=30')

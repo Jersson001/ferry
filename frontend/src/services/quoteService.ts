@@ -304,6 +304,32 @@ export const getTopRatedStores = async (limit = 50): Promise<TopStore[]> => {
   }
 };
 
+// ─── Promociones de las ferreterías ──────────────────────────────────────────
+
+export interface Promocion {
+  id: string;
+  name: string;
+  price: number;
+  discountPercent: number;
+  finalPrice: number;
+  category: string;
+  image: string | null;
+  storeId: string;
+  storeName: string;
+  storePhoto: string | null;
+  specialties: string[];
+  location: { lat: number; lng: number; address?: string } | null;
+}
+
+// Público: también lo ven los invitados. Si falla, la sección simplemente no se muestra.
+export const getPromociones = async (limit = 50): Promise<Promocion[]> => {
+  try {
+    return await apiRequest<Promocion[]>(`/stores/promotions?limit=${limit}`);
+  } catch {
+    return [];
+  }
+};
+
 // ─── Quote Actions ────────────────────────────────────────────────────────────
 
 export const acceptQuote = async (quoteId: string, requestId: string, createSplit: boolean = false): Promise<AcceptQuoteResult> => {

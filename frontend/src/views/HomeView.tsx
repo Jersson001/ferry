@@ -1,26 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
-import { MaterialRequest, RequestStatus, Product } from '../types';
-import { Badge, Button } from '../components/UIComponents';
+import { MaterialRequest, RequestStatus } from '../types';
 import { TopStoresSection } from '../components/TopStoresSection';
-import { ShoppingBag, Briefcase, Store, TrendingUp, Percent, MapPin, FileText, Package, ChevronRight, UserCog, ArrowRight } from 'lucide-react';
+import { PromocionesSection } from '../components/PromocionesSection';
+import { ShoppingBag, Briefcase, Store, TrendingUp, FileText, Package, ChevronRight, UserCog, ArrowRight } from 'lucide-react';
 import { getRecentPendingQuotes, RecentPendingQuote } from '../services/quoteService';
-
-const PROMO_PRODUCTS: Product[] = [
-  {
-    id: 'promo1', storeId: 's1', name: 'Kit Herrajes Gabinete', price: 45000, stock: 20,
-    category: 'Carpintería', description: 'Juego completo de bisagras y manijas.',
-    image: 'https://images.unsplash.com/photo-1610557892470-55d9e80c0bce?auto=format&fit=crop&q=80&w=200',
-    lat: 4.6097, lng: -74.0817,
-  },
-  {
-    id: 'promo2', storeId: 's2', name: 'Taladro 20V + Set', price: 180000, stock: 5,
-    category: 'Herramientas', description: 'Potente taladro inalámbrico.',
-    image: 'https://images.unsplash.com/photo-1504148455328-c376907d081c?auto=format&fit=crop&q=80&w=200',
-    lat: 4.6250, lng: -74.0650,
-  },
-];
-
 
 // ---------------------------------------------------------------------------
 // Notification feed hook
@@ -57,7 +41,6 @@ const buildNotificationMessage = (q: RecentPendingQuote, idx: number): string =>
 interface Props {
   userName: string;
   ongoingRequest?: MaterialRequest;
-  products: Product[];
   onNavigate: (view: 'SHOP' | 'HUB' | 'QUOTES') => void;
   onOpenRequest: (reqId: string) => void;
   userLocation?: { lat: number; lng: number } | null;
@@ -67,24 +50,9 @@ interface Props {
 }
 
 export const HomeView: React.FC<Props> = ({
-  userName, ongoingRequest, products, onNavigate, onOpenRequest, userLocation, calcularDistancia, isGuest = false, onRegister,
+  userName, ongoingRequest, onNavigate, onOpenRequest, userLocation, calcularDistancia, isGuest = false, onRegister,
 }) => {
   const { quotes: recentQuotes, loading: quotesLoading } = useRecentQuotes(!isGuest);
-
-  // --- Productos con filtro de distancia ---
-  const allProducts = [...PROMO_PRODUCTS, ...products.slice(0, 2)];
-  const displayProducts = allProducts
-    .map(product => {
-      const distance =
-        userLocation && calcularDistancia && product.lat != null && product.lng != null
-          ? calcularDistancia(userLocation.lat, userLocation.lng, product.lat, product.lng)
-          : null;
-      return { ...product, distance };
-    })
-    .filter(product => {
-      if (!userLocation || !calcularDistancia || product.lat == null || product.lng == null) return true;
-      return product.distance !== null && product.distance <= 50;
-    });
 
   return (
     <div className="space-y-6 pb-20">
@@ -236,43 +204,8 @@ export const HomeView: React.FC<Props> = ({
       {/* Mejor calificadas: calificaciones reales de clientes; sin datos, la sección no se muestra */}
       <TopStoresSection userLocation={userLocation} calcularDistancia={calcularDistancia} />
 
-      {/* Ofertas Flash */}
-      <div>
-        <div className="flex items-center gap-2 mb-3 px-1">
-          <h3 className="font-bold text-slate-800 flex items-center gap-2">
-            <Percent className="w-4 h-4 text-ferry-600" /> Ofertas Flash
-          </h3>
-          <Badge type="warning">Herrajes</Badge>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          {displayProducts.map((product, idx) => (
-            <div key={idx} className="bg-white rounded-xl border border-slate-100 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-              <div className="h-28 bg-slate-100 relative">
-                <img src={product.image} className="w-full h-full object-cover" alt={product.name} />
-                <div className="absolute top-2 left-2 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-sm">
-                  -{(idx + 2) * 10}%
-                </div>
-                {product.distance !== null && (
-                  <div className="absolute top-2 right-2 bg-white/90 backdrop-blur-sm text-slate-500 text-[10px] font-medium px-1.5 py-0.5 rounded-md shadow-sm flex items-center gap-0.5">
-                    <MapPin className="w-2.5 h-2.5 text-ferry-500" />
-                    {product.distance < 1 ? `${(product.distance * 1000).toFixed(0)} m` : `${product.distance.toFixed(1)} km`}
-                  </div>
-                )}
-              </div>
-              <div className="p-3">
-                <h4 className="font-bold text-xs text-slate-700 line-clamp-2 mb-1">{product.name}</h4>
-                <div className="flex items-end gap-2">
-                  <span className="font-bold text-ferry-600">${product.price.toLocaleString()}</span>
-                  <span className="text-[10px] text-slate-400 line-through decoration-red-400">${(product.price * 1.2).toLocaleString()}</span>
-                </div>
-                <Button variant="outline" className="w-full mt-2 !py-1 !px-2 !text-xs h-7">
-                  Agregar
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* Promociones que publican las ferreterías, filtradas por su especialidad */}
+      <PromocionesSection userLocation={userLocation} calcularDistancia={calcularDistancia} />
     </div>
   );
 };

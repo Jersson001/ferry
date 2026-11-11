@@ -520,7 +520,6 @@ const App: React.FC = () => {
                 {currentView === 'HOME' && <HomeView
                   userName={currentUserProfile?.displayName || 'Usuario'}
                   ongoingRequest={ongoingRequest}
-                  products={products}
                   onNavigate={(view) => setCurrentView(view)}
                   onOpenRequest={(id) => { setActiveRequestId(id); setCurrentView('SHOP'); }}
                   userLocation={userLocation || currentUserProfile?.location || null}

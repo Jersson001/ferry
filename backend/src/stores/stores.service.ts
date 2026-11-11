@@ -8,6 +8,7 @@ import { Quote } from '../quotes/entities/quote.entity';
 import { contarTiendasQueCubren } from './cobertura';
 import { Punto } from '../quotes/ubicacion';
 import { User } from '../users/user.entity';
+import { armarPromociones, FilaPromocion, Promocion } from './promociones';
 import { ordenarTiendasPorCalificacion, TiendaTop, FilaCalificacion } from './top-stores';
 
 @Injectable()
@@ -37,6 +38,34 @@ export class StoresService {
       .groupBy('s.uid')
       .getRawMany<FilaCalificacion>();
     return ordenarTiendasPorCalificacion(filas, limite);
+  }
+
+  // Productos que las ferreterías marcaron "en oferta" en su catálogo, con la especialidad de la tienda
+  // para poder filtrarlos. Solo datos públicos del producto y de la tienda.
+  async getPromociones(limite: number): Promise<Promocion[]> {
+    const filas = await this.catalogRepository
+      .createQueryBuilder('p')
+      .innerJoin('p.store', 's')
+      .select('p.id', 'id')
+      .addSelect('p.name', 'name')
+      .addSelect('p.price', 'price')
+      .addSelect('p.discountPercent', 'discountPercent')
+      .addSelect('p.stock', 'stock')
+      .addSelect('p.category', 'category')
+      .addSelect('p.imageUrl', 'imageUrl')
+      .addSelect('s.uid', 'storeId')
+      .addSelect('s.displayName', 'storeName')
+      .addSelect('s.photoURL', 'storePhoto')
+      .addSelect('s.specialties', 'specialties')
+      .addSelect('s.location', 'location')
+      .where('p.isOnOffer = true')
+      .andWhere('p.discountPercent BETWEEN 1 AND 99')
+      .andWhere('p.stock > 0')
+      .andWhere('s.role = :role', { role: 'STORE' })
+      .orderBy('p.createdAt', 'DESC')
+      .limit(limite * 3)
+      .getRawMany<FilaPromocion>();
+    return armarPromociones(filas, limite);
   }
 
   // Ferreterías que recibirían una solicitud con esta categoría y este radio: solo el número, nunca quiénes son.
