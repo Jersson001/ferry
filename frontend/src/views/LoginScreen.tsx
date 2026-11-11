@@ -7,6 +7,7 @@
  *   Paso 2 → Formulario email + contraseña (login o registro)
  */
 
+import { BotonGoogle } from '../components/BotonGoogle';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   ArrowLeft,
@@ -489,6 +490,11 @@ export const LoginScreen: React.FC<Props> = ({ onLogin, onGuestLogin, preselecte
               '🚀 Crear cuenta gratis'
             )}
           </button>
+
+          {/* Entrar con Google: une la cuenta si el correo ya existe */}
+          {selectedRole && (
+            <BotonGoogle role={selectedRole} onSuccess={r => onLogin(r.role)} onError={setError} />
+          )}
 
           {/* Link de recuperación de contraseña (solo en modo login) */}
           {isLogin && onForgotPassword && (

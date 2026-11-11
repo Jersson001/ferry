@@ -15,6 +15,7 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
+import { verificarTokenDeGoogle } from './google';
 
 @Injectable()
 export class AuthService {
@@ -87,6 +88,43 @@ export class AuthService {
       access_token: token,
       user: this.safeUser(user),
     };
+  }
+
+  // ── Entrar con Google ────────────────────────────────────────────────────────
+  // Si el correo ya tiene cuenta en Ferry, se une a ella (Google confirma que el correo es de quien entra);
+  // si no, se crea una cuenta nueva con el rol elegido. Nunca se crea un ADMIN por esta vía.
+  async loginWithGoogle(credential: unknown, roleCrudo: unknown) {
+    const datos = await verificarTokenDeGoogle(credential);
+    if (!datos) throw new UnauthorizedException('No pudimos verificar tu cuenta de Google. Intenta de nuevo.');
+
+    const existente = await this.usersService.findOneByEmail(datos.email);
+    if (existente) {
+      if (existente.googleId && existente.googleId !== datos.sub) {
+        throw new UnauthorizedException('Este correo está vinculado a otra cuenta de Google.');
+      }
+      const cambios: Record<string, any> = {};
+      if (!existente.googleId) cambios.googleId = datos.sub;
+      if (!existente.isEmailVerified) {
+        cambios.isEmailVerified = true;
+        cambios.emailVerificationToken = null;
+      }
+      if (!existente.photoURL && datos.picture) cambios.photoURL = datos.picture;
+      const user = Object.keys(cambios).length
+        ? ((await this.usersService.update(existente.uid, cambios)) ?? existente)
+        : existente;
+      return { access_token: this.signToken(user.uid, user.email!, user.role), user: this.safeUser(user), isNew: false };
+    }
+
+    const role = roleCrudo === 'STORE' ? 'STORE' : 'USER';
+    const user = await this.usersService.create({
+      email: datos.email,
+      displayName: datos.name || (role === 'STORE' ? 'Mi Ferretería' : 'Usuario'),
+      role,
+      isEmailVerified: true,
+      googleId: datos.sub,
+      photoURL: datos.picture ?? undefined,
+    });
+    return { access_token: this.signToken(user.uid, user.email!, user.role), user: this.safeUser(user), isNew: true };
   }
 
   // ── Verificar email ───────────────────────────────────────────────────────────

@@ -23,6 +23,10 @@ export class User {
   @Column({ type: 'text', nullable: true })
   photoURL?: string;
 
+  // Identificador de la cuenta de Google vinculada (inicio de sesión con Google)
+  @Column({ type: 'varchar', nullable: true })
+  googleId?: string | null;
+
   @Column({ type: 'jsonb', nullable: true })
   portfolio?: any[];
 

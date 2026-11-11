@@ -44,6 +44,25 @@ export async function signInWithEmail(email: string, password: string): Promise<
   return { role: mapRole(data.user.role), isNew: false };
 }
 
+export async function signInWithGoogle(credential: string, role: 'USER' | 'STORE'): Promise<AuthResult> {
+  const response = await fetch(`${API_URL}/auth/google`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ credential, role }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.message || 'No se pudo entrar con Google.');
+  }
+
+  const data = await response.json();
+  localStorage.setItem('access_token', data.access_token);
+  localStorage.setItem('user', JSON.stringify(data.user));
+
+  return { role: mapRole(data.user.role), isNew: Boolean(data.isNew) };
+}
+
 export async function registerWithEmail(email: string, password: string, role: string, displayName?: string): Promise<AuthResult> {
   const response = await fetch(`${API_URL}/auth/register`, {
     method: 'POST',

@@ -24,6 +24,12 @@ export class AuthController {
     return this.authService.login(dto);
   }
 
+  // ── POST /auth/google ──────────────────────────────────────────────────────
+  @Post('google')
+  async google(@Body('credential') credential: string, @Body('role') role?: string) {
+    return this.authService.loginWithGoogle(credential, role);
+  }
+
   // ── GET /auth/me  (requiere JWT válido) ────────────────────────────────────
   @UseGuards(JwtAuthGuard)
   @Get('me')
