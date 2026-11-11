@@ -31,11 +31,11 @@ export function perfilPropio(usuario: any) {
   if (!usuario) return usuario;
   const {
     uid, email, displayName, role, phoneNumber, isEmailVerified, isProfileComplete,
-    location, description, specialties, photoURL, rut, families, createdAt,
+    location, description, specialties, photoURL, rut, rutVerificacion, families, createdAt,
   } = usuario;
   return {
     uid, email, displayName, role, phoneNumber, isEmailVerified, isProfileComplete,
-    location, description, specialties, photoURL, rut, families, createdAt,
+    location, description, specialties, photoURL, rut, rutVerificacion, families, createdAt,
   };
 }
 

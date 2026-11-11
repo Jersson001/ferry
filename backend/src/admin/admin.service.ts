@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource, MoreThanOrEqual } from 'typeorm';
 import { UsersService } from '../users/users.service';
+import { VerificadorRutService, camposDeRut } from '../users/verificador-rut.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { User } from '../users/user.entity';
 import { MaterialRequest } from '../quotes/entities/material-request.entity';
@@ -16,6 +17,7 @@ export class AdminService {
     private readonly usersService: UsersService,
     private readonly subscriptionsService: SubscriptionsService,
     private readonly dataSource: DataSource,
+    private readonly verificadorRut: VerificadorRutService,
   ) {}
 
   async getUsersWithSubscriptions() {
@@ -30,6 +32,8 @@ export class AdminService {
         role: u.role,
         isEmailVerified: u.isEmailVerified,
         createdAt: u.createdAt,
+        rut: u.rut ?? null,
+        rutVerificacion: u.rutVerificacion ?? null,
         subscription: sub ? {
           status: sub.status,
           creditsBalance: sub.creditsBalance,
@@ -45,6 +49,28 @@ export class AdminService {
       });
     }
     return result;
+  }
+
+  // Vuelve a verificar el RUT de un usuario aunque no haya cambiado (p. ej. tras renovar su matrícula).
+  async verificarRutDe(userId: string) {
+    const usuario = await this.usersService.findOne(userId);
+    if (!usuario?.rut) return { uid: userId, rut: null, rutVerificacion: null };
+    const campos = await camposDeRut(usuario.rut, null, this.verificadorRut);
+    await this.usersService.update(userId, campos);
+    return { uid: userId, ...campos };
+  }
+
+  // Verifica las ferreterías con RUT que todavía no quedó verificado (nunca se consultó, el RUES falló o no pasó). Una a la vez
+  // para no saturar datos.gov.co.
+  async verificarRutsPendientes() {
+    const tiendas = (await this.usersService.findAll()).filter(u =>
+      u.role === 'STORE' && !!u.rut && u.rutVerificacion?.estado !== 'VERIFICADO');
+    const resultados: { uid: string; displayName: string; rut: string | null; estado?: string }[] = [];
+    for (const t of tiendas) {
+      const r = await this.verificarRutDe(t.uid);
+      resultados.push({ uid: t.uid, displayName: t.displayName, rut: r.rut, estado: r.rutVerificacion?.estado });
+    }
+    return { revisadas: resultados.length, resultados };
   }
 
   async assignPlan(userId: string, planId: string) {

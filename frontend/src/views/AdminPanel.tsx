@@ -6,7 +6,8 @@ import { ReferidosAdmin } from '../components/ReferidosAdmin';
 import { ResumenAdminPanel } from '../components/ResumenAdmin';
 import { OpinionesAdmin } from '../components/OpinionesAdmin';
 import { LayoutDashboard, Star, Zap, DollarSign, Package, Users, Crown, ShieldAlert, Loader2 } from 'lucide-react';
-import { getAdminUsersWithSubscriptions, adminAssignPlan, getSubscriptionPlans, SubscriptionPlan } from '../services/subscriptionService';
+import { getAdminUsersWithSubscriptions, adminAssignPlan, getSubscriptionPlans, SubscriptionPlan, adminVerificarRutsPendientes, adminVerificarRut } from '../services/subscriptionService';
+import { InsigniaRut } from '../components/EstadoRut';
 
 interface Props {
   requests: MaterialRequest[];
@@ -50,6 +51,21 @@ export const AdminPanel: React.FC<Props> = ({ requests, onManualQuote }) => {
       alert(err.message || 'Error al asignar el plan');
     } finally {
       setAssigningId(null);
+    }
+  };
+
+  // Verifica en el RUES los RUT de ferreterías que nunca se verificaron (o cuya consulta falló).
+  const [verificandoRuts, setVerificandoRuts] = useState<string | null>(null);
+  const handleVerificarRuts = async (userId?: string) => {
+    setVerificandoRuts(userId ?? 'TODOS');
+    try {
+      if (userId) await adminVerificarRut(userId);
+      else alert(`Ferreterías revisadas: ${(await adminVerificarRutsPendientes()).revisadas}`);
+      loadUsers();
+    } catch (err: any) {
+      alert(err.message || 'No se pudo verificar');
+    } finally {
+      setVerificandoRuts(null);
     }
   };
 
@@ -186,9 +202,14 @@ export const AdminPanel: React.FC<Props> = ({ requests, onManualQuote }) => {
                 </h3>
                 <p className="text-xs text-slate-500 mt-1">Supervisa y asigna manualmente planes a ferreterías y contratistas.</p>
               </div>
-              <Button onClick={loadUsers} variant="outline" className="text-xs font-bold">
-                🔄 Recargar
-              </Button>
+              <div className="flex gap-2">
+                <Button onClick={() => handleVerificarRuts()} variant="outline" className="text-xs font-bold" disabled={!!verificandoRuts}>
+                  {verificandoRuts === 'TODOS' ? 'Verificando…' : 'Verificar RUT pendientes'}
+                </Button>
+                <Button onClick={loadUsers} variant="outline" className="text-xs font-bold">
+                  🔄 Recargar
+                </Button>
+              </div>
             </div>
 
             {loadingUsers ? (
@@ -207,6 +228,7 @@ export const AdminPanel: React.FC<Props> = ({ requests, onManualQuote }) => {
                     <tr className="border-b border-slate-200 text-xs text-slate-500 uppercase tracking-wider bg-slate-50">
                       <th className="p-4 font-bold rounded-l-xl">Usuario</th>
                       <th className="p-4 font-bold">Rol</th>
+                      <th className="p-4 font-bold">RUT</th>
                       <th className="p-4 font-bold">Plan Actual</th>
                       <th className="p-4 font-bold">Créditos</th>
                       <th className="p-4 font-bold rounded-r-xl">Acción Manual</th>
@@ -223,6 +245,23 @@ export const AdminPanel: React.FC<Props> = ({ requests, onManualQuote }) => {
                           <Badge type={u.role === 'STORE' ? 'warning' : u.role === 'ADMIN' ? 'success' : 'info'}>
                             {u.role}
                           </Badge>
+                        </td>
+                        <td className="p-4">
+                          {u.role === 'STORE' ? (
+                            <div className="flex items-start gap-2">
+                              <InsigniaRut rut={u.rut} verificacion={u.rutVerificacion} />
+                              {u.rut && (
+                                <button
+                                  onClick={() => handleVerificarRuts(u.uid)}
+                                  disabled={!!verificandoRuts}
+                                  className="text-[10px] font-bold text-ferry-600 hover:underline disabled:opacity-50"
+                                  title="Volver a consultar el RUES"
+                                >
+                                  {verificandoRuts === u.uid ? '...' : 'Reverificar'}
+                                </button>
+                              )}
+                            </div>
+                          ) : <span className="text-xs text-slate-300">—</span>}
                         </td>
                         <td className="p-4 font-bold text-slate-800">
                           {u.subscription?.plan?.name ? (

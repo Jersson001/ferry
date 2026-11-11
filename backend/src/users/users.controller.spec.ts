@@ -3,7 +3,9 @@ import { UsersController } from './users.controller';
 describe('UsersController.updateProfile — campos permitidos', () => {
   const guardar = async (body: Record<string, unknown>) => {
     const update = jest.fn(async (_uid: string, cambios: unknown) => cambios);
-    const controller = new UsersController({ update } as any);
+    const findOne = jest.fn(async () => null);
+    const verificador = { verificar: jest.fn(async (rut: string) => ({ estado: 'NO_REGISTRADO', nit: `${rut}-1`, mensaje: '', verificadoEn: '' })) };
+    const controller = new UsersController({ update, findOne } as any, verificador as any);
     await controller.updateProfile({ user: { uid: 'usuario-1' } }, body);
     return update.mock.calls[0][1] as Record<string, unknown>;
   };
@@ -36,15 +38,21 @@ describe('UsersController.updateProfile — campos permitidos', () => {
       rut: '900123',
       specialties: ['Plomería'],
     });
+    expect(cambios.rutVerificacion).toMatchObject({ estado: 'NO_REGISTRADO' });
     expect(cambios).toMatchObject({
       displayName: 'Ferretería Norte',
       description: 'Vendemos de todo',
       location: { lat: 4.6, lng: -74.1, address: 'Cra. 15 # 93-47' },
       photoURL: 'https://ejemplo.com/foto.jpg',
       phoneNumber: '3001234567',
-      rut: '900123',
+      rut: '900123-1',
       specialties: ['Plomería'],
     });
+  });
+
+  it('ignora una verificación de RUT enviada por el cliente: solo la escribe el servidor', async () => {
+    const cambios = await guardar({ displayName: 'Ana', rutVerificacion: { estado: 'VERIFICADO' } });
+    expect(cambios).not.toHaveProperty('rutVerificacion');
   });
 
   it('descarta especialidades que no existen y las repetidas', async () => {

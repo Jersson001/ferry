@@ -1,4 +1,5 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn } from 'typeorm';
+import type { VerificacionRut } from './rut';
 
 @Entity('users')
 export class User {
@@ -42,8 +43,13 @@ export class User {
   @Column({ type: 'simple-array', nullable: true })
   specialties?: string[];
 
-  @Column({ nullable: true })
-  rut?: string;
+  @Column({ type: 'varchar', nullable: true })
+  rut?: string | null;
+
+  // Resultado de la última verificación del RUT (DV y registro mercantil en el RUES). Lo escribe el
+  // servidor, nunca el usuario; el sello de ferretería verificada exige estado VERIFICADO.
+  @Column({ type: 'jsonb', nullable: true })
+  rutVerificacion?: VerificacionRut | null;
 
   @Column({ type: 'jsonb', nullable: true, default: [] })
   families?: string[];

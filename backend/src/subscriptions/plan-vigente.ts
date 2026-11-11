@@ -69,7 +69,7 @@ const limitesDe = (p: SubscriptionPlan | null): Limites => ({
  * tipo de cuenta, con cupos por mes calendario. Los administradores no tienen límites.
  */
 export async function planVigente(manager: EntityManager, userId: string, ahora: Date = new Date()): Promise<PlanVigente> {
-  const user = await manager.findOne(User, { where: { uid: userId }, select: ['uid', 'role'] });
+  const user = await manager.findOne(User, { where: { uid: userId }, select: ['uid', 'role', 'rutVerificacion'] });
   const mes = mesColombia(ahora);
 
   if (user?.role === 'ADMIN') {
@@ -92,7 +92,9 @@ export async function planVigente(manager: EntityManager, userId: string, ahora:
       inicio = new Date(fin);
       inicio.setMonth(inicio.getMonth() - 1);
     }
-    return { nombre: plan!.name, pago: true, verificado: plan!.hasVerifiedBadge, inicio, fin, limites: limitesDe(plan!) };
+    // Una ferretería solo lleva el sello si, además del plan, su RUT quedó verificado en el RUES.
+    const rutOk = targetRole !== 'STORE' || user?.rutVerificacion?.estado === 'VERIFICADO';
+    return { nombre: plan!.name, pago: true, verificado: plan!.hasVerifiedBadge && rutOk, inicio, fin, limites: limitesDe(plan!) };
   }
 
   const gratis = await manager.findOne(SubscriptionPlan, { where: { targetRole, priceInCents: 0 } });

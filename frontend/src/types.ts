@@ -1,3 +1,4 @@
+import type { VerificacionRut } from './utils/rut';
 
 export interface PortfolioItem {
   id: string;
@@ -15,6 +16,7 @@ export interface UserProfile {
   displayName?: string;
   photoURL?: string;
   rut?: string;
+  rutVerificacion?: VerificacionRut | null; // La escribe el servidor al guardar el RUT
   description?: string;
   specialties?: string[];
   portfolio?: PortfolioItem[];

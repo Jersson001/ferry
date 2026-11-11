@@ -19,6 +19,8 @@ import { PlansModal } from '../components/PlansModal';
 import { Map, AdvancedMarker } from '@vis.gl/react-google-maps';
 import { usePlacesAutocomplete, PlacePick } from '../hooks/usePlacesAutocomplete';
 import { PlaceSuggestionsDropdown } from '../components/PlaceSuggestionsDropdown';
+import { EstadoRutPerfil } from '../components/EstadoRut';
+import { errorDeRut } from '../utils/rut';
 
 const getInitials = (name?: string) => {
   if (!name || name === 'guest') return 'U';
@@ -67,6 +69,7 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
   const [isEditingBasic, setIsEditingBasic] = useState(false);
   const [editName, setEditName] = useState(profile?.displayName || '');
   const [editRut, setEditRut] = useState(profile?.rut || '');
+  const [rutError, setRutError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -192,12 +195,16 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
     if (!profile) return;
     setIsSaving(true);
     try {
-      const updates: any = {
-        displayName: editName,
-        rut: editRut
-      };
-      await updateUserProfile(updates);
-      onUpdateProfile({ ...profile, ...updates });
+      const updates: any = { displayName: editName };
+      if (profile.role === UserRole.STORE) {
+        const error = errorDeRut(editRut);
+        if (error) { setRutError(error); return; }
+        updates.rut = editRut;
+      }
+      const guardado = await updateUserProfile(updates);
+      // El servidor normaliza el RUT y devuelve su verificación en el RUES.
+      onUpdateProfile({ ...profile, ...updates, rut: guardado?.rut ?? updates.rut, rutVerificacion: guardado?.rutVerificacion ?? null });
+      setEditRut(guardado?.rut ?? editRut);
       setIsEditingBasic(false);
     } catch (error) {
       console.error("Error saving profile:", error);
@@ -403,10 +410,12 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
                     <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
                       value={editRut}
-                      onChange={(e) => setEditRut(e.target.value)}
-                      placeholder="RUT / NIT"
-                      className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-ferry-500 outline-none"
+                      onChange={(e) => { setEditRut(e.target.value); setRutError(null); }}
+                      onBlur={() => setRutError(errorDeRut(editRut))}
+                      placeholder="NIT con DV, ej. 900123456-7"
+                      className={`w-full pl-10 pr-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-ferry-500 outline-none ${rutError ? 'border-red-300' : 'border-slate-200'}`}
                     />
+                    {rutError && <p className="text-[11px] text-red-500 mt-1 text-left">{rutError}</p>}
                   </div>
                 )}
                 <div className="flex gap-2">
@@ -438,6 +447,7 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
                 {profile?.rut && (
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">RUT: {profile.rut}</p>
                 )}
+                {profile?.role === UserRole.STORE && <EstadoRutPerfil profile={profile} />}
               </>
             )}
           </div>

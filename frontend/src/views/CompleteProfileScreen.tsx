@@ -21,6 +21,7 @@ import ferryLogo from '../assets/logo.svg';
 import { usePlacesAutocomplete, PlacePick } from '../hooks/usePlacesAutocomplete';
 import { PlaceSuggestionsDropdown } from '../components/PlaceSuggestionsDropdown';
 import { ESPECIALIDADES } from '../config/especialidades';
+import { errorDeRut } from '../utils/rut';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -66,6 +67,7 @@ export const CompleteProfileScreen: React.FC<Props> = ({ profile, onComplete }) 
       ? { lat: profile.location.lat, lng: profile.location.lng } : null);
   const places = usePlacesAutocomplete();
   const [description, setDescription] = useState(profile.description ?? '');
+  const [rut,         setRut]         = useState(profile.rut ?? '');
   const [specialties, setSpecialties] = useState<string[]>(profile.specialties ?? []);
   const [loading,     setLoading]     = useState(false);
   const [error,   setError]   = useState<string | null>(null);
@@ -75,7 +77,9 @@ export const CompleteProfileScreen: React.FC<Props> = ({ profile, onComplete }) 
   const nameOk    = name.trim().length >= 3;
   const addressOk = isStore ? address.trim().length >= 5 : true;
   const specialtiesOk = isStore ? specialties.length > 0 : true;
-  const canSubmit = nameOk && addressOk && specialtiesOk && !loading;
+  // El RUT es opcional al registrarse, pero si lo escribe tiene que tener buen formato y DV.
+  const rutError = isStore ? errorDeRut(rut) : null;
+  const canSubmit = nameOk && addressOk && specialtiesOk && !rutError && !loading;
 
   const toggleSpecialty = (spec: string) =>
     setSpecialties(prev => (prev.includes(spec) ? prev.filter(s => s !== spec) : [...prev, spec]));
@@ -102,6 +106,7 @@ export const CompleteProfileScreen: React.FC<Props> = ({ profile, onComplete }) 
           ...(coords ?? {}),
         };
         patch['specialties'] = specialties;
+        if (rut.trim()) patch['rut'] = rut.trim();
       }
 
       // ── Actualizar via API REST ──
@@ -326,6 +331,28 @@ export const CompleteProfileScreen: React.FC<Props> = ({ profile, onComplete }) 
               </div>
               <p className="text-xs text-slate-400 ml-1 leading-snug">
                 Elige al menos una. Es lo que ven los clientes y lo que te habilita para recibir solicitudes.
+              </p>
+            </div>
+          )}
+
+          {/* ── RUT (solo STORE) ── */}
+          {isStore && (
+            <div className="space-y-2">
+              <label htmlFor="profile-rut" className="block text-xs font-bold text-slate-500 uppercase tracking-wide">
+                NIT del negocio (opcional)
+              </label>
+              <input
+                id="profile-rut"
+                inputMode="numeric"
+                placeholder="Ej. 900123456-7"
+                value={rut}
+                onChange={(e) => setRut(e.target.value)}
+                className={`w-full px-4 py-3 rounded-2xl border-2 bg-slate-50 text-slate-800 font-medium outline-none focus:bg-white transition-all duration-200 text-sm placeholder:text-slate-300 ${
+                  rut && rutError ? 'border-red-300 focus:border-red-400' : 'border-slate-200 focus:border-slate-400'
+                }`}
+              />
+              <p className={`text-xs ml-1 leading-snug ${rut && rutError ? 'text-red-500' : 'text-slate-400'}`}>
+                {rut && rutError ? rutError : 'Lo verificamos en el registro mercantil (RUES). Es necesario para el sello de ferretería verificada.'}
               </p>
             </div>
           )}

@@ -4,6 +4,7 @@ import { Repository, In, DataSource } from 'typeorm';
 import { CatalogProduct } from './entities/catalog-product.entity';
 import { UsersService } from '../users/users.service';
 import { sanitizarPerfil, perfilPropio } from '../users/perfil';
+import { VerificadorRutService, camposDeRut } from '../users/verificador-rut.service';
 import { Quote } from '../quotes/entities/quote.entity';
 import { contarTiendasQueCubren } from './cobertura';
 import { Punto } from '../quotes/ubicacion';
@@ -21,6 +22,7 @@ export class StoresService {
     private catalogRepository: Repository<CatalogProduct>,
     private usersService: UsersService,
     private dataSource: DataSource,
+    private verificadorRut: VerificadorRutService,
   ) {}
 
   // Ferreterías con calificaciones de clientes, de mejor a peor. Solo datos públicos de la tienda.
@@ -210,6 +212,10 @@ export class StoresService {
     }
     if (Object.keys(safeData).length === 0) {
       return perfilPropio(await this.usersService.findOne(storeId));
+    }
+    // Igual que en PUT /users/profile: un RUT nuevo se verifica, y el resultado anterior no se conserva.
+    if (typeof safeData.rut === 'string') {
+      Object.assign(safeData, await camposDeRut(safeData.rut, await this.usersService.findOne(storeId), this.verificadorRut));
     }
     return perfilPropio(await this.usersService.update(storeId, safeData));
   }

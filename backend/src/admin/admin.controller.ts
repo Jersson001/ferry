@@ -36,6 +36,18 @@ export class AdminController {
     return this.adminService.getOpiniones(200);
   }
 
+  @Post('verificar-rut/:userId')
+  async verificarRut(@Param('userId') userId: string, @Req() req: RequestWithUser) {
+    this.checkAdmin(req);
+    return this.adminService.verificarRutDe(userId);
+  }
+
+  @Post('verificar-ruts-pendientes')
+  async verificarRutsPendientes(@Req() req: RequestWithUser) {
+    this.checkAdmin(req);
+    return this.adminService.verificarRutsPendientes();
+  }
+
   @Post('assign-plan/:userId/:planId')
   async assignPlan(
     @Param('userId') userId: string,

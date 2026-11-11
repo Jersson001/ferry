@@ -63,7 +63,7 @@ describe('StoresService.getStoreRating', () => {
     for (const m of ['select', 'addSelect', 'where', 'andWhere']) qb[m] = jest.fn(() => qb);
     qb.getRawOne = jest.fn(async () => fila);
     const dataSource: any = { getRepository: jest.fn(() => ({ createQueryBuilder: jest.fn(() => qb) })) };
-    return new StoresService({} as any, {} as any, dataSource);
+    return new StoresService({} as any, {} as any, dataSource, {} as any);
   };
 
   it('devuelve el promedio redondeado y la cantidad de calificaciones', async () => {
@@ -73,5 +73,20 @@ describe('StoresService.getStoreRating', () => {
   it('sin calificaciones devuelve null y no un 0 ni un número inventado', async () => {
     expect(await armar({ average: null, reviews: '0' }).getStoreRating('t1')).toEqual({ rating: null, reviews: 0 });
     expect(await armar(undefined).getStoreRating('t1')).toEqual({ rating: null, reviews: 0 });
+  });
+});
+
+describe('StoresService.updateStoreProfile — RUT', () => {
+  it('verifica el RUT nuevo y no conserva la verificación del anterior', async () => {
+    const anterior = { uid: 't1', rut: '890903938-8', rutVerificacion: { estado: 'VERIFICADO' } };
+    const usersService: any = { findOne: jest.fn(async () => anterior), update: jest.fn(async (_uid: string, c: any) => ({ ...anterior, ...c })) };
+    const verificador: any = { verificar: jest.fn(async () => ({ estado: 'NO_REGISTRADO', nit: '900123456-8', mensaje: '', verificadoEn: '' })) };
+    const service = new StoresService({} as any, usersService, {} as any, verificador);
+
+    const perfil = await service.updateStoreProfile('t1', { rut: '900123456', rutVerificacion: { estado: 'VERIFICADO' } });
+
+    expect(verificador.verificar).toHaveBeenCalledWith('900123456');
+    expect(perfil.rut).toBe('900123456-8');
+    expect(perfil.rutVerificacion.estado).toBe('NO_REGISTRADO');
   });
 });

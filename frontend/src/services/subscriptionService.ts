@@ -101,6 +101,14 @@ export async function getAdminUsersWithSubscriptions(): Promise<any[]> {
   return apiRequest<any[]>('/admin/users-with-subscriptions');
 }
 
+export async function adminVerificarRutsPendientes(): Promise<{ revisadas: number }> {
+  return apiRequest<{ revisadas: number }>('/admin/verificar-ruts-pendientes', { method: 'POST' });
+}
+
+export async function adminVerificarRut(userId: string): Promise<unknown> {
+  return apiRequest(`/admin/verificar-rut/${userId}`, { method: 'POST' });
+}
+
 export async function adminAssignPlan(userId: string, planId: string): Promise<UserSubscription> {
   return apiRequest<UserSubscription>(`/admin/assign-plan/${userId}/${planId}`, {
     method: 'POST',
