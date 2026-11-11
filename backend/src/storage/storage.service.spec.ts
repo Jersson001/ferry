@@ -55,6 +55,41 @@ describe('StorageService', () => {
       await storage.deleteFile(url);
       expect(fs.existsSync(file)).toBe(false);
     });
+
+    describe('adjuntos del chat: solo imágenes y PDF', () => {
+      const pdf = (texto: string) => `data:application/pdf;base64,${Buffer.from(texto).toString('base64')}`;
+
+      it('una imagen se guarda como WebP', async () => {
+        const r = await new StorageService().saveChatAttachment(await pngDataUrl(), 'user-1');
+        expect(r.type).toBe('image');
+        expect(r.url).toMatch(/\/uploads\/chat\/user-1\/.+\.webp$/);
+      });
+
+      it('un PDF se guarda tal cual', async () => {
+        const contenido = '%PDF-1.4\n%%EOF';
+        const r = await new StorageService().saveChatAttachment(pdf(contenido), 'user-1');
+        expect(r).toMatchObject({ type: 'pdf', size: contenido.length });
+        expect(fs.readFileSync(path.join(dir, r.url.replace('http://localhost:3000/uploads/', ''))).toString()).toBe(contenido);
+      });
+
+      it('rechaza un archivo que dice ser PDF y no lo es', async () => {
+        await expect(new StorageService().saveChatAttachment(pdf('<html>hola</html>'), 'user-1')).rejects.toThrow('no es un PDF');
+      });
+
+      it.each([
+        ['Word', 'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,UEsDBA=='],
+        ['ZIP', 'data:application/zip;base64,UEsDBA=='],
+        ['texto', 'data:text/plain;base64,aG9sYQ=='],
+        ['SVG', 'data:image/svg+xml;base64,PHN2Zy8+'],
+      ])('rechaza %s', async (_tipo, dataUrl) => {
+        await expect(new StorageService().saveChatAttachment(dataUrl, 'user-1')).rejects.toThrow('Solo se pueden enviar imágenes');
+      });
+
+      it('rechaza un PDF de más de 10 MB', async () => {
+        const grande = '%PDF' + 'a'.repeat(10 * 1024 * 1024);
+        await expect(new StorageService().saveChatAttachment(pdf(grande), 'user-1')).rejects.toThrow('10 MB');
+      });
+    });
   });
 
   describe('con Supabase configurado', () => {

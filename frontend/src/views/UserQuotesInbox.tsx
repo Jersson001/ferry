@@ -7,6 +7,7 @@ import {
   Truck, Plus, Bell, FileText, Search, PackageCheck,
   Upload, Smartphone, Copy, Download, Star,
 } from 'lucide-react';
+import { BotonChat } from '../components/BotonChat';
 import {
   openWompiCheckout,
   WOMPI_PUBLIC_KEY,
@@ -1212,6 +1213,15 @@ const QuoteCard: React.FC<{
             </button>
           </div>
         )}
+
+        {/* Chat con la ferretería: se abre al aceptar la cotización */}
+        <BotonChat
+          quoteId={quote.id}
+          status={quote.status}
+          etiqueta="Chatear con la ferretería"
+          titulo={isPaid || isPreparing || isShipped || quote.status === 'delivered' ? (quote.storeName || 'Ferretería') : alias}
+          subtitulo={quote.requestTitle ? `Pedido: ${quote.requestTitle}` : undefined}
+        />
 
         {/* Shipped — confirm delivery */}
         {isShipped && onConfirmDelivery && (

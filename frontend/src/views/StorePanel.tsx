@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { MaterialRequest, RequestStatus, UserProfile } from '../types';
 import { Package, Clock, Truck, CheckCircle2, Store, AlertCircle, X, Inbox, RefreshCw, FileText, MapPin, Send, Trash2, RotateCcw, Eye } from 'lucide-react';
 import { getPendingRequestsForStore, formatRelativeTime, IncomingQuoteRequest, submitQuoteResponse, getStorePriceCatalog, saveStorePriceCatalog, getCupoDiario, CupoDiario, StoreCatalogEntry, rejectQuoteRequest, updateQuoteLogisticStatus, getStoreSentQuotes, StoreSentQuote, FERRY_MARKUP } from '../services/quoteService';
+import { BotonChat } from '../components/BotonChat';
 import { getStoreCatalogProducts } from '../services/catalogService';
 import { useApi } from '../hooks/useApi';
 import { construirIndice, buscarEnIndice } from '../config/memoriaPrecios';
@@ -1299,6 +1300,14 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
                     {q.message && (
                       <p className="text-[10px] text-slate-400 italic border-t border-slate-50 pt-1.5">"{q.message}"</p>
                     )}
+
+                    <BotonChat
+                      quoteId={q.id}
+                      status={q.status}
+                      etiqueta="Chatear con el cliente"
+                      titulo={q.clientName || 'Cliente'}
+                      subtitulo={`Cotización #${q.id.slice(-6).toUpperCase()}`}
+                    />
                   </div>
                 ))}
               </div>

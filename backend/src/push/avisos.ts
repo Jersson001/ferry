@@ -5,7 +5,7 @@ export function textoDeAviso(categoria: string, tienda: Punto | null, obra: Punt
   const km = tienda && obra ? Math.round(distanciaKm(tienda, obra) * 10) / 10 : null;
   return {
     title: 'Nueva solicitud en Ferry',
-    body: km !== null ? `${categoria} · a ${km} km de tu ferretería. Responde primero: solo caben 5 cotizaciones.` : `${categoria}. Responde primero: solo caben 5 cotizaciones.`,
+    body: km !== null ? `${categoria} · a ${km} km de tu ferretería. Responde primero: los cupos de cotización son limitados.` : `${categoria}. Responde primero: los cupos de cotización son limitados.`,
   };
 }
 

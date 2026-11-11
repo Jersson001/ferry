@@ -8,6 +8,7 @@ const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
 const MAX_IMAGE_SIZE = 15 * 1024 * 1024;  // 15MB antes de comprimir
 const MAX_VIDEO_SIZE = 50 * 1024 * 1024;  // 50MB
+const MAX_PDF_SIZE = 10 * 1024 * 1024;    // 10MB, adjuntos del chat
 
 const VIDEO_CONTENT_TYPES: Record<string, string> = {
   '.mp4': 'video/mp4',
@@ -108,6 +109,32 @@ export class StorageService {
     return this.saveAsWebP(buffer, `${subfolder}/${userId}/${Date.now()}.webp`);
   }
 
+  /**
+   * Adjunto del chat de una cotización: una imagen (se comprime a WebP) o un PDF (se guarda tal cual).
+   * Nada más: ni documentos de Office ni ZIP. Recibe un Data URL base64.
+   */
+  async saveChatAttachment(dataUrl: string, userId: string): Promise<{ url: string; type: 'image' | 'pdf'; size: number }> {
+    const matches = dataUrl.match(/^data:([A-Za-z-+\/.]+);base64,(.+)$/);
+    if (!matches) throw new Error('Archivo inválido.');
+    const mimeType = matches[1];
+    const buffer = Buffer.from(matches[2], 'base64');
+    const nombre = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+    if (ALLOWED_IMAGE_TYPES.includes(mimeType)) {
+      if (buffer.length > MAX_IMAGE_SIZE) throw new Error('La imagen no puede superar 15 MB.');
+      const url = await this.saveAsWebP(buffer, `chat/${userId}/${nombre}.webp`);
+      return { url, type: 'image', size: buffer.length };
+    }
+    if (mimeType === 'application/pdf') {
+      if (buffer.length > MAX_PDF_SIZE) throw new Error('El PDF no puede superar 10 MB.');
+      // Se mira el contenido, no solo lo que dice el navegador: un PDF empieza con "%PDF".
+      if (buffer.subarray(0, 4).toString('latin1') !== '%PDF') throw new Error('El archivo no es un PDF válido.');
+      const url = await this.put(`chat/${userId}/${nombre}.pdf`, buffer, 'application/pdf');
+      return { url, type: 'pdf', size: buffer.length };
+    }
+    throw new Error('Solo se pueden enviar imágenes (JPG, PNG, WebP) o PDF.');
+  }
+
   /** Si la URL apunta a un archivo guardado por este servicio. */
   isStoredFile(fileUrl: string): boolean {
     return fileUrl.startsWith(this.publicBaseUrl()) || fileUrl.startsWith(this.uploadsBaseUrl);
@@ -192,6 +219,17 @@ export class StorageService {
             `El bucket "${bucket}" existe pero es privado: las fotos no se verán. Márcalo como público en Supabase.`,
           );
         }
+        // El bucket se creó aceptando solo imágenes y video; los PDF del chat necesitan su tipo.
+        const tipos: string[] | null = Array.isArray(info.allowed_mime_types) ? info.allowed_mime_types : null;
+        if (tipos && tipos.length > 0 && !tipos.includes('application/pdf')) {
+          const res = await fetch(`${url}/storage/v1/bucket/${bucket}`, {
+            method: 'PUT',
+            headers: { ...this.authHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ public: info.public, file_size_limit: info.file_size_limit, allowed_mime_types: [...tipos, 'application/pdf'] }),
+          });
+          if (res.ok) this.logger.log(`Bucket "${bucket}" ahora acepta PDF`);
+          else this.logger.error(`No se pudo habilitar PDF en el bucket "${bucket}" (${res.status}): ${await res.text()}`);
+        }
         return;
       }
 
@@ -203,7 +241,7 @@ export class StorageService {
           name: bucket,
           public: true,
           file_size_limit: MAX_VIDEO_SIZE,
-          allowed_mime_types: ['image/webp', ...ALLOWED_VIDEO_TYPES],
+          allowed_mime_types: ['image/webp', 'application/pdf', ...ALLOWED_VIDEO_TYPES],
         }),
       });
       if (!created.ok) {

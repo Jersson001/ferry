@@ -40,6 +40,32 @@ export class PushService {
     await this.subs.delete({ userId, endpoint });
   }
 
+  // Aviso a una sola persona, en todos sus navegadores (p. ej. un mensaje nuevo del chat). Nunca falla.
+  async avisarUsuario(userId: string, aviso: { title: string; body: string; url?: string }): Promise<number> {
+    if (!this.habilitado || !userId) return 0;
+    try {
+      const suscripciones = await this.subs.find({ where: { userId } });
+      let enviados = 0;
+      await Promise.all(suscripciones.map(async (s) => {
+        try {
+          await webpush.sendNotification(
+            { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+            JSON.stringify({ ...aviso, url: aviso.url ?? '/' }),
+            { TTL: 60 * 60 * 6 },
+          );
+          enviados++;
+        } catch (err: any) {
+          if (err?.statusCode === 404 || err?.statusCode === 410) await this.subs.delete({ id: s.id });
+          else this.logger.warn(`No se pudo enviar un aviso (${err?.statusCode ?? err?.message})`);
+        }
+      }));
+      return enviados;
+    } catch (err: any) {
+      this.logger.error(`Fallo al avisar al usuario ${userId}: ${err?.message}`);
+      return 0;
+    }
+  }
+
   // Avisa a las ferreterías de la categoría que quedan dentro del radio. Nunca debe romper la creación de la solicitud.
   async avisarSolicitud(request: MaterialRequest): Promise<number> {
     if (!this.habilitado) return 0;
