@@ -13,10 +13,10 @@ const Estrellas: React.FC<{ n: number }> = ({ n }) => (
   </span>
 );
 
-const Resumen: React.FC<{ r: ResumenOpiniones }> = ({ r }) => (
+const Resumen: React.FC<{ r: ResumenOpiniones; titulo?: string }> = ({ r, titulo }) => (
   <div className="flex items-center gap-2">
     <MessageSquare className="w-4 h-4 text-ferry-600" />
-    <h3 className="font-bold text-slate-800 text-sm">Opiniones</h3>
+    <h3 className="font-bold text-slate-800 text-sm">{titulo ?? 'Opiniones'}</h3>
     {r.rating !== null && (
       <span className="flex items-center gap-1 text-sm font-bold text-yellow-500">
         <Star className="w-4 h-4 fill-yellow-500" /> {r.rating.toFixed(1)}
@@ -45,11 +45,11 @@ const Tarjeta: React.FC<{ o: Opinion; children?: React.ReactNode }> = ({ o, chil
 );
 
 // Lo que ve quien abre el catálogo público de una ferretería. Sin opiniones, no se muestra.
-export const OpinionesPublicas: React.FC<{ storeId: string }> = ({ storeId }) => {
+export const OpinionesPublicas: React.FC<{ storeId?: string; cargar?: () => Promise<ResumenOpiniones | null> }> = ({ storeId, cargar }) => {
   const [data, setData] = useState<ResumenOpiniones | null>(null);
   useEffect(() => {
     let cancelled = false;
-    getOpiniones(storeId).then(r => { if (!cancelled) setData(r); });
+    (cargar ? cargar() : getOpiniones(storeId ?? '')).then(r => { if (!cancelled) setData(r); });
     return () => { cancelled = true; };
   }, [storeId]);
 
@@ -63,7 +63,11 @@ export const OpinionesPublicas: React.FC<{ storeId: string }> = ({ storeId }) =>
 };
 
 // Las opiniones de la propia ferretería, con la opción de responder una vez a cada una.
-export const MisOpiniones: React.FC = () => {
+export const MisOpiniones: React.FC<{
+  titulo?: string;
+  cargar?: () => Promise<ResumenOpiniones | null>;
+  responder?: (id: string, texto: string) => Promise<void>;
+}> = ({ titulo, cargar, responder }) => {
   const [data, setData] = useState<ResumenOpiniones | null>(null);
   const [respondiendo, setRespondiendo] = useState<string | null>(null);
   const [texto, setTexto] = useState('');
@@ -72,7 +76,7 @@ export const MisOpiniones: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
-    getMisOpiniones().then(r => { if (!cancelled) setData(r); });
+    (cargar ? cargar() : getMisOpiniones()).then(r => { if (!cancelled) setData(r); });
     return () => { cancelled = true; };
   }, []);
 
@@ -82,7 +86,7 @@ export const MisOpiniones: React.FC = () => {
     setEnviando(true);
     setError('');
     try {
-      await responderOpinion(id, texto);
+      await (responder ? responder(id, texto) : responderOpinion(id, texto));
       setData(d => d && ({ ...d, items: d.items.map(o => (o.id === id ? { ...o, reply: texto.trim(), repliedAt: new Date().toISOString() } : o)) }));
       setRespondiendo(null);
       setTexto('');
@@ -95,7 +99,7 @@ export const MisOpiniones: React.FC = () => {
 
   return (
     <section className="space-y-2 mx-2">
-      <Resumen r={data} />
+      <Resumen r={data} titulo={titulo} />
       <ul className="space-y-2">
         {data.items.map((o, i) => (
           <Tarjeta key={o.id ?? i} o={o}>

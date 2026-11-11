@@ -3,8 +3,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, Not } from 'typeorm';
 import { Project, ProjectStatus } from './entities/project.entity';
 import { ProjectApplication, ApplicationStatus } from './entities/project-application.entity';
+import { User } from '../users/user.entity';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { StorageService } from '../storage/storage.service';
+import { armarOpiniones, limpiarTexto, Opinion } from '../stores/opiniones';
+import { ConflictException } from '@nestjs/common';
 
 @Injectable()
 export class ProjectsService {
@@ -61,7 +64,17 @@ export class ProjectsService {
     // Count applications per project
     const result = await Promise.all(projects.map(async (p) => {
       const count = await this.applicationRepository.count({ where: { projectId: p.id } });
-      return { ...p, applicationCount: count };
+      if (p.status !== ProjectStatus.IN_PROGRESS && p.status !== ProjectStatus.COMPLETED) return { ...p, applicationCount: count };
+      const contratada = await this.applicationRepository.findOne({
+        where: { projectId: p.id, status: ApplicationStatus.ACCEPTED },
+        relations: ['contractor'],
+      });
+      return {
+        ...p,
+        applicationCount: count,
+        hiredName: contratada?.contractor?.displayName ?? null,
+        rated: contratada?.rating != null,
+      };
     }));
 
     return result;
@@ -78,6 +91,8 @@ export class ProjectsService {
       order: { estimatedPriceInCents: 'ASC' }
     });
 
+    const reputacion = await this.reputacionDe(applications.map(a => a.contractorId));
+
     // Map contractor data from their user profile
     return applications.map(app => ({
       id: app.id,
@@ -92,8 +107,113 @@ export class ProjectsService {
         description: (app.contractor as any).description ?? null,
         specialties: (app.contractor as any).specialties ?? [],
         isProfileComplete: (app.contractor as any).isProfileComplete ?? false,
+        rating: reputacion.get(app.contractorId) ?? { rating: null, reviews: 0 },
       }
     }));
+  }
+
+  // Promedio y número de opiniones visibles de varios contratistas, en una sola consulta.
+  async reputacionDe(contractorIds: string[]): Promise<Map<string, { rating: number | null; reviews: number }>> {
+    const ids = [...new Set(contractorIds.filter(Boolean))];
+    const r = new Map<string, { rating: number | null; reviews: number }>();
+    if (ids.length === 0) return r;
+    const filas = await this.applicationRepository
+      .createQueryBuilder('a')
+      .select('a.contractorId', 'id')
+      .addSelect('AVG(a.rating)', 'average')
+      .addSelect('COUNT(a.rating)', 'reviews')
+      .where('a.contractorId IN (:...ids)', { ids })
+      .andWhere('a.rating BETWEEN 1 AND 5')
+      .andWhere('a.reviewHidden = false')
+      .groupBy('a.contractorId')
+      .getRawMany<{ id: string; average: string; reviews: string }>();
+    for (const f of filas) {
+      const reviews = Number(f.reviews);
+      const average = Number(f.average);
+      r.set(f.id, { rating: reviews > 0 && Number.isFinite(average) ? Math.round(average * 10) / 10 : null, reviews });
+    }
+    return r;
+  }
+
+  // Opiniones visibles de un contratista, de la más reciente a la más antigua. `propias` agrega el id para responder.
+  async getOpinionesContratista(contractorId: string, limite: number, propias = false): Promise<{ rating: number | null; reviews: number; items: Opinion[] }> {
+    const filas = await this.applicationRepository
+      .createQueryBuilder('a')
+      .innerJoin('a.project', 'p')
+      .innerJoin(User, 'u', 'u.uid = p.userId')
+      .select('a.id', 'id')
+      .addSelect('a.rating', 'rating')
+      .addSelect('a.reviewComment', 'reviewComment')
+      .addSelect('a.reviewReply', 'reviewReply')
+      .addSelect('a.reviewedAt', 'reviewedAt')
+      .addSelect('a.reviewRepliedAt', 'reviewRepliedAt')
+      .addSelect('u.displayName', 'authorName')
+      .where('a.contractorId = :contractorId', { contractorId })
+      .andWhere('a.rating BETWEEN 1 AND 5')
+      .andWhere('a.reviewHidden = false')
+      .orderBy('a.reviewedAt', 'DESC', 'NULLS LAST')
+      .addOrderBy('a.createdAt', 'DESC')
+      .limit(limite)
+      .getRawMany();
+    const resumen = (await this.reputacionDe([contractorId])).get(contractorId) ?? { rating: null, reviews: 0 };
+    return { ...resumen, items: armarOpiniones(filas, propias) };
+  }
+
+  // El cliente da por terminado el proyecto contratado y, si quiere, califica de una vez al contratista.
+  async terminarProyecto(projectId: string, userId: string, rating?: unknown, comment?: unknown): Promise<{ completed: true; rated: boolean }> {
+    const project = await this.projectRepository.findOne({ where: { id: projectId } });
+    if (!project) throw new NotFoundException('Proyecto no encontrado');
+    if (project.userId !== userId) throw new ForbiddenException('No es tu proyecto');
+    if (project.status !== ProjectStatus.IN_PROGRESS) throw new BadRequestException('Solo se puede terminar un proyecto en progreso');
+    project.status = ProjectStatus.COMPLETED;
+    await this.projectRepository.save(project);
+    const valida = Number.isInteger(rating) && (rating as number) >= 1 && (rating as number) <= 5;
+    if (valida) await this.guardarCalificacion(projectId, rating as number, comment);
+    return { completed: true, rated: valida };
+  }
+
+  // Calificar después de haber terminado sin calificar. Una sola vez.
+  async calificarContratista(projectId: string, userId: string, rating: unknown, comment: unknown): Promise<{ rated: true }> {
+    const project = await this.projectRepository.findOne({ where: { id: projectId } });
+    if (!project) throw new NotFoundException('Proyecto no encontrado');
+    if (project.userId !== userId) throw new ForbiddenException('No es tu proyecto');
+    if (project.status !== ProjectStatus.COMPLETED) throw new BadRequestException('Primero termina el proyecto');
+    if (!Number.isInteger(rating) || (rating as number) < 1 || (rating as number) > 5) throw new BadRequestException('La calificación va de 1 a 5');
+    await this.guardarCalificacion(projectId, rating as number, comment);
+    return { rated: true };
+  }
+
+  private async guardarCalificacion(projectId: string, rating: number, comment: unknown): Promise<void> {
+    const app = await this.applicationRepository.findOne({ where: { projectId, status: ApplicationStatus.ACCEPTED } });
+    if (!app) throw new NotFoundException('Este proyecto no tiene un contratista contratado');
+    if (app.rating != null) throw new ConflictException('Ya calificaste a este contratista');
+    app.rating = rating;
+    app.reviewComment = limpiarTexto(comment);
+    app.reviewedAt = new Date();
+    await this.applicationRepository.save(app);
+  }
+
+  // El contratista responde una vez a la opinión recibida. No puede editarla ni borrarla.
+  async responderOpinion(appId: string, contractorId: string, texto: unknown): Promise<{ reply: string }> {
+    const app = await this.applicationRepository.findOne({ where: { id: appId } });
+    if (!app || app.contractorId !== contractorId) throw new NotFoundException('Opinión no encontrada');
+    if (app.rating == null) throw new BadRequestException('Este proyecto aún no tiene calificación');
+    if (app.reviewReply) throw new ConflictException('Ya respondiste esta opinión');
+    const reply = limpiarTexto(texto);
+    if (!reply) throw new BadRequestException('Escribe tu respuesta');
+    app.reviewReply = reply;
+    app.reviewRepliedAt = new Date();
+    await this.applicationRepository.save(app);
+    return { reply };
+  }
+
+  // Solo el administrador: oculta (o vuelve a mostrar) una opinión abusiva.
+  async ocultarOpinion(appId: string, oculta: boolean): Promise<{ hidden: boolean }> {
+    const app = await this.applicationRepository.findOne({ where: { id: appId } });
+    if (!app || app.rating == null) throw new NotFoundException('Opinión no encontrada');
+    app.reviewHidden = oculta;
+    await this.applicationRepository.save(app);
+    return { hidden: oculta };
   }
 
   async acceptApplication(appId: string, userId: string): Promise<any> {

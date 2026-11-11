@@ -18,6 +18,8 @@ export interface ProjectFeedItem {
   createdAt: string;
   postedBy: string;
   applicationCount?: number;
+  hiredName?: string | null;
+  rated?: boolean;
   postType?: 'STANDARD' | 'MULTIMEDIA' | 'VIP';
   mediaUrls?: string[];
 }
@@ -35,6 +37,7 @@ export interface ProjectApplication {
     description?: string;
     specialties?: string[];
     isProfileComplete?: boolean;
+    rating?: { rating: number | null; reviews: number };
   };
 }
 
@@ -144,4 +147,40 @@ export const getMyApplications = async () => {
   const res = await fetch(`${API_URL}/projects/my-applications`, { headers: authHeaders() });
   if (!res.ok) throw new Error('Error al cargar tus postulaciones');
   return res.json();
+};
+
+// ── TERMINAR Y CALIFICAR ────────────────────────────────────────────────────
+const enviarAccion = async (ruta: string, cuerpo: object, falla: string): Promise<void> => {
+  const res = await fetch(`${API_URL}${ruta}`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(cuerpo) });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || falla);
+  }
+};
+
+export const completeProject = (projectId: string, rating: number | null, comment: string) =>
+  enviarAccion(`/projects/${projectId}/complete`, { rating: rating ?? undefined, comment }, 'No se pudo terminar el proyecto');
+
+export const rateContractor = (projectId: string, rating: number, comment: string) =>
+  enviarAccion(`/projects/${projectId}/rate`, { rating, comment }, 'No se pudo enviar la calificación');
+
+export const replyToContractorReview = (applicationId: string, text: string) =>
+  enviarAccion(`/projects/applications/${applicationId}/review-reply`, { text }, 'No se pudo enviar la respuesta');
+
+export const getContractorReviews = async (contractorId: string) => {
+  try {
+    const res = await fetch(`${API_URL}/projects/contractor/${encodeURIComponent(contractorId)}/reviews`, { headers: authHeaders() });
+    return res.ok ? await res.json() : null;
+  } catch {
+    return null;
+  }
+};
+
+export const getMyContractorReviews = async () => {
+  try {
+    const res = await fetch(`${API_URL}/projects/me/reviews`, { headers: authHeaders() });
+    return res.ok ? await res.json() : null;
+  } catch {
+    return null;
+  }
 };

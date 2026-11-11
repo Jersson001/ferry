@@ -42,6 +42,27 @@ export class ProjectApplication {
   @Column({ type: 'enum', enum: ApplicationStatus, default: ApplicationStatus.PENDING })
   status: ApplicationStatus;
 
+  // Calificación que el cliente le da al contratista contratado al terminar el proyecto
+  @Column({ type: 'integer', nullable: true })
+  rating?: number | null;
+
+  @Column({ type: 'text', nullable: true })
+  reviewComment?: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  reviewedAt?: Date | null;
+
+  // Respuesta del contratista (una sola; no puede editar ni borrar la opinión)
+  @Column({ type: 'text', nullable: true })
+  reviewReply?: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  reviewRepliedAt?: Date | null;
+
+  // Oculta por el administrador ante un abuso evidente; deja de contar en el promedio
+  @Column({ type: 'boolean', default: false })
+  reviewHidden: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 }

@@ -1,9 +1,11 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Badge, Card, Button } from '../components/UIComponents';
-import { MapPin, DollarSign, Briefcase, Plus, User, HardHat, Search, ChevronRight, CheckCircle2, ArrowLeft, ShieldCheck, FileText, Phone, Loader2, X, AlertCircle } from 'lucide-react';
-import { createProject, getMyProjects, getProjectFeed, getProjectApplications, applyToProject, acceptApplication, cancelProject, ProjectFeedItem, ProjectApplication, getProjectWompiSignature } from '../services/projectsService';
+import { Star, MapPin, DollarSign, Briefcase, Plus, User, HardHat, Search, ChevronRight, CheckCircle2, ArrowLeft, ShieldCheck, FileText, Phone, Loader2, X, AlertCircle } from 'lucide-react';
+import { createProject, getMyProjects, getProjectFeed, getProjectApplications, applyToProject, acceptApplication, cancelProject, completeProject, rateContractor, getContractorReviews, ProjectFeedItem, ProjectApplication, getProjectWompiSignature } from '../services/projectsService';
 import { openWompiCheckout } from '../utils/wompi';
+import { CalificarContratista } from '../components/CalificarContratista';
+import { OpinionesPublicas } from '../components/OpinionesDeTienda';
 
 const getInitials = (name?: string) => {
   if (!name || name === 'guest') return 'U';
@@ -13,6 +15,16 @@ const getInitials = (name?: string) => {
   if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 };
+
+const RatingChip: React.FC<{ r?: { rating: number | null; reviews: number } }> = ({ r }) =>
+  r && r.rating !== null ? (
+    <p className="text-xs font-bold text-yellow-500 flex items-center gap-1">
+      <Star className="w-3.5 h-3.5 fill-yellow-500" /> {r.rating.toFixed(1)}
+      <span className="font-normal text-slate-400">({r.reviews})</span>
+    </p>
+  ) : (
+    <p className="text-[11px] text-slate-400">Sin calificaciones aún</p>
+  );
 
 export const ProjectHub: React.FC = () => {
   const [viewMode, setViewMode] = useState<'CLIENT' | 'CONTRACTOR'>('CLIENT');
@@ -28,6 +40,7 @@ export const ProjectHub: React.FC = () => {
   const [myProjects, setMyProjects] = useState<ProjectFeedItem[]>([]);
   const [marketProjects, setMarketProjects] = useState<ProjectFeedItem[]>([]);
   const [applications, setApplications] = useState<ProjectApplication[]>([]);
+  const [calificando, setCalificando] = useState<ProjectFeedItem | null>(null);
   const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set());
 
   // Loading / Error
@@ -247,6 +260,7 @@ export const ProjectHub: React.FC = () => {
                        {app.contractor.isProfileComplete && <CheckCircle2 className="w-4 h-4 text-blue-500" />}
                      </h3>
                      <p className="text-sm text-green-600 font-semibold">{formatBudget(app.estimatedPriceInCents)}</p>
+                     <RatingChip r={app.contractor.rating} />
                      <p className="text-xs text-slate-500 mt-1 line-clamp-1">{app.proposal}</p>
                      {app.contractor.specialties && app.contractor.specialties.length > 0 && (
                      <div className="flex gap-2 mt-2">
@@ -288,6 +302,7 @@ export const ProjectHub: React.FC = () => {
                 {c.displayName}
                 {c.isProfileComplete && <ShieldCheck className="w-5 h-5 text-blue-500 fill-blue-100" />}
               </h2>
+              <RatingChip r={c.rating} />
            </div>
         </div>
         <div className="space-y-6">
@@ -307,6 +322,7 @@ export const ProjectHub: React.FC = () => {
                {c.specialties.map((skill: string, i: number) => (<Badge key={i} type="neutral">{skill}</Badge>))}
            </div>
            )}
+           <OpinionesPublicas key={c.uid} cargar={() => getContractorReviews(c.uid)} />
         </div>
         <div className="fixed bottom-20 left-0 right-0 p-4 bg-white/90 backdrop-blur border-t border-slate-100 z-10">
            <Button onClick={() => handleAccept(selectedApp)} className="w-full shadow-xl" disabled={loading}>
@@ -320,6 +336,19 @@ export const ProjectHub: React.FC = () => {
   // --- MAIN VIEW ---
   return (
     <div className="space-y-6 pb-20">
+      {calificando && (
+        <CalificarContratista
+          nombre={calificando.hiredName || 'el profesional'}
+          terminando={calificando.status === 'IN_PROGRESS'}
+          onClose={() => setCalificando(null)}
+          onConfirm={async (rating, comment) => {
+            if (calificando.status === 'IN_PROGRESS') await completeProject(calificando.id, rating, comment);
+            else if (rating) await rateContractor(calificando.id, rating, comment);
+            setCalificando(null);
+            await loadMyProjects();
+          }}
+        />
+      )}
       
       {/* ROLE SWITCHER */}
       <div className="bg-white p-1 rounded-xl border border-slate-200 flex mb-4">

@@ -9,6 +9,7 @@ import { ESPECIALIDADES } from '../config/especialidades';
 import { getMyStoreRating, getMyActivity, StoreRating, HistorialCliente } from '../services/quoteService';
 import { nombreDeNivel, detalleDeUso } from '../components/InsigniaCliente';
 import { MisOpiniones } from '../components/OpinionesDeTienda';
+import { getMyContractorReviews, replyToContractorReview } from '../services/projectsService';
 import { AddPortfolioItemModal } from '../components/AddPortfolioItemModal';
 import { PortfolioLightbox } from '../components/PortfolioLightbox';
 import { Crown, Sparkles } from 'lucide-react';
@@ -460,6 +461,9 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
       </div>
 
       {profile?.role === UserRole.STORE && <MisOpiniones />}
+      {profile?.role === UserRole.USER && (
+        <MisOpiniones titulo="Opiniones como profesional" cargar={getMyContractorReviews} responder={replyToContractorReview} />
+      )}
 
       {/* Tabs Switcher */}
       <div className="flex p-1 bg-slate-100 rounded-xl mx-2">

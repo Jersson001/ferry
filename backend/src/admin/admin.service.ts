@@ -5,6 +5,7 @@ import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { User } from '../users/user.entity';
 import { MaterialRequest } from '../quotes/entities/material-request.entity';
 import { Quote, QuoteStatus } from '../quotes/entities/quote.entity';
+import { ProjectApplication } from '../projects/entities/project-application.entity';
 import { Referral } from '../referrals/entities/referral.entity';
 import { CatalogVisit } from '../stores/entities/catalog-visit.entity';
 import { haceDias, num, promedio, ResumenAdmin } from './admin-stats';
@@ -125,15 +126,38 @@ export class AdminService {
       .addOrderBy('q.createdAt', 'DESC')
       .limit(limite)
       .getRawMany();
-    return filas.map((f: any) => ({
+    const deContratistas = await this.dataSource
+      .getRepository(ProjectApplication)
+      .createQueryBuilder('a')
+      .innerJoin('a.contractor', 'c')
+      .innerJoin('a.project', 'p')
+      .innerJoin(User, 'u', 'u.uid = p.userId')
+      .select('a.id', 'id')
+      .addSelect('a.rating', 'rating')
+      .addSelect('a.reviewComment', 'comment')
+      .addSelect('a.reviewReply', 'reply')
+      .addSelect('a.reviewHidden', 'hidden')
+      .addSelect('a.reviewedAt', 'date')
+      .addSelect('c.displayName', 'store')
+      .addSelect('u.displayName', 'client')
+      .where('a.rating BETWEEN 1 AND 5')
+      .orderBy('a.reviewedAt', 'DESC', 'NULLS LAST')
+      .addOrderBy('a.createdAt', 'DESC')
+      .limit(limite)
+      .getRawMany();
+    const aItem = (kind: 'tienda' | 'contratista') => (f: any) => ({
+      kind,
       id: f.id,
       rating: num(f.rating),
       comment: f.comment ?? '',
       reply: f.reply ?? null,
       hidden: Boolean(f.hidden),
       date: f.date ?? null,
-      store: f.store || 'Ferretería',
+      store: f.store || (kind === 'tienda' ? 'Ferretería' : 'Profesional'),
       client: f.client || 'Cliente',
-    }));
+    });
+    const todas = [...filas.map(aItem('tienda')), ...deContratistas.map(aItem('contratista'))];
+    todas.sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime());
+    return todas.slice(0, limite);
   }
 }

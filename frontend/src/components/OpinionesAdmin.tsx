@@ -21,8 +21,8 @@ export const OpinionesAdmin: React.FC = () => {
     setTrabajando(o.id);
     setError('');
     try {
-      await ocultarOpinion(o.id, !o.hidden);
-      setLista(l => l && l.map(x => (x.id === o.id ? { ...x, hidden: !o.hidden } : x)));
+      await ocultarOpinion(o, !o.hidden);
+      setLista(l => l && l.map(x => (x.id === o.id && x.kind === o.kind ? { ...x, hidden: !o.hidden } : x)));
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -52,7 +52,7 @@ export const OpinionesAdmin: React.FC = () => {
       ) : (
         <ul className="space-y-2">
           {visibles.map(o => (
-            <li key={o.id} className={`bg-white border border-slate-200 rounded-xl p-3 ${o.hidden ? 'opacity-60' : ''}`}>
+            <li key={`${o.kind}-${o.id}`} className={`bg-white border border-slate-200 rounded-xl p-3 ${o.hidden ? 'opacity-60' : ''}`}>
               <div className="flex items-center gap-2 mb-1">
                 <span className="inline-flex">
                   {[1, 2, 3, 4, 5].map(i => (
@@ -60,7 +60,7 @@ export const OpinionesAdmin: React.FC = () => {
                   ))}
                 </span>
                 <span className="text-xs text-slate-600 truncate">
-                  <strong>{o.client}</strong> → {o.store}
+                  <strong>{o.client}</strong> → {o.store}{o.kind === 'contratista' && <em className="not-italic text-slate-400"> (profesional)</em>}
                 </span>
                 <span className="text-[10px] text-slate-400 ml-auto whitespace-nowrap">{fecha(o.date)}</span>
               </div>

@@ -21,6 +21,7 @@ export interface ResumenAdmin {
 }
 
 export interface OpinionAdmin {
+  kind: 'tienda' | 'contratista';
   id: string;
   rating: number;
   comment: string;
@@ -33,8 +34,13 @@ export interface OpinionAdmin {
 
 export const getResumenAdmin = () => request<ResumenAdmin>('/admin/summary');
 export const getOpinionesAdmin = () => request<OpinionAdmin[]>('/admin/reviews');
-export const ocultarOpinion = (quoteId: string, hidden: boolean) =>
-  request<{ hidden: boolean }>(`/quotes/${encodeURIComponent(quoteId)}/review-hidden`, {
-    method: 'POST',
-    body: JSON.stringify({ hidden }),
-  });
+export const ocultarOpinion = (o: Pick<OpinionAdmin, 'kind' | 'id'>, hidden: boolean) =>
+  request<{ hidden: boolean }>(
+    o.kind === 'contratista'
+      ? `/projects/applications/${encodeURIComponent(o.id)}/review-hidden`
+      : `/quotes/${encodeURIComponent(o.id)}/review-hidden`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ hidden }),
+    },
+  );
