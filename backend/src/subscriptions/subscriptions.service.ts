@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, EntityManager } from 'typeorm';
 import { SubscriptionPlan } from './entities/subscription-plan.entity';
 import { UserSubscription, SubscriptionStatus } from './entities/user-subscription.entity';
 import { CreditLedger, LedgerType } from './entities/credit-ledger.entity';
@@ -109,39 +109,35 @@ export class SubscriptionsService {
     }
   }
 
-  async deductCredits(userId: string, amount: number, reference: string): Promise<void> {
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
+  /**
+   * Descuenta créditos. Si recibe `manager`, corre dentro de esa transacción (quien llama la confirma
+   * o la revierte); si no, abre y confirma la suya.
+   */
+  async deductCredits(userId: string, amount: number, reference: string, manager?: EntityManager): Promise<void> {
+    if (manager) return this.descontar(manager, userId, amount, reference);
+    await this.dataSource.transaction(m => this.descontar(m, userId, amount, reference));
+  }
 
-    try {
-      const sub = await queryRunner.manager.findOne(UserSubscription, {
-        where: { userId },
-        lock: { mode: 'pessimistic_write' },
-      });
+  private async descontar(manager: EntityManager, userId: string, amount: number, reference: string): Promise<void> {
+    const sub = await manager.findOne(UserSubscription, {
+      where: { userId },
+      lock: { mode: 'pessimistic_write' },
+    });
 
-      if (!sub || sub.creditsBalance < amount) {
-        throw new BadRequestException('Créditos insuficientes para realizar esta acción');
-      }
-
-      sub.creditsBalance -= amount;
-      await queryRunner.manager.save(sub);
-
-      const ledgerEntry = queryRunner.manager.create(CreditLedger, {
-        userId,
-        type: LedgerType.SPENT,
-        amount,
-        reference,
-      });
-      await queryRunner.manager.save(ledgerEntry);
-
-      await queryRunner.commitTransaction();
-    } catch (err) {
-      await queryRunner.rollbackTransaction();
-      throw err;
-    } finally {
-      await queryRunner.release();
+    if (!sub || sub.creditsBalance < amount) {
+      throw new BadRequestException('Créditos insuficientes para realizar esta acción');
     }
+
+    sub.creditsBalance -= amount;
+    await manager.save(sub);
+
+    const ledgerEntry = manager.create(CreditLedger, {
+      userId,
+      type: LedgerType.SPENT,
+      amount,
+      reference,
+    });
+    await manager.save(ledgerEntry);
   }
 
   /**

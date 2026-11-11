@@ -222,15 +222,25 @@ export class ProjectsService {
     await queryRunner.startTransaction();
 
     try {
-      const application = await queryRunner.manager.findOne(ProjectApplication, {
-        where: { id: appId },
-        relations: ['project'],
+      // Postgres no deja usar FOR UPDATE con el LEFT JOIN de `relations`, así que se bloquea cada
+      // fila por separado. Primero el proyecto: dos aceptaciones simultáneas del mismo proyecto
+      // quedan en fila y la segunda ve que ya no está abierto.
+      const found = await queryRunner.manager.findOne(ProjectApplication, { where: { id: appId } });
+      if (!found) throw new NotFoundException('Postulación no encontrada');
+
+      const project = await queryRunner.manager.findOne(Project, {
+        where: { id: found.projectId },
         lock: { mode: 'pessimistic_write' },
       });
+      if (!project) throw new NotFoundException('Proyecto no encontrado');
+      if (project.userId !== userId) throw new ForbiddenException('No es tu proyecto');
+      if (project.status !== ProjectStatus.OPEN) throw new BadRequestException('Este proyecto ya no está abierto');
 
-      if (!application) throw new NotFoundException('Postulación no encontrada');
-      if (application.project.userId !== userId) throw new ForbiddenException('No es tu proyecto');
-      if (application.status !== ApplicationStatus.PENDING) throw new BadRequestException('Esta postulación ya no está pendiente');
+      const application = await queryRunner.manager.findOne(ProjectApplication, {
+        where: { id: appId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!application || application.status !== ApplicationStatus.PENDING) throw new BadRequestException('Esta postulación ya no está pendiente');
 
       // 1. Aceptar postulación
       application.status = ApplicationStatus.ACCEPTED;
@@ -243,7 +253,6 @@ export class ProjectsService {
       );
 
       // 3. Marcar proyecto como en progreso
-      const project = application.project;
       project.status = ProjectStatus.IN_PROGRESS;
       await queryRunner.manager.save(project);
 
@@ -305,33 +314,38 @@ export class ProjectsService {
   }
 
   async applyToProject(contractorId: string, projectId: string, data: any): Promise<ProjectApplication> {
-    const project = await this.projectRepository.findOne({ where: { id: projectId } });
-    if (!project) throw new NotFoundException('Proyecto no encontrado');
-    if (project.status !== ProjectStatus.OPEN) throw new BadRequestException('El proyecto ya no recibe postulaciones');
-    if (project.userId === contractorId) throw new BadRequestException('No puedes aplicar a tu propio proyecto');
+    const proposal = typeof data?.proposal === 'string' ? data.proposal.trim() : '';
+    if (proposal.length < 10) throw new BadRequestException('Escribe tu propuesta (mínimo 10 caracteres)');
+    if (proposal.length > 2000) throw new BadRequestException('La propuesta no puede pasar de 2000 caracteres');
+    const price = Number(data?.estimatedPriceInCents);
+    // Entre $1.000 y $10.000 millones de pesos, en centavos
+    if (!Number.isInteger(price) || price < 100_000 || price > 1_000_000_000_000) {
+      throw new BadRequestException('Escribe un precio estimado válido');
+    }
 
-    // Verificar si ya aplicó
-    const existing = await this.applicationRepository.findOne({
-      where: { projectId, contractorId }
+    // Cobro del crédito y postulación van en una sola transacción: o quedan las dos cosas, o ninguna.
+    return this.dataSource.transaction(async (manager) => {
+      const project = await manager.findOne(Project, { where: { id: projectId } });
+      if (!project) throw new NotFoundException('Proyecto no encontrado');
+      if (project.status !== ProjectStatus.OPEN) throw new BadRequestException('El proyecto ya no recibe postulaciones');
+      if (project.userId === contractorId) throw new BadRequestException('No puedes aplicar a tu propio proyecto');
+
+      // Primero el cobro: bloquea la fila de créditos del contratista, así dos envíos seguidos
+      // se atienden uno tras otro y el segundo sí ve la postulación del primero.
+      await this.subscriptionsService.deductCredits(contractorId, 1, `APPLY-${project.id}`, manager);
+
+      const existing = await manager.findOne(ProjectApplication, { where: { projectId, contractorId } });
+      if (existing) throw new BadRequestException('Ya te postulaste a este proyecto');
+
+      const application = manager.create(ProjectApplication, {
+        projectId,
+        contractorId,
+        proposal,
+        estimatedPriceInCents: price,
+        status: ApplicationStatus.PENDING,
+      });
+      return manager.save(application);
     });
-    if (existing) throw new BadRequestException('Ya te postulaste a este proyecto');
-
-    // COBRAR 1 CRÉDITO (Lead) — Sistema de suscripciones
-    await this.subscriptionsService.deductCredits(
-      contractorId,
-      1,
-      `APPLY-${project.id}`
-    );
-
-    const application = this.applicationRepository.create({
-      projectId,
-      contractorId,
-      proposal: data.proposal,
-      estimatedPriceInCents: data.estimatedPriceInCents,
-      status: ApplicationStatus.PENDING,
-    });
-
-    return this.applicationRepository.save(application);
   }
 
   async getMyApplications(contractorId: string): Promise<any[]> {

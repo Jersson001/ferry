@@ -143,7 +143,24 @@ export const applyToProject = async (
 };
 
 // ── MIS POSTULACIONES (CONTRATISTA) ──────────────────────────────────────────
-export const getMyApplications = async () => {
+export interface MyApplication {
+  id: string;
+  status: 'PENDING' | 'ACCEPTED' | 'REJECTED';
+  proposal: string;
+  estimatedPriceInCents: number;
+  createdAt: string;
+  project: {
+    id: string;
+    title: string;
+    category: string;
+    location: string;
+    status: 'OPEN' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+    revealedAddress: string | null;
+    revealedPhone: string | null;
+  };
+}
+
+export const getMyApplications = async (): Promise<MyApplication[]> => {
   const res = await fetch(`${API_URL}/projects/my-applications`, { headers: authHeaders() });
   if (!res.ok) throw new Error('Error al cargar tus postulaciones');
   return res.json();

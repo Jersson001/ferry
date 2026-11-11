@@ -2,7 +2,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Badge, Card, Button } from '../components/UIComponents';
 import { Star, MapPin, DollarSign, Briefcase, Plus, User, HardHat, Search, ChevronRight, CheckCircle2, ArrowLeft, ShieldCheck, FileText, Phone, Loader2, X, AlertCircle } from 'lucide-react';
-import { createProject, getMyProjects, getProjectFeed, getProjectApplications, applyToProject, acceptApplication, cancelProject, completeProject, rateContractor, getContractorReviews, ProjectFeedItem, ProjectApplication, getProjectWompiSignature } from '../services/projectsService';
+import { createProject, getMyProjects, getProjectFeed, getProjectApplications, applyToProject, acceptApplication, cancelProject, completeProject, rateContractor, getContractorReviews, getMyApplications, ProjectFeedItem, ProjectApplication, MyApplication, getProjectWompiSignature } from '../services/projectsService';
+import { getMySubscription, UserSubscription } from '../services/subscriptionService';
+import { PlansModal } from '../components/PlansModal';
+import { UserRole } from '../types';
 import { openWompiCheckout } from '../utils/wompi';
 import { CalificarContratista } from '../components/CalificarContratista';
 import { OpinionesPublicas } from '../components/OpinionesDeTienda';
@@ -42,6 +45,10 @@ export const ProjectHub: React.FC = () => {
   const [applications, setApplications] = useState<ProjectApplication[]>([]);
   const [calificando, setCalificando] = useState<ProjectFeedItem | null>(null);
   const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set());
+  const [contractorTab, setContractorTab] = useState<'FEED' | 'MINE'>('FEED');
+  const [myApps, setMyApps] = useState<MyApplication[]>([]);
+  const [subscription, setSubscription] = useState<UserSubscription | null>(null);
+  const [showPlans, setShowPlans] = useState(false);
 
   // Loading / Error
   const [loading, setLoading] = useState(false);
@@ -70,7 +77,24 @@ export const ProjectHub: React.FC = () => {
     try { const data = await getProjectFeed(); setMarketProjects(data); } catch { /* silent */ }
   }, []);
 
-  useEffect(() => { loadMyProjects(); loadFeed(); }, [loadMyProjects, loadFeed]);
+  // Mis postulaciones como constructor: también marcan "Postulado" en el muro aunque se recargue la página
+  const loadMyApps = useCallback(async () => {
+    try {
+      const data = await getMyApplications();
+      setMyApps(data);
+      setAppliedIds(new Set(data.map(a => a.project.id)));
+    } catch { /* silent */ }
+  }, []);
+
+  const loadCredits = useCallback(async () => {
+    try { setSubscription(await getMySubscription()); } catch { /* silent */ }
+  }, []);
+
+  useEffect(() => { loadMyProjects(); loadFeed(); loadMyApps(); }, [loadMyProjects, loadFeed, loadMyApps]);
+  useEffect(() => { if (viewMode === 'CONTRACTOR') { loadFeed(); loadMyApps(); loadCredits(); } }, [viewMode, loadFeed, loadMyApps, loadCredits]);
+
+  const credits = subscription?.creditsBalance ?? null;
+  const sinCreditos = credits !== null && credits < 1;
 
   // ── Post Project ───────────────────────────────────────────────────
   const handlePostProject = async () => {
@@ -155,13 +179,15 @@ export const ProjectHub: React.FC = () => {
   const handleApply = async () => {
     if (!applyModal) return;
     const priceNum = parseInt(applyForm.price.replace(/\D/g, '')) || 0;
-    if (!applyForm.proposal.trim() || priceNum === 0) { setApplyError('Escribe tu propuesta y precio estimado'); return; }
+    if (priceNum < 1000) { setApplyError('Escribe un precio estimado (mínimo $1.000)'); return; }
+    if (applyForm.proposal.trim().length < 10) { setApplyError('Escribe tu propuesta (mínimo 10 caracteres)'); return; }
     setApplyLoading(true); setApplyError(null);
     try {
       await applyToProject(applyModal.projectId, { proposal: applyForm.proposal, estimatedPriceInCents: priceNum * 100 });
       setAppliedIds(prev => new Set(prev).add(applyModal.projectId));
       setApplyModal(null); setApplyForm({ proposal: '', price: '' });
-    } catch (err: any) { setApplyError(err.message); }
+      loadMyApps(); loadCredits();
+    } catch (err: any) { setApplyError(err.message); loadCredits(); }
     finally { setApplyLoading(false); }
   };
 
@@ -580,11 +606,74 @@ export const ProjectHub: React.FC = () => {
       {viewMode === 'CONTRACTOR' && (
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
            <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold text-slate-800">Muro de Oportunidades</h2>
-            <div className="bg-slate-100 p-2 rounded-full">
-              <Search className="w-4 h-4 text-slate-500" />
-            </div>
+            <h2 className="text-xl font-bold text-slate-800">{contractorTab === 'FEED' ? 'Muro de Oportunidades' : 'Mis Postulaciones'}</h2>
+            <button onClick={() => setShowPlans(true)} className={`text-xs font-bold px-3 py-1.5 rounded-full border ${sinCreditos ? 'bg-orange-50 border-orange-200 text-orange-700' : 'bg-white border-slate-200 text-slate-600'}`}>
+              {credits === null ? 'Créditos' : `${credits} ${credits === 1 ? 'crédito' : 'créditos'}`}
+            </button>
           </div>
+
+          <div className="bg-slate-100 p-1 rounded-xl flex mb-4">
+            <button onClick={() => setContractorTab('FEED')} className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${contractorTab === 'FEED' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}>
+              Oportunidades
+            </button>
+            <button onClick={() => setContractorTab('MINE')} className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${contractorTab === 'MINE' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}>
+              Mis postulaciones{myApps.length > 0 ? ` (${myApps.length})` : ''}
+            </button>
+          </div>
+
+          {sinCreditos && contractorTab === 'FEED' && (
+            <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-xl flex items-center justify-between gap-3">
+              <p className="text-xs text-orange-800">No tienes créditos. Cada postulación cuesta 1 crédito.</p>
+              <button onClick={() => setShowPlans(true)} className="shrink-0 text-xs font-bold text-white bg-orange-500 px-3 py-1.5 rounded-lg">Ver planes</button>
+            </div>
+          )}
+
+          {contractorTab === 'MINE' && (
+            <div className="space-y-3">
+              {myApps.length === 0 ? (
+                <div className="text-center py-10 opacity-60">
+                  <FileText className="w-12 h-12 mx-auto text-slate-300 mb-2" />
+                  <p className="text-slate-400">Aún no te has postulado a ningún proyecto.</p>
+                </div>
+              ) : myApps.map(app => {
+                const estado = app.status === 'ACCEPTED'
+                  ? { texto: '¡Te contrataron!', tipo: 'success' as const }
+                  : app.status === 'REJECTED' || app.project.status === 'CANCELLED'
+                    ? { texto: app.project.status === 'CANCELLED' ? 'Proyecto cancelado' : 'Eligieron a otro', tipo: 'neutral' as const }
+                    : { texto: 'En espera', tipo: 'warning' as const };
+                return (
+                  <Card key={app.id} className={app.status === 'ACCEPTED' ? 'border-2 border-green-300' : ''}>
+                    <div className="flex justify-between items-start gap-2 mb-1">
+                      <h3 className="font-bold text-slate-800">{app.project.title}</h3>
+                      <Badge type={estado.tipo}>{estado.texto}</Badge>
+                    </div>
+                    <div className="flex items-center gap-1 text-slate-500 text-xs mb-2">
+                      <MapPin className="w-3 h-3" /> {app.project.location} · {app.project.category} · {timeAgo(app.createdAt)}
+                    </div>
+                    <p className="text-sm text-green-600 font-semibold">Tu cotización: {formatBudget(app.estimatedPriceInCents)}</p>
+                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">{app.proposal}</p>
+                    {app.status === 'ACCEPTED' && (
+                      <div className="mt-3 p-3 bg-green-50 rounded-xl border border-green-100 space-y-2">
+                        <p className="text-xs font-bold text-green-800 uppercase">Datos del cliente</p>
+                        <p className="text-sm text-slate-700 flex items-start gap-2">
+                          <MapPin className="w-4 h-4 shrink-0 mt-0.5 text-green-600" /> {app.project.revealedAddress || 'El cliente no dejó dirección'}
+                        </p>
+                        {app.project.revealedPhone ? (
+                          <a href={`tel:${app.project.revealedPhone.replace(/\s/g, '')}`} className="text-sm font-semibold text-green-700 flex items-center gap-2">
+                            <Phone className="w-4 h-4" /> {app.project.revealedPhone}
+                          </a>
+                        ) : (
+                          <p className="text-sm text-slate-500 flex items-center gap-2"><Phone className="w-4 h-4" /> El cliente no dejó teléfono</p>
+                        )}
+                      </div>
+                    )}
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+
+          {contractorTab === 'FEED' && (<>
 
           {/* Filter Bar */}
           <div className="flex gap-2 overflow-x-auto no-scrollbar pb-4">
@@ -666,6 +755,7 @@ export const ProjectHub: React.FC = () => {
                 })
             )}
           </div>
+          </>)}
         </div>
       )}
 
@@ -710,13 +800,28 @@ export const ProjectHub: React.FC = () => {
               </div>
               <p className="text-[11px] text-slate-400 flex items-center gap-1">
                 <ShieldCheck className="w-3 h-3" /> Se descontará 1 crédito de tu cuenta al postularte.
+                {credits !== null && <span className="font-semibold text-slate-600">Tienes {credits}.</span>}
               </p>
-              <Button onClick={handleApply} className="w-full mt-2" disabled={applyLoading}>
-                {applyLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Enviar Postulación'}
-              </Button>
+              {sinCreditos ? (
+                <Button onClick={() => setShowPlans(true)} className="w-full mt-2">Ver planes para postularte</Button>
+              ) : (
+                <Button onClick={handleApply} className="w-full mt-2" disabled={applyLoading}>
+                  {applyLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Enviar Postulación'}
+                </Button>
+              )}
             </div>
           </div>
         </div>
+      )}
+
+      {showPlans && (
+        <PlansModal
+          isOpen={showPlans}
+          onClose={() => { setShowPlans(false); loadCredits(); }}
+          userRole={UserRole.USER}
+          currentSubscription={subscription}
+          onPlanUpdated={(sub) => { setSubscription(sub); setApplyError(null); }}
+        />
       )}
     </div>
   );
