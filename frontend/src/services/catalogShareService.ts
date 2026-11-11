@@ -34,3 +34,18 @@ export const getCatalogoPublico = async (storeId: string): Promise<CatalogoPubli
 // El QR se dibuja en el navegador: el enlace de la tienda no se manda a ningún servicio externo.
 export const qrComoImagen = (texto: string, ancho = 512): Promise<string> =>
   QRCode.toDataURL(texto, { width: ancho, margin: 2, errorCorrectionLevel: 'M' });
+
+// Cuenta la apertura del catálogo una vez por pestaña. `?via=qr` distingue a quien escaneó el QR; si falla, no importa.
+export const registrarVisita = (storeId: string): void => {
+  try {
+    const clave = `ferry_visita_${storeId}`;
+    if (sessionStorage.getItem(clave)) return;
+    sessionStorage.setItem(clave, '1');
+    const via = new URLSearchParams(window.location.search).get('via') === 'qr' ? 'qr' : 'link';
+    fetch(`${API_URL}/stores/${encodeURIComponent(storeId)}/visit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ via }),
+    }).catch(() => undefined);
+  } catch { /* sin almacenamiento o red: no afecta al visitante */ }
+};

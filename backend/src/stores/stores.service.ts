@@ -8,6 +8,7 @@ import { Quote } from '../quotes/entities/quote.entity';
 import { contarTiendasQueCubren } from './cobertura';
 import { Punto } from '../quotes/ubicacion';
 import { User } from '../users/user.entity';
+import { CatalogVisit } from './entities/catalog-visit.entity';
 import { armarOpiniones, Opinion } from './opiniones';
 import { armarCatalogoPublico, esIdValido, ProductoPublico } from './catalogo-publico';
 import { armarPromociones, FilaPromocion, Promocion } from './promociones';
@@ -211,6 +212,14 @@ export class StoresService {
       return perfilPropio(await this.usersService.findOne(storeId));
     }
     return perfilPropio(await this.usersService.update(storeId, safeData));
+  }
+
+  // Cuenta una apertura del catálogo público. Solo para tiendas que existen; nunca falla hacia el visitante.
+  async registrarVisita(id: string, via: unknown): Promise<void> {
+    if (!esIdValido(id)) return;
+    const existe = await this.dataSource.getRepository(User).exist({ where: { uid: id, role: 'STORE' as any } });
+    if (!existe) return;
+    await this.dataSource.getRepository(CatalogVisit).insert({ storeId: id, via: via === 'qr' ? 'qr' : 'link' });
   }
 
   // Opiniones visibles de una tienda, de la más reciente a la más antigua. `propias` agrega el id para responder.

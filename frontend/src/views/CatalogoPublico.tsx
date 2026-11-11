@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Package, Search, Store, ArrowRight } from 'lucide-react';
 import { OpinionesPublicas } from '../components/OpinionesDeTienda';
-import { getCatalogoPublico, CatalogoPublicoData } from '../services/catalogShareService';
+import { getCatalogoPublico, registrarVisita, CatalogoPublicoData } from '../services/catalogShareService';
 
 const pesos = (n: number) => `$${n.toLocaleString('es-CO')}`;
 
@@ -11,6 +11,8 @@ export const CatalogoPublico: React.FC<{ storeId: string }> = ({ storeId }) => {
   const [estado, setEstado] = useState<'cargando' | 'listo' | 'no-existe'>('cargando');
   const [busqueda, setBusqueda] = useState('');
   const [categoria, setCategoria] = useState<string | null>(null);
+
+  useEffect(() => { registrarVisita(storeId); }, [storeId]);
 
   useEffect(() => {
     let cancelled = false;

@@ -24,6 +24,18 @@ export class AdminController {
     return this.adminService.getUsersWithSubscriptions();
   }
 
+  @Get('summary')
+  async getSummary(@Req() req: RequestWithUser) {
+    this.checkAdmin(req);
+    return this.adminService.getResumen();
+  }
+
+  @Get('reviews')
+  async getReviews(@Req() req: RequestWithUser) {
+    this.checkAdmin(req);
+    return this.adminService.getOpiniones(200);
+  }
+
   @Post('assign-plan/:userId/:planId')
   async assignPlan(
     @Param('userId') userId: string,

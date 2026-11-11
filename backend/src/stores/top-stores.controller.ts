@@ -1,4 +1,4 @@
-import { Controller, Get, Header, NotFoundException, Param, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Header, NotFoundException, Param, Post, Query } from '@nestjs/common';
 import { StoresService } from './stores.service';
 import { esIdValido } from './catalogo-publico';
 import { leerUbicacion, leerRadioKm } from '../quotes/ubicacion';
@@ -29,6 +29,13 @@ export class TopStoresController {
     if (!esIdValido(id)) throw new NotFoundException('Ferretería no encontrada');
     const cantidad = Math.min(Math.max(parseInt(limit ?? '', 10) || 10, 1), 50);
     return this.storesService.getOpiniones(id, cantidad);
+  }
+
+  // Público: lo llama la página del catálogo una vez por visita. La respuesta es siempre 204 para no revelar qué tiendas existen.
+  @Post(':id/visit')
+  @HttpCode(204)
+  async registerVisit(@Param('id') id: string, @Body('via') via?: string) {
+    await this.storesService.registrarVisita(id, via).catch(() => undefined);
   }
 
   @Get(':id/public-catalog')

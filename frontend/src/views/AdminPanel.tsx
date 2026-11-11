@@ -3,7 +3,9 @@ import { MaterialRequest, RequestStatus, UserRole } from '../types';
 import { Card, Button, Badge } from '../components/UIComponents';
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { ReferidosAdmin } from '../components/ReferidosAdmin';
-import { Zap, DollarSign, Package, Users, Crown, ShieldAlert, Loader2 } from 'lucide-react';
+import { ResumenAdminPanel } from '../components/ResumenAdmin';
+import { OpinionesAdmin } from '../components/OpinionesAdmin';
+import { LayoutDashboard, Star, Zap, DollarSign, Package, Users, Crown, ShieldAlert, Loader2 } from 'lucide-react';
 import { getAdminUsersWithSubscriptions, adminAssignPlan, getSubscriptionPlans, SubscriptionPlan } from '../services/subscriptionService';
 
 interface Props {
@@ -12,7 +14,7 @@ interface Props {
 }
 
 export const AdminPanel: React.FC<Props> = ({ requests, onManualQuote }) => {
-  const [activeTab, setActiveTab] = useState<'PEDIDOS' | 'USUARIOS' | 'REFERIDOS'>('PEDIDOS');
+  const [activeTab, setActiveTab] = useState<'RESUMEN' | 'PEDIDOS' | 'USUARIOS' | 'OPINIONES' | 'REFERIDOS'>('RESUMEN');
   const [users, setUsers] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [plansStore, setPlansStore] = useState<SubscriptionPlan[]>([]);
@@ -81,44 +83,35 @@ export const AdminPanel: React.FC<Props> = ({ requests, onManualQuote }) => {
         </div>
       </div>
 
-      {/* Premium Segmented Navigation Bar */}
-      <div className="flex bg-slate-200/80 backdrop-blur-md p-1.5 rounded-2xl shadow-inner border border-slate-300/60 my-6">
-        <button
-          onClick={() => setActiveTab('PEDIDOS')}
-          className={`flex-1 py-3 px-4 rounded-xl font-extrabold text-xs tracking-wider uppercase transition-all duration-300 flex items-center justify-center gap-2 ${
-            activeTab === 'PEDIDOS'
-              ? 'bg-white text-slate-900 shadow-md scale-[1.01] ring-1 ring-black/5'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-          }`}
-        >
-          <Package className={`w-4 h-4 transition-colors ${activeTab === 'PEDIDOS' ? 'text-ferry-500' : 'text-slate-400'}`} />
-          <span>Gestión de Pedidos</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('USUARIOS')}
-          className={`flex-1 py-3 px-4 rounded-xl font-extrabold text-xs tracking-wider uppercase transition-all duration-300 flex items-center justify-center gap-2 ${
-            activeTab === 'USUARIOS'
-              ? 'bg-white text-slate-900 shadow-md scale-[1.01] ring-1 ring-black/5'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-          }`}
-        >
-          <Users className={`w-4 h-4 transition-colors ${activeTab === 'USUARIOS' ? 'text-ferry-500' : 'text-slate-400'}`} />
-          <span>Usuarios & Suscripciones</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('REFERIDOS')}
-          className={`flex-1 py-3 px-4 rounded-xl font-extrabold text-xs tracking-wider uppercase transition-all duration-300 flex items-center justify-center gap-2 ${
-            activeTab === 'REFERIDOS'
-              ? 'bg-white text-slate-900 shadow-md scale-[1.01] ring-1 ring-black/5'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-          }`}
-        >
-          <Crown className={`w-4 h-4 transition-colors ${activeTab === 'REFERIDOS' ? 'text-ferry-500' : 'text-slate-400'}`} />
-          <span>Referidos</span>
-        </button>
+      {/* Navegación del panel */}
+      <div className="flex gap-1.5 bg-slate-200/80 backdrop-blur-md p-1.5 rounded-2xl shadow-inner border border-slate-300/60 my-6 overflow-x-auto no-scrollbar">
+        {([
+          ['RESUMEN', 'Resumen', LayoutDashboard],
+          ['PEDIDOS', 'Pedidos', Package],
+          ['USUARIOS', 'Usuarios y planes', Users],
+          ['OPINIONES', 'Opiniones', Star],
+          ['REFERIDOS', 'Referidos', Crown],
+        ] as const).map(([id, texto, Icono]) => (
+          <button
+            key={id}
+            onClick={() => setActiveTab(id)}
+            className={`flex-1 min-w-fit py-3 px-4 rounded-xl font-extrabold text-xs tracking-wider uppercase transition-all duration-300 flex items-center justify-center gap-2 whitespace-nowrap ${
+              activeTab === id
+                ? 'bg-white text-slate-900 shadow-md ring-1 ring-black/5'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+            }`}
+          >
+            <Icono className={`w-4 h-4 transition-colors ${activeTab === id ? 'text-ferry-500' : 'text-slate-400'}`} />
+            <span>{texto}</span>
+          </button>
+        ))}
       </div>
+
+      {/* RESUMEN TAB */}
+      {activeTab === 'RESUMEN' && <ResumenAdminPanel />}
+
+      {/* OPINIONES TAB */}
+      {activeTab === 'OPINIONES' && <OpinionesAdmin />}
 
       {/* PEDIDOS TAB */}
       {activeTab === 'PEDIDOS' && (

@@ -15,7 +15,7 @@ export const CompartirCatalogo: React.FC<Props> = ({ storeId, storeName, onClose
 
   useEffect(() => {
     let cancelled = false;
-    qrComoImagen(enlace, 768).then(url => { if (!cancelled) setQr(url); }).catch(() => {});
+    qrComoImagen(`${enlace}?via=qr`, 768).then(url => { if (!cancelled) setQr(url); }).catch(() => {});
     return () => { cancelled = true; };
   }, [enlace]);
 

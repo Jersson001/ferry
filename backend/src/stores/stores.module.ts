@@ -5,12 +5,13 @@ import { TopStoresController } from './top-stores.controller';
 import { StoresService } from './stores.service';
 import { CatalogController } from './catalog.controller';
 import { CatalogProduct } from './entities/catalog-product.entity';
+import { CatalogVisit } from './entities/catalog-visit.entity';
 import { UsersModule } from '../users/users.module';
 import { StorageModule } from '../storage/storage.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([CatalogProduct]),
+    TypeOrmModule.forFeature([CatalogProduct, CatalogVisit]),
     UsersModule,
     StorageModule,
   ],
