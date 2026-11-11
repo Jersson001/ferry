@@ -29,6 +29,13 @@ export class SubscriptionsController {
     return this.subscriptionsService.getUserSubscription(req.user.uid);
   }
 
+  /** GET /subscriptions/my-usage — Plan vigente, sus cupos del mes y lo usado */
+  @UseGuards(JwtAuthGuard)
+  @Get('my-usage')
+  async getMyUsage(@Req() req: RequestWithUser) {
+    return this.subscriptionsService.getUso(req.user.uid);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get('ledger')
   async getMyLedger(@Req() req: RequestWithUser) {

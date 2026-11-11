@@ -1,3 +1,8 @@
+// Las columnas `timestamp` no guardan zona horaria: unas fechas las pone Postgres (en UTC) y otras Node.
+// Si Node corre con la hora de Colombia (como en un PC local) quedan corridas 5 horas entre sí, lo que
+// descuadra los cupos del mes y muestra tiempos negativos ("Hace -300m"). Render ya corre en UTC.
+process.env.TZ = 'UTC';
+
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';

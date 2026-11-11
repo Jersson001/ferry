@@ -115,6 +115,21 @@ export class ProjectsController {
     return this.projectsService.ocultarOpinion(appId, hidden !== false);
   }
 
+  /** GET /projects/applications/:appId/contact/signature — Firma Wompi para pagar el contacto del cliente */
+  @Get('applications/:appId/contact/signature')
+  async getContactSignature(@Param('appId') appId: string, @Req() req: RequestWithUser) {
+    const { amountInCents } = await this.projectsService.contactoPorPagar(appId, req.user.uid);
+    const reference = `CONTACT_${appId}_${Date.now()}`;
+    const signature = this.paymentsService.generateWidgetSignature(reference, amountInCents, 'COP');
+    return { reference, amountInCents, currency: 'COP', signature };
+  }
+
+  /** POST /projects/applications/:appId/contact/verify — Confirma el pago y muestra el contacto */
+  @Post('applications/:appId/contact/verify')
+  async verifyContactPayment(@Param('appId') appId: string, @Body('transactionId') transactionId: string, @Req() req: RequestWithUser) {
+    return this.paymentsService.verifyWompiContactTransaction(transactionId, req.user.uid, appId);
+  }
+
   /** GET /projects/my-applications — Mis postulaciones como contratista */
   @Get('my-applications')
   async getMyApplications(@Req() req: RequestWithUser) {

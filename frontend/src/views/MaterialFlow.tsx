@@ -811,7 +811,8 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
    * capturar los materiales a mano. Devuelve true si ya se manejó el error.
    */
   const handleAiUnavailable = (error: any): boolean => {
-    if (error?.status !== 503) return false;
+    // 503: la IA no está disponible. 403: se acabaron las transcripciones del plan este mes.
+    if (error?.status !== 503 && error?.status !== 403) return false;
 
     const irManual = window.confirm(
       `${error.message}\n\n¿Quieres agregarlos a mano ahora?`

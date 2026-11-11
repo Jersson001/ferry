@@ -37,6 +37,7 @@ export interface ProjectApplication {
     description?: string;
     specialties?: string[];
     isProfileComplete?: boolean;
+    verified?: boolean;
     rating?: { rating: number | null; reviews: number };
   };
 }
@@ -149,6 +150,8 @@ export interface MyApplication {
   proposal: string;
   estimatedPriceInCents: number;
   createdAt: string;
+  contactLocked?: boolean; // Lo contrataron pero debe pagar para ver el contacto
+  contactPriceInCents?: number | null;
   project: {
     id: string;
     title: string;
@@ -166,14 +169,25 @@ export const getMyApplications = async (): Promise<MyApplication[]> => {
   return res.json();
 };
 
+// ── PAGAR EL CONTACTO DEL CLIENTE (contratación que el plan no cubre) ──────────
+export const getContactSignature = async (applicationId: string): Promise<{ reference: string; amountInCents: number; signature: string }> => {
+  const res = await fetch(`${API_URL}/projects/applications/${applicationId}/contact/signature`, { headers: authHeaders() });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.message || 'No se pudo preparar el pago');
+  return data;
+};
+
+export const verifyContactPayment = (applicationId: string, transactionId: string) =>
+  enviarAccion(`/projects/applications/${applicationId}/contact/verify`, { transactionId }, 'No se pudo confirmar el pago');
+
 // ── TERMINAR Y CALIFICAR ────────────────────────────────────────────────────
-const enviarAccion = async (ruta: string, cuerpo: object, falla: string): Promise<void> => {
+async function enviarAccion(ruta: string, cuerpo: object, falla: string): Promise<void> {
   const res = await fetch(`${API_URL}${ruta}`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(cuerpo) });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.message || falla);
   }
-};
+}
 
 export const completeProject = (projectId: string, rating: number | null, comment: string) =>
   enviarAccion(`/projects/${projectId}/complete`, { rating: rating ?? undefined, comment }, 'No se pudo terminar el proyecto');

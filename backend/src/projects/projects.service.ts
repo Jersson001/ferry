@@ -8,6 +8,8 @@ import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { StorageService } from '../storage/storage.service';
 import { armarOpiniones, limpiarTexto, Opinion } from '../stores/opiniones';
 import { ConflictException } from '@nestjs/common';
+import { UserSubscription } from '../subscriptions/entities/user-subscription.entity';
+import { planVigente, usoDesde, quedaCupo, mensajeSinCupo, precioContacto } from '../subscriptions/plan-vigente';
 
 @Injectable()
 export class ProjectsService {
@@ -25,6 +27,12 @@ export class ProjectsService {
   // CLIENTES
   // ==========================================
   async createProject(userId: string, data: any): Promise<Project> {
+    const plan = await planVigente(this.dataSource.manager, userId);
+    const { proyectos } = await usoDesde(this.dataSource.manager, userId, plan.inicio);
+    if (!quedaCupo(plan.limites.proyectos, proyectos)) {
+      throw new ForbiddenException(mensajeSinCupo(plan, 'publicaciones de proyectos', plan.limites.proyectos));
+    }
+
     const processedMediaUrls: string[] = [];
     if (data.mediaUrls && Array.isArray(data.mediaUrls)) {
       for (const media of data.mediaUrls) {
@@ -92,6 +100,10 @@ export class ProjectsService {
     });
 
     const reputacion = await this.reputacionDe(applications.map(a => a.contractorId));
+    const verificados = new Set<string>();
+    for (const a of applications) {
+      if ((await planVigente(this.dataSource.manager, a.contractorId)).verificado) verificados.add(a.contractorId);
+    }
 
     // Map contractor data from their user profile
     return applications.map(app => ({
@@ -107,6 +119,7 @@ export class ProjectsService {
         description: (app.contractor as any).description ?? null,
         specialties: (app.contractor as any).specialties ?? [],
         isProfileComplete: (app.contractor as any).isProfileComplete ?? false,
+        verified: verificados.has(app.contractorId),
         rating: reputacion.get(app.contractorId) ?? { rating: null, reviews: 0 },
       }
     }));
@@ -242,8 +255,15 @@ export class ProjectsService {
       });
       if (!application || application.status !== ApplicationStatus.PENDING) throw new BadRequestException('Esta postulación ya no está pendiente');
 
-      // 1. Aceptar postulación
+      // 1. Aceptar postulación. Si el plan del contratista aún tiene contactos incluidos este mes, ve el
+      // del cliente de una vez; si no, queda contratado y debe pagar para verlo.
+      const planContratista = await planVigente(queryRunner.manager, application.contractorId);
+      const { contactosIncluidos } = await usoDesde(queryRunner.manager, application.contractorId, planContratista.inicio);
+      const incluido = quedaCupo(planContratista.limites.contactosIncluidos, contactosIncluidos);
       application.status = ApplicationStatus.ACCEPTED;
+      application.contactUnlocked = incluido;
+      application.contactSource = incluido ? 'PLAN' : null;
+      application.contactUnlockedAt = incluido ? new Date() : null;
       await queryRunner.manager.save(application);
 
       // 2. Rechazar las demás
@@ -258,7 +278,7 @@ export class ProjectsService {
 
       await queryRunner.commitTransaction();
 
-      // Return with revealed confidential data (address + phone)
+      // El cliente ve sus propios datos de vuelta; al contratista se le muestran en "Mis postulaciones".
       return {
         ...application,
         revealedAddress: project.exactAddress ?? null,
@@ -323,19 +343,26 @@ export class ProjectsService {
       throw new BadRequestException('Escribe un precio estimado válido');
     }
 
-    // Cobro del crédito y postulación van en una sola transacción: o quedan las dos cosas, o ninguna.
+    // La revisión del cupo y la postulación van en una sola transacción.
     return this.dataSource.transaction(async (manager) => {
       const project = await manager.findOne(Project, { where: { id: projectId } });
       if (!project) throw new NotFoundException('Proyecto no encontrado');
       if (project.status !== ProjectStatus.OPEN) throw new BadRequestException('El proyecto ya no recibe postulaciones');
       if (project.userId === contractorId) throw new BadRequestException('No puedes aplicar a tu propio proyecto');
 
-      // Primero el cobro: bloquea la fila de créditos del contratista, así dos envíos seguidos
-      // se atienden uno tras otro y el segundo sí ve la postulación del primero.
-      await this.subscriptionsService.deductCredits(contractorId, 1, `APPLY-${project.id}`, manager);
+      // Bloquea la suscripción del contratista: dos envíos seguidos se atienden uno tras otro, así el
+      // segundo ve la postulación del primero y el conteo del cupo no se pasa.
+      await this.subscriptionsService.getUserSubscription(contractorId); // crea la fila si no existe
+      await manager.findOne(UserSubscription, { where: { userId: contractorId }, lock: { mode: 'pessimistic_write' } });
 
       const existing = await manager.findOne(ProjectApplication, { where: { projectId, contractorId } });
       if (existing) throw new BadRequestException('Ya te postulaste a este proyecto');
+
+      const plan = await planVigente(manager, contractorId);
+      const { postulaciones } = await usoDesde(manager, contractorId, plan.inicio);
+      if (!quedaCupo(plan.limites.postulaciones, postulaciones)) {
+        throw new ForbiddenException(mensajeSinCupo(plan, 'postulaciones', plan.limites.postulaciones));
+      }
 
       const application = manager.create(ProjectApplication, {
         projectId,
@@ -354,23 +381,40 @@ export class ProjectsService {
       relations: ['project'],
       order: { createdAt: 'DESC' },
     });
+    const plan = await planVigente(this.dataSource.manager, contractorId);
 
-    return applications.map(app => ({
-      id: app.id,
-      status: app.status,
-      proposal: app.proposal,
-      estimatedPriceInCents: app.estimatedPriceInCents,
-      createdAt: app.createdAt,
-      project: {
-        id: app.project.id,
-        title: app.project.title,
-        category: app.project.category,
-        location: app.project.location,
-        status: app.project.status,
-        // Only reveal address to accepted contractors
-        revealedAddress: app.status === ApplicationStatus.ACCEPTED ? app.project.exactAddress ?? null : null,
-        revealedPhone: app.status === ApplicationStatus.ACCEPTED ? app.project.contactPhone ?? null : null,
-      }
-    }));
+    return applications.map(app => {
+      const aceptada = app.status === ApplicationStatus.ACCEPTED;
+      // Null = contratado antes de los cupos: se muestra como siempre.
+      const veContacto = aceptada && app.contactUnlocked !== false;
+      return {
+        id: app.id,
+        status: app.status,
+        proposal: app.proposal,
+        estimatedPriceInCents: app.estimatedPriceInCents,
+        createdAt: app.createdAt,
+        contactLocked: aceptada && !veContacto,
+        contactPriceInCents: aceptada && !veContacto ? precioContacto(plan) : null,
+        project: {
+          id: app.project.id,
+          title: app.project.title,
+          category: app.project.category,
+          location: app.project.location,
+          status: app.project.status,
+          revealedAddress: veContacto ? app.project.exactAddress ?? null : null,
+          revealedPhone: veContacto ? app.project.contactPhone ?? null : null,
+        },
+      };
+    });
+  }
+
+  // Postulación aceptada cuyo contacto el contratista aún no puede ver: lo que debe pagar para verlo.
+  async contactoPorPagar(appId: string, contractorId: string): Promise<{ amountInCents: number }> {
+    const app = await this.applicationRepository.findOne({ where: { id: appId } });
+    if (!app || app.contractorId !== contractorId) throw new NotFoundException('Postulación no encontrada');
+    if (app.status !== ApplicationStatus.ACCEPTED) throw new BadRequestException('Aún no te han contratado en este proyecto');
+    if (app.contactUnlocked !== false) throw new BadRequestException('Ya puedes ver el contacto de este cliente');
+    const plan = await planVigente(this.dataSource.manager, contractorId);
+    return { amountInCents: precioContacto(plan) };
   }
 }

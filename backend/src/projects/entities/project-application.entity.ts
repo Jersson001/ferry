@@ -42,6 +42,18 @@ export class ProjectApplication {
   @Column({ type: 'enum', enum: ApplicationStatus, default: ApplicationStatus.PENDING })
   status: ApplicationStatus;
 
+  // ¿Ve el contratista la dirección y el teléfono del cliente? Se decide al contratarlo: true si su plan
+  // aún tenía contactos incluidos, false si debe pagarlo. Null en contrataciones anteriores a los cupos
+  // (esas siguen mostrándolo).
+  @Column({ type: 'boolean', nullable: true })
+  contactUnlocked?: boolean | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  contactSource?: 'PLAN' | 'PAGO' | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  contactUnlockedAt?: Date | null;
+
   // Calificación que el cliente le da al contratista contratado al terminar el proyecto
   @Column({ type: 'integer', nullable: true })
   rating?: number | null;

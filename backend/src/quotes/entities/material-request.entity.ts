@@ -56,6 +56,10 @@ export class MaterialRequest {
   @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true })
   userLng: number;
 
+  // Cotizaciones que puede recibir, según el plan de quien la creó. Vacío en solicitudes anteriores (usan 5).
+  @Column({ type: 'integer', nullable: true, name: 'max_quotes' })
+  maxQuotes?: number | null;
+
   // Hasta dónde quiere el cliente que le coticen, en km desde la obra.
   @Column({ type: 'integer', default: 10 })
   radioKm: number;

@@ -31,6 +31,10 @@ export class UserSubscription {
   @Column({ type: 'enum', enum: SubscriptionStatus, default: SubscriptionStatus.INACTIVE })
   status: SubscriptionStatus;
 
+  // Inicio del mes pagado; los cupos se cuentan desde aquí. Vacío en suscripciones anteriores a los cupos.
+  @Column({ type: 'timestamp', nullable: true })
+  currentPeriodStart: Date | null;
+
   @Column({ type: 'timestamp', nullable: true })
   currentPeriodEnd: Date;
 

@@ -4,6 +4,9 @@ import { Repository, DataSource, EntityManager } from 'typeorm';
 import { SubscriptionPlan } from './entities/subscription-plan.entity';
 import { UserSubscription, SubscriptionStatus } from './entities/user-subscription.entity';
 import { CreditLedger, LedgerType } from './entities/credit-ledger.entity';
+import { UsageLog } from './entities/usage-log.entity';
+import { planVigente, usoDesde, quedaCupo, precioContacto, mensajeSinCupo } from './plan-vigente';
+import { PLANES_USUARIO } from './planes-usuario';
 
 @Injectable()
 export class SubscriptionsService {
@@ -85,8 +88,10 @@ export class SubscriptionsService {
       sub.status = SubscriptionStatus.ACTIVE;
       sub.creditsBalance += plan.credits;
 
-      const nextMonth = new Date();
+      const now = new Date();
+      const nextMonth = new Date(now);
       nextMonth.setMonth(nextMonth.getMonth() + 1);
+      sub.currentPeriodStart = now;
       sub.currentPeriodEnd = nextMonth;
 
       await queryRunner.manager.save(sub);
@@ -199,50 +204,42 @@ export class SubscriptionsService {
       },
 
       // ─── SEGMENTO: CONTRATISTAS Y PROFESIONALES ────────────────────────
-      {
-        name: 'Gratuito',
-        targetRole: 'CONTRACTOR',
-        priceInCents: 0,
-        credits: 0,
-        maxLeadsOrApplications: 0,
-        maxPortfolioItems: 6,
-        hasVerifiedBadge: false,
-        isPopular: false,
-        features: ['10 transcripciones IA/mes.'],
-      },
-      {
-        name: 'Maestro Sub',
-        targetRole: 'CONTRACTOR',
-        priceInCents: 3000000, // $30.000 COP
-        credits: 6,
-        maxLeadsOrApplications: 6,
-        maxPortfolioItems: 15,
-        hasVerifiedBadge: false,
-        isPopular: false,
-        features: ['Acceso a contacto post-match.'],
-      },
-      {
-        name: 'Especialista',
-        targetRole: 'CONTRACTOR',
-        priceInCents: 5500000, // $55.000 COP
-        credits: 15,
-        maxLeadsOrApplications: 15,
-        maxPortfolioItems: 30,
-        hasVerifiedBadge: false,
-        isPopular: true,
-        features: ['Prioridad visual en proyectos nuevos.'],
-      },
-      {
-        name: 'Constructor Pro',
-        targetRole: 'CONTRACTOR',
-        priceInCents: 9000000, // $90.000 COP
-        credits: 35,
-        maxLeadsOrApplications: 35,
-        maxPortfolioItems: -1, // Ilimitado
-        hasVerifiedBadge: true,
-        isPopular: false,
-        features: ['Sello Verificado y estadísticas de éxito.'],
-      },
+      ...PLANES_USUARIO.map(({ nombresAnteriores, ...plan }) => plan),
     ]);
+  }
+
+  /**
+   * Deja los planes de usuario (targetRole CONTRACTOR) como dice PLANES_USUARIO. Corre en cada arranque:
+   * seedPlans solo siembra con la tabla vacía, y así los cambios de precios y cupos llegan a producción.
+   * Busca cada plan por su nombre actual o uno anterior, para conservar su id y las suscripciones.
+   */
+  async sincronizarPlanesUsuario(): Promise<void> {
+    const existentes = await this.planRepository.find({ where: { targetRole: 'CONTRACTOR' } });
+    for (const { nombresAnteriores, ...def } of PLANES_USUARIO) {
+      const nombres = [def.name, ...nombresAnteriores];
+      const plan = existentes.find(p => nombres.includes(p.name));
+      await this.planRepository.save(plan ? Object.assign(plan, def) : this.planRepository.create(def));
+    }
+  }
+
+  // Plan vigente y cuánto lleva gastado de cada cupo este mes.
+  async getUso(userId: string) {
+    const plan = await planVigente(this.dataSource.manager, userId);
+    const usados = await usoDesde(this.dataSource.manager, userId, plan.inicio);
+    return { ...plan, usados, precioContactoInCents: precioContacto(plan) };
+  }
+
+  // Antes de una lectura de IA: corta si ya no le quedan en el mes.
+  async verificarCupoIa(userId: string): Promise<void> {
+    const plan = await planVigente(this.dataSource.manager, userId);
+    const { transcripcionesIa } = await usoDesde(this.dataSource.manager, userId, plan.inicio);
+    if (!quedaCupo(plan.limites.transcripcionesIa, transcripcionesIa)) {
+      throw new ForbiddenException(mensajeSinCupo(plan, 'transcripciones de IA', plan.limites.transcripcionesIa));
+    }
+  }
+
+  // Después de una lectura de IA exitosa.
+  async registrarUsoIa(userId: string): Promise<void> {
+    await this.dataSource.getRepository(UsageLog).save({ userId, kind: 'AI' });
   }
 }

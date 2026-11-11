@@ -1,6 +1,8 @@
 import { Injectable, Logger, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
+import { ProjectApplication, ApplicationStatus } from '../projects/entities/project-application.entity';
+import { PRECIO_CONTACTO_SUSCRITO } from '../subscriptions/plan-vigente';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { PaymentTransaction, PaymentStatus } from './entities/payment-transaction.entity';
@@ -18,6 +20,7 @@ export class PaymentsService {
     private configService: ConfigService,
     @Inject(forwardRef(() => SubscriptionsService))
     private subscriptionsService: SubscriptionsService,
+    private dataSource: DataSource,
   ) {}
 
   // 1. Generar Hash de Integridad para el Frontend (Widget)
@@ -85,6 +88,10 @@ export class PaymentsService {
       if (newTx.reference.startsWith('QUOTE-') && newTx.quoteId) {
         this.logger.log(`Pago aprobado para cotización ${newTx.quoteId}. Actualizando estados...`);
         await this.confirmQuotePayment(newTx.quoteId);
+      } else if (newTx.reference.startsWith('CONTACT_')) {
+        // Formato: CONTACT_{applicationId}_{timestamp}
+        const appId = newTx.reference.split('_')[1];
+        if (appId && newTx.amountInCents >= PRECIO_CONTACTO_SUSCRITO) await this.desbloquearContacto(appId);
       } else if (newTx.reference.startsWith('SUB_')) {
         // Formato: SUB_{userId}_{planId}_{timestamp}
         const parts = newTx.reference.split('_');
@@ -320,6 +327,61 @@ export class PaymentsService {
     }
 
     throw new BadRequestException('El pago no ha sido aprobado por Wompi aún.');
+  }
+
+  // Pago del contacto del cliente para una postulación aceptada que el plan no cubría.
+  async verifyWompiContactTransaction(transactionId: string, userId: string, appId: string): Promise<{ success: boolean }> {
+    if (!transactionId) throw new BadRequestException('Falta la transacción de Wompi.');
+    const app = await this.dataSource.getRepository(ProjectApplication).findOne({ where: { id: appId } });
+    if (!app || app.contractorId !== userId) throw new BadRequestException('Postulación no encontrada.');
+
+    let tx = await this.transactionRepository.findOne({ where: { transactionId } });
+    if (!tx) {
+      const useProduction = this.configService.get<string>('WOMPI_ENV') === 'production';
+      const baseUrl = useProduction ? 'https://production.wompi.co/v1' : 'https://sandbox.wompi.co/v1';
+      let wompiData: any;
+      try {
+        const json = await (await fetch(`${baseUrl}/transactions/${transactionId}`)).json();
+        wompiData = json.data;
+      } catch (err: any) {
+        this.logger.error(`Error verificando Wompi para contacto tx ${transactionId}: ${err.message}`);
+        throw new BadRequestException('No se pudo verificar el pago con Wompi.');
+      }
+      if (!wompiData || wompiData.status !== 'APPROVED') throw new BadRequestException('El pago no ha sido aprobado por Wompi aún.');
+      tx = this.transactionRepository.create({
+        transactionId: wompiData.id,
+        reference: wompiData.reference,
+        amountInCents: wompiData.amount_in_cents,
+        currency: wompiData.currency,
+        status: PaymentStatus.APPROVED,
+        paymentMethodType: wompiData.payment_method_type,
+      });
+      try {
+        await this.transactionRepository.save(tx);
+      } catch (dbErr: any) {
+        if (dbErr.code !== '23505') throw dbErr;
+        tx = await this.transactionRepository.findOne({ where: { transactionId } });
+      }
+    }
+
+    // La referencia la firmó el servidor con el precio vigente, pero se revisa que sea de esta postulación
+    // y que el monto alcance al menos el precio más bajo.
+    if (!tx || tx.status !== PaymentStatus.APPROVED) throw new BadRequestException('El pago no ha sido aprobado por Wompi aún.');
+    if (tx.reference.split('_')[0] !== 'CONTACT' || tx.reference.split('_')[1] !== appId) {
+      throw new BadRequestException('Este pago no corresponde a esta postulación.');
+    }
+    if (tx.amountInCents < PRECIO_CONTACTO_SUSCRITO) throw new BadRequestException('El monto pagado no alcanza para el contacto.');
+
+    await this.desbloquearContacto(appId);
+    return { success: true };
+  }
+
+  // Idempotente: si ya estaba desbloqueado (o se pagó dos veces) no cambia nada.
+  private async desbloquearContacto(appId: string): Promise<void> {
+    await this.dataSource.getRepository(ProjectApplication).update(
+      { id: appId, status: ApplicationStatus.ACCEPTED, contactUnlocked: false },
+      { contactUnlocked: true, contactSource: 'PAGO', contactUnlockedAt: new Date() },
+    );
   }
 
   // 5. Pagos Manuales (Nequi/Comprobantes)

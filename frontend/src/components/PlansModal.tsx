@@ -95,13 +95,13 @@ export const PlansModal: React.FC<Props> = ({ isOpen, onClose, userRole, current
             <X className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-2 text-yellow-300 text-xs font-black tracking-widest uppercase mb-2">
-            <Crown className="w-4 h-4" /> Planes de {userRole === UserRole.STORE ? 'Ferreterías & Tiendas' : 'Contratistas & Maestros'}
+            <Crown className="w-4 h-4" /> {userRole === UserRole.STORE ? 'Planes de Ferreterías & Tiendas' : 'Planes para Usuarios'}
           </div>
           <h2 className="text-3xl font-black tracking-tight">Desbloquea tu Máximo Potencial</h2>
           <p className="text-slate-100 text-sm mt-2 max-w-xl font-medium">
             {userRole === UserRole.STORE 
               ? 'Recibe leads calificados de cotizaciones en tu zona, destaca tus productos y aumenta las ventas de tu ferretería.'
-              : 'Sube fotos a tu portafolio, accede a postulaciones exclusivas y recibe notificaciones de proyectos en tu zona.'}
+              : 'Cotiza con más ferreterías, publica más proyectos y consigue clientes con su contacto incluido.'}
           </p>
         </div>
 
@@ -121,7 +121,10 @@ export const PlansModal: React.FC<Props> = ({ isOpen, onClose, userRole, current
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {plans.map((plan) => {
-                const isCurrent = currentSubscription?.plan?.id === plan.id || (!currentSubscription?.plan && plan.priceInCents === 0);
+                // Un plan de pago vencido ya no rige: se vuelve al gratuito.
+                const vigente = !!currentSubscription?.plan && currentSubscription.plan.priceInCents > 0
+                  && !!currentSubscription.currentPeriodEnd && new Date(currentSubscription.currentPeriodEnd) > new Date();
+                const isCurrent = vigente ? currentSubscription!.plan!.id === plan.id : plan.priceInCents === 0;
                 return (
                   <div
                     key={plan.id}
@@ -166,10 +169,10 @@ export const PlansModal: React.FC<Props> = ({ isOpen, onClose, userRole, current
                           <span>{plan.maxPortfolioItems === -1 || plan.maxPortfolioItems >= 999 ? 'Fotos ilimitadas en portafolio' : `Hasta ${plan.maxPortfolioItems ?? 6} fotos en galería`}</span>
                         </div>
                       )}
-                      <div className="flex items-center gap-2 text-slate-900 font-bold">
+                      {userRole === UserRole.STORE && <div className="flex items-center gap-2 text-slate-900 font-bold">
                         <Check className="w-4 h-4 text-ferry-500 shrink-0" />
                         <span>{plan.maxLeadsOrApplications === -1 || plan.maxLeadsOrApplications >= 999 ? (userRole === UserRole.STORE ? 'Leads ilimitados/mes' : 'Postulaciones ilimitadas') : `${plan.maxLeadsOrApplications ?? 10} ${userRole === UserRole.STORE ? 'leads calificados/mes' : 'postulaciones/mes'}`}</span>
-                      </div>
+                      </div>}
                       
                       {plan.features && plan.features.map((feat, idx) => (
                         <div key={idx} className="flex items-center gap-2 text-slate-700">

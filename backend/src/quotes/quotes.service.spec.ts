@@ -50,7 +50,9 @@ describe('QuotesService.createRequest — foto adjunta', () => {
   const crear = async (imageUrl: unknown) => {
     const create = jest.fn((entity) => entity);
     const save = jest.fn(async (entity) => entity);
-    const service = new QuotesService({ create, save } as any, {} as any, {} as any);
+    // Sin plan de pago ni plan gratuito en la base: rige el tope general de cotizaciones.
+    const dataSource = { manager: { findOne: jest.fn(async () => null) } };
+    const service = new QuotesService({ create, save } as any, {} as any, dataSource as any);
     const request = await service.createRequest('user-1', {
       title: 'Pedido',
       category: 'General',
@@ -80,5 +82,27 @@ describe('QuotesService.createRequest — foto adjunta', () => {
     ['demasiado larga', 'https://ejemplo.com/' + 'a'.repeat(3000)],
   ])('descarta la URL %s', async (_caso, valor) => {
     expect(await crear(valor)).toBeNull();
+  });
+});
+
+describe('QuotesService.createRequest — cotizaciones según el plan', () => {
+  const crearCon = async (plan: object | null) => {
+    const create = jest.fn((entity) => entity);
+    const save = jest.fn(async (entity) => entity);
+    // planVigente busca el usuario, su suscripción y el plan gratuito, en ese orden.
+    const findOne = jest.fn()
+      .mockResolvedValueOnce({ uid: 'user-1', role: 'USER' })
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(plan);
+    const service = new QuotesService({ create, save } as any, {} as any, { manager: { findOne } } as any);
+    return service.createRequest('user-1', { title: 'Pedido', category: 'General', items: [], deliveryAddress: 'Calle 1' });
+  };
+
+  it('guarda el tope de ferreterías del plan de quien pide', async () => {
+    expect((await crearCon({ name: 'Gratuito', maxQuotesPerRequest: 3 })).maxQuotes).toBe(3);
+  });
+
+  it('sin plan en la base usa el tope general de 5', async () => {
+    expect((await crearCon(null)).maxQuotes).toBe(5);
   });
 });

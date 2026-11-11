@@ -3,7 +3,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * Flujo de autenticación Ferry:
  *   Paso 0 → Splash animado
- *   Paso 1 → Selección de rol (Constructor / Ferretería)
+ *   Paso 1 → Selección de rol (Usuario / Ferretería)
  *   Paso 2 → Formulario email + contraseña (login o registro)
  */
 
@@ -254,7 +254,7 @@ export const LoginScreen: React.FC<Props> = ({ onLogin, onGuestLogin, preselecte
           <img src={ferryLogo} alt="Ferry" className="h-16 object-contain" />
         </div>
         <p className="text-white/70 text-sm mt-6 font-medium tracking-wide animate-pulse">
-          Conectando ferreterías y constructores…
+          Conectando ferreterías y usuarios…
         </p>
       </div>
     );
@@ -288,7 +288,7 @@ export const LoginScreen: React.FC<Props> = ({ onLogin, onGuestLogin, preselecte
               <Hammer className="w-7 h-7 text-ferry-600" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-bold text-slate-800 text-base">Soy Constructor</p>
+              <p className="font-bold text-slate-800 text-base">Soy Usuario</p>
               <p className="text-sm text-slate-500 mt-0.5 leading-snug">
                 Busco materiales y cotizo con ferreterías cercanas
               </p>
@@ -332,7 +332,7 @@ export const LoginScreen: React.FC<Props> = ({ onLogin, onGuestLogin, preselecte
   // ═══════════════════════════════════════════════════════════════════════════
   // RENDER: Paso 2 — Formulario email + contraseña
   // ═══════════════════════════════════════════════════════════════════════════
-  const roleLabel = selectedRole === 'ferreteria' ? 'Ferretería' : 'Constructor';
+  const roleLabel = selectedRole === 'ferreteria' ? 'Ferretería' : 'Usuario';
 
   return (
     <div className="h-screen flex flex-col bg-slate-50">

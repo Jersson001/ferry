@@ -54,6 +54,22 @@ export async function getSubscriptionPlans(role?: string): Promise<SubscriptionP
   return apiRequest<SubscriptionPlan[]>(`/subscriptions/plans${query}`);
 }
 
+export interface UsoPlan {
+  nombre: string;
+  pago: boolean;
+  verificado: boolean;
+  inicio: string;
+  fin: string;
+  limites: { transcripcionesIa: number; proyectos: number; tiendasPorSolicitud: number; postulaciones: number; contactosIncluidos: number };
+  usados: { transcripcionesIa: number; proyectos: number; postulaciones: number; contactosIncluidos: number };
+  precioContactoInCents: number;
+}
+
+// Plan vigente con sus cupos del mes (-1 = sin límite) y lo que ya se usó.
+export async function getMyUsage(): Promise<UsoPlan> {
+  return apiRequest<UsoPlan>('/subscriptions/my-usage');
+}
+
 export async function getMySubscription(): Promise<UserSubscription> {
   return apiRequest<UserSubscription>('/subscriptions/my-subscription');
 }

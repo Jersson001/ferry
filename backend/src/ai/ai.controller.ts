@@ -18,23 +18,27 @@ export class AiController {
     private readonly subscriptionsService: SubscriptionsService,
   ) {}
 
+  // Cada lectura (texto o foto) cuenta como una transcripción del cupo mensual del plan.
+  // Solo se registra si la IA respondió: un error de Google no le gasta el cupo al usuario.
   @Post('parse-materials')
-  async parseMaterials(@Body('text') text: string) {
+  async parseMaterials(@Body('text') text: string, @Req() req: RequestWithUser) {
     if (!text || text.trim() === '') {
       throw new BadRequestException('El texto de entrada no puede estar vacío');
     }
-    
-    // Llamamos al servicio de IA
+    await this.subscriptionsService.verificarCupoIa(req.user.uid);
     const items = await this.aiService.parseMaterialsList(text);
+    await this.subscriptionsService.registrarUsoIa(req.user.uid);
     return { items };
   }
 
   @Post('analyze-image')
-  async analyzeImage(@Body('base64Image') base64Image: string) {
+  async analyzeImage(@Body('base64Image') base64Image: string, @Req() req: RequestWithUser) {
     if (!base64Image || base64Image.trim() === '') {
       throw new BadRequestException('La imagen no puede estar vacía');
     }
+    await this.subscriptionsService.verificarCupoIa(req.user.uid);
     const items = await this.aiService.analyzeImage(base64Image);
+    await this.subscriptionsService.registrarUsoIa(req.user.uid);
     return { items };
   }
 

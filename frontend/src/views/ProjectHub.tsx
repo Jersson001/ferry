@@ -2,8 +2,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Badge, Card, Button } from '../components/UIComponents';
 import { Star, MapPin, DollarSign, Briefcase, Plus, User, HardHat, Search, ChevronRight, CheckCircle2, ArrowLeft, ShieldCheck, FileText, Phone, Loader2, X, AlertCircle } from 'lucide-react';
-import { createProject, getMyProjects, getProjectFeed, getProjectApplications, applyToProject, acceptApplication, cancelProject, completeProject, rateContractor, getContractorReviews, getMyApplications, ProjectFeedItem, ProjectApplication, MyApplication, getProjectWompiSignature } from '../services/projectsService';
-import { getMySubscription, UserSubscription } from '../services/subscriptionService';
+import { createProject, getMyProjects, getProjectFeed, getProjectApplications, applyToProject, acceptApplication, cancelProject, completeProject, rateContractor, getContractorReviews, getMyApplications, getContactSignature, verifyContactPayment, ProjectFeedItem, ProjectApplication, MyApplication, getProjectWompiSignature } from '../services/projectsService';
+import { getMySubscription, getMyUsage, UserSubscription, UsoPlan } from '../services/subscriptionService';
 import { PlansModal } from '../components/PlansModal';
 import { UserRole } from '../types';
 import { openWompiCheckout } from '../utils/wompi';
@@ -48,6 +48,9 @@ export const ProjectHub: React.FC = () => {
   const [contractorTab, setContractorTab] = useState<'FEED' | 'MINE'>('FEED');
   const [myApps, setMyApps] = useState<MyApplication[]>([]);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
+  const [uso, setUso] = useState<UsoPlan | null>(null);
+  const [pagandoContacto, setPagandoContacto] = useState<string | null>(null);
+  const [contactError, setContactError] = useState<string | null>(null);
   const [showPlans, setShowPlans] = useState(false);
 
   // Loading / Error
@@ -86,15 +89,41 @@ export const ProjectHub: React.FC = () => {
     } catch { /* silent */ }
   }, []);
 
+  // Plan vigente y cupos del mes (postulaciones, contactos incluidos)
   const loadCredits = useCallback(async () => {
     try { setSubscription(await getMySubscription()); } catch { /* silent */ }
+    try { setUso(await getMyUsage()); } catch { /* silent */ }
   }, []);
 
   useEffect(() => { loadMyProjects(); loadFeed(); loadMyApps(); }, [loadMyProjects, loadFeed, loadMyApps]);
   useEffect(() => { if (viewMode === 'CONTRACTOR') { loadFeed(); loadMyApps(); loadCredits(); } }, [viewMode, loadFeed, loadMyApps, loadCredits]);
 
-  const credits = subscription?.creditsBalance ?? null;
-  const sinCreditos = credits !== null && credits < 1;
+  const limitePostulaciones = uso?.limites.postulaciones ?? -1;
+  const sinCupo = !!uso && limitePostulaciones !== -1 && uso.usados.postulaciones >= limitePostulaciones;
+  const contactosRestantes = uso
+    ? (uso.limites.contactosIncluidos === -1 ? Infinity : Math.max(0, uso.limites.contactosIncluidos - uso.usados.contactosIncluidos))
+    : 0;
+  const pesos = (cents: number) => `$${(cents / 100).toLocaleString('es-CO')}`;
+  const resumenPlan = !uso ? 'Mi plan'
+    : limitePostulaciones !== -1 ? `${uso.nombre} · ${Math.max(0, limitePostulaciones - uso.usados.postulaciones)} de ${limitePostulaciones}`
+    : uso.limites.contactosIncluidos > 0 ? `${uso.nombre} · ${uso.usados.contactosIncluidos} de ${uso.limites.contactosIncluidos} contactos`
+    : uso.nombre;
+
+  // Pagar con Wompi el contacto de un cliente que ya me contrató y mi plan no cubría
+  const handlePayContact = async (appId: string) => {
+    setPagandoContacto(appId); setContactError(null);
+    try {
+      const { reference, signature, amountInCents } = await getContactSignature(appId);
+      await openWompiCheckout({ quoteId: reference, requestId: '', amountInCents, reference, signature }, async (res) => {
+        try {
+          if (res.transaction.status !== 'APPROVED') throw new Error('El pago fue rechazado o cancelado.');
+          await verifyContactPayment(appId, res.transaction.id);
+          await loadMyApps();
+        } catch (err: any) { setContactError(err.message); }
+        finally { setPagandoContacto(null); }
+      });
+    } catch (err: any) { setContactError(err.message); setPagandoContacto(null); }
+  };
 
   // ── Post Project ───────────────────────────────────────────────────
   const handlePostProject = async () => {
@@ -283,7 +312,7 @@ export const ProjectHub: React.FC = () => {
                   <div className="flex-1">
                      <h3 className="font-bold text-slate-800 flex items-center gap-1">
                        {app.contractor.displayName}
-                       {app.contractor.isProfileComplete && <CheckCircle2 className="w-4 h-4 text-blue-500" />}
+                       {app.contractor.verified && <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full"><ShieldCheck className="w-3 h-3" /> Verificado</span>}
                      </h3>
                      <p className="text-sm text-green-600 font-semibold">{formatBudget(app.estimatedPriceInCents)}</p>
                      <RatingChip r={app.contractor.rating} />
@@ -326,7 +355,7 @@ export const ProjectHub: React.FC = () => {
               )}
               <h2 className="text-2xl font-bold text-slate-800 mt-2 flex items-center gap-2">
                 {c.displayName}
-                {c.isProfileComplete && <ShieldCheck className="w-5 h-5 text-blue-500 fill-blue-100" />}
+                {c.verified && <ShieldCheck className="w-5 h-5 text-blue-500 fill-blue-100" aria-label="Verificado" />}
               </h2>
               <RatingChip r={c.rating} />
            </div>
@@ -607,8 +636,8 @@ export const ProjectHub: React.FC = () => {
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
            <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold text-slate-800">{contractorTab === 'FEED' ? 'Muro de Oportunidades' : 'Mis Postulaciones'}</h2>
-            <button onClick={() => setShowPlans(true)} className={`text-xs font-bold px-3 py-1.5 rounded-full border ${sinCreditos ? 'bg-orange-50 border-orange-200 text-orange-700' : 'bg-white border-slate-200 text-slate-600'}`}>
-              {credits === null ? 'Créditos' : `${credits} ${credits === 1 ? 'crédito' : 'créditos'}`}
+            <button onClick={() => setShowPlans(true)} className={`text-xs font-bold px-3 py-1.5 rounded-full border ${sinCupo ? 'bg-orange-50 border-orange-200 text-orange-700' : 'bg-white border-slate-200 text-slate-600'}`}>
+              {resumenPlan}
             </button>
           </div>
 
@@ -621,9 +650,9 @@ export const ProjectHub: React.FC = () => {
             </button>
           </div>
 
-          {sinCreditos && contractorTab === 'FEED' && (
+          {sinCupo && contractorTab === 'FEED' && (
             <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-xl flex items-center justify-between gap-3">
-              <p className="text-xs text-orange-800">No tienes créditos. Cada postulación cuesta 1 crédito.</p>
+              <p className="text-xs text-orange-800">Usaste tus {limitePostulaciones} postulaciones de este mes. Mejora tu plan para seguir postulándote.</p>
               <button onClick={() => setShowPlans(true)} className="shrink-0 text-xs font-bold text-white bg-orange-500 px-3 py-1.5 rounded-lg">Ver planes</button>
             </div>
           )}
@@ -652,7 +681,16 @@ export const ProjectHub: React.FC = () => {
                     </div>
                     <p className="text-sm text-green-600 font-semibold">Tu cotización: {formatBudget(app.estimatedPriceInCents)}</p>
                     <p className="text-xs text-slate-500 mt-1 line-clamp-2">{app.proposal}</p>
-                    {app.status === 'ACCEPTED' && (
+                    {app.status === 'ACCEPTED' && app.contactLocked && (
+                      <div className="mt-3 p-3 bg-amber-50 rounded-xl border border-amber-200 space-y-2">
+                        <p className="text-sm text-amber-900">El cliente te eligió. {uso && uso.limites.contactosIncluidos > 0 ? 'Tu plan ya no incluye más contactos este mes' : 'Tu plan no incluye contactos de clientes'}: desbloquea su dirección y teléfono por {pesos(app.contactPriceInCents ?? 0)}.</p>
+                        {contactError && pagandoContacto === null && <p className="text-xs text-red-600">{contactError}</p>}
+                        <Button onClick={() => handlePayContact(app.id)} className="w-full" disabled={pagandoContacto !== null}>
+                          {pagandoContacto === app.id ? <Loader2 className="w-4 h-4 animate-spin" /> : `Ver contacto por ${pesos(app.contactPriceInCents ?? 0)}`}
+                        </Button>
+                      </div>
+                    )}
+                    {app.status === 'ACCEPTED' && !app.contactLocked && (
                       <div className="mt-3 p-3 bg-green-50 rounded-xl border border-green-100 space-y-2">
                         <p className="text-xs font-bold text-green-800 uppercase">Datos del cliente</p>
                         <p className="text-sm text-slate-700 flex items-start gap-2">
@@ -798,11 +836,18 @@ export const ProjectHub: React.FC = () => {
                   className="w-full mt-1 p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-ferry-500 h-28 resize-none"
                 />
               </div>
-              <p className="text-[11px] text-slate-400 flex items-center gap-1">
-                <ShieldCheck className="w-3 h-3" /> Se descontará 1 crédito de tu cuenta al postularte.
-                {credits !== null && <span className="font-semibold text-slate-600">Tienes {credits}.</span>}
-              </p>
-              {sinCreditos ? (
+              {uso && (
+                <p className="text-[11px] text-slate-500 flex items-start gap-1">
+                  <ShieldCheck className="w-3 h-3 shrink-0 mt-0.5" />
+                  <span>
+                    {contactosRestantes > 0
+                      ? `Si te contratan, verás el contacto del cliente${Number.isFinite(contactosRestantes) ? ` (te quedan ${contactosRestantes} incluidos este mes)` : ''}.`
+                      : `Si te contratan, ver el contacto del cliente cuesta ${pesos(uso.precioContactoInCents)}.`}
+                    {limitePostulaciones !== -1 && ` Te quedan ${Math.max(0, limitePostulaciones - uso.usados.postulaciones)} postulaciones este mes.`}
+                  </span>
+                </p>
+              )}
+              {sinCupo ? (
                 <Button onClick={() => setShowPlans(true)} className="w-full mt-2">Ver planes para postularte</Button>
               ) : (
                 <Button onClick={handleApply} className="w-full mt-2" disabled={applyLoading}>

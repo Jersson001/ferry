@@ -29,6 +29,19 @@ export class SubscriptionPlan {
   @Column({ type: 'boolean', default: false })
   isPopular: boolean;
 
+  // Cupos mensuales de los planes para usuarios. -1 = sin límite.
+  @Column({ type: 'integer', default: -1 })
+  aiTranscriptionsPerMonth: number; // Listas de materiales leídas por IA (texto o foto)
+
+  @Column({ type: 'integer', default: -1 })
+  maxProjectsPerMonth: number; // Proyectos que puede publicar
+
+  @Column({ type: 'integer', default: 5 })
+  maxQuotesPerRequest: number; // Ferreterías que pueden cotizar cada solicitud suya
+
+  @Column({ type: 'integer', default: 0 })
+  includedContactsPerMonth: number; // Contrataciones con el contacto del cliente incluido; las demás se pagan
+
   @Column({ type: 'jsonb', nullable: true })
   features: string[]; // ['Sello Verificado', 'Estadísticas de éxito']
 

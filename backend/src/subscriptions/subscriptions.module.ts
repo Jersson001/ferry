@@ -5,11 +5,12 @@ import { SubscriptionsService } from './subscriptions.service';
 import { SubscriptionPlan } from './entities/subscription-plan.entity';
 import { UserSubscription } from './entities/user-subscription.entity';
 import { CreditLedger } from './entities/credit-ledger.entity';
+import { UsageLog } from './entities/usage-log.entity';
 import { PaymentsModule } from '../payments/payments.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([SubscriptionPlan, UserSubscription, CreditLedger]),
+    TypeOrmModule.forFeature([SubscriptionPlan, UserSubscription, CreditLedger, UsageLog]),
     forwardRef(() => PaymentsModule),
   ],
   controllers: [SubscriptionsController],
@@ -22,5 +23,6 @@ export class SubscriptionsModule implements OnModuleInit {
   async onModuleInit() {
     // Autollenar la tabla de planes al iniciar si está vacía
     await this.subscriptionsService.seedPlans();
+    await this.subscriptionsService.sincronizarPlanesUsuario();
   }
 }

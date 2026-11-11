@@ -11,10 +11,12 @@ import { limpiarTexto } from '../stores/opiniones';
 import { armarHistorial, HistorialCliente } from './historial-cliente';
 import { PushService } from '../push/push.service';
 import { leerUbicacion, leerRadioKm, estaEnRadio, distanciaKm, Punto } from './ubicacion';
+import { planVigente } from '../subscriptions/plan-vigente';
 import { COTIZACIONES_POR_SOLICITUD, COTIZACIONES_DIARIAS_GRATIS, inicioDelDiaColombia, itemsDeCotizacionValidos } from './cupos';
 
 // Solicitudes que aún tienen cupo: las que ya recibieron todas sus cotizaciones salen de la bandeja.
-const CON_CUPO = '(SELECT COUNT(*) FROM quotes q WHERE q.request_id = request.id) < :cupoSolicitud';
+// Cada solicitud guarda su tope según el plan de quien la creó; las anteriores a los planes usan el general.
+const CON_CUPO = '(SELECT COUNT(*) FROM quotes q WHERE q.request_id = request.id) < COALESCE(request.max_quotes, :cupoSolicitud)';
 
 @Injectable()
 export class QuotesService {
@@ -32,6 +34,7 @@ export class QuotesService {
   // ==========================================
   async createRequest(userId: string, data: any): Promise<MaterialRequest> {
     const ubicacion = leerUbicacion(data);
+    const plan = await planVigente(this.dataSource.manager, userId);
     const request = this.requestRepository.create({
       userId,
       title: data.title,
@@ -43,6 +46,7 @@ export class QuotesService {
       userLng: ubicacion?.lng,
       radioKm: leerRadioKm(data.radioKm),
       publicationType: data.publicationType || PublicationType.FREE,
+      maxQuotes: plan.limites.tiendasPorSolicitud,
       status: RequestStatus.OPEN,
       displayId: `REQ-${Math.floor(10000 + Math.random() * 90000)}`,
     });
@@ -299,9 +303,9 @@ export class QuotesService {
     // Gana quien responde primero: se bloquea la solicitud para contar y guardar sin que dos tiendas
     // tomen a la vez el último cupo.
     return this.dataSource.transaction(async (manager) => {
-      await manager.findOne(MaterialRequest, { where: { id: requestId }, lock: { mode: 'pessimistic_write' } });
+      const solicitud = await manager.findOne(MaterialRequest, { where: { id: requestId }, lock: { mode: 'pessimistic_write' } });
       const recibidas = await manager.count(Quote, { where: { requestId } });
-      if (recibidas >= COTIZACIONES_POR_SOLICITUD) {
+      if (recibidas >= (solicitud?.maxQuotes ?? COTIZACIONES_POR_SOLICITUD)) {
         throw new ConflictException('Esta solicitud ya recibió el máximo de cotizaciones');
       }
       return manager.save(Quote, quote);

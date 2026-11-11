@@ -13,7 +13,8 @@ import { getMyContractorReviews, replyToContractorReview } from '../services/pro
 import { AddPortfolioItemModal } from '../components/AddPortfolioItemModal';
 import { PortfolioLightbox } from '../components/PortfolioLightbox';
 import { Crown, Sparkles } from 'lucide-react';
-import { getMySubscription, UserSubscription } from '../services/subscriptionService';
+import { getMySubscription, getMyUsage, UserSubscription, UsoPlan } from '../services/subscriptionService';
+import { UsoDelPlan } from '../components/UsoDelPlan';
 import { PlansModal } from '../components/PlansModal';
 import { Map, AdvancedMarker } from '@vis.gl/react-google-maps';
 import { usePlacesAutocomplete, PlacePick } from '../hooks/usePlacesAutocomplete';
@@ -50,6 +51,7 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
   const [profileSaveStatus, setProfileSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [showBalance, setShowBalance] = useState(false);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
+  const [uso, setUso] = useState<UsoPlan | null>(null);
   const [showPlansModal, setShowPlansModal] = useState(false);
 
   // Security Modal States
@@ -87,6 +89,7 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
     getMySubscription()
       .then(sub => setSubscription(sub))
       .catch(() => {});
+    getMyUsage().then(setUso).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -812,7 +815,7 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
                   <Crown className="w-4 h-4" /> Suscripción Activa
                 </div>
                 <h3 className="text-2xl font-black text-slate-900">
-                  {subscription?.plan?.name || (profile?.role === UserRole.STORE ? 'Ferretería Gratuita' : 'Contratista Gratuito')}
+                  {profile?.role !== UserRole.STORE && uso ? uso.nombre : (subscription?.plan?.name || (profile?.role === UserRole.STORE ? 'Ferretería Gratuita' : 'Usuario Gratuito'))}
                 </h3>
               </div>
               <Badge type={subscription?.plan?.priceInCents && subscription.plan.priceInCents > 0 ? 'success' : 'info'}>
@@ -842,20 +845,7 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
                       </div>
                     )}
                   </div>
-                  <div>
-                    <div className="flex justify-between text-xs font-bold text-slate-700 mb-1">
-                      <span>📝 Postulaciones a Proyectos</span>
-                      <span>{subscription?.creditsBalance || 0} / {subscription?.plan?.maxLeadsOrApplications === -1 ? 'Ilimitadas' : (subscription?.plan?.maxLeadsOrApplications || 0)} disponibles</span>
-                    </div>
-                    {subscription?.plan?.maxLeadsOrApplications !== -1 && (
-                      <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-blue-500 rounded-full transition-all duration-500"
-                          style={{ width: `${Math.min(100, ((subscription?.creditsBalance || 0) / Math.max(1, subscription?.plan?.maxLeadsOrApplications || 1)) * 100)}%` }}
-                        />
-                      </div>
-                    )}
-                  </div>
+                  {uso && <UsoDelPlan uso={uso} />}
                 </>
               ) : (
                 <div>
@@ -881,7 +871,7 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
               className="w-full justify-center shadow-lg font-bold py-3"
             >
               <Sparkles className="w-4 h-4 mr-2" />
-              {subscription?.plan?.priceInCents ? 'Cambiar Plan o Ver Opciones' : 'Mejorar Plan a Profesional'}
+              {subscription?.plan?.priceInCents ? 'Cambiar Plan o Ver Opciones' : (profile?.role === UserRole.STORE ? 'Mejorar Plan a Profesional' : 'Mejorar mi Plan')}
             </Button>
           </Card>
 
@@ -980,7 +970,7 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
           onClose={() => setShowPlansModal(false)}
           userRole={profile?.role || UserRole.USER}
           currentSubscription={subscription}
-          onPlanUpdated={(newSub) => setSubscription(newSub)}
+          onPlanUpdated={(newSub) => { setSubscription(newSub); getMyUsage().then(setUso).catch(() => {}); }}
         />
       )}
 
