@@ -1,4 +1,4 @@
-import { Controller, Get, Header, Query } from '@nestjs/common';
+import { Controller, Get, Header, Param, Query } from '@nestjs/common';
 import { StoresService } from './stores.service';
 import { leerUbicacion, leerRadioKm } from '../quotes/ubicacion';
 
@@ -20,6 +20,12 @@ export class TopStoresController {
   async getPromotions(@Query('limit') limit?: string) {
     const cantidad = Math.min(Math.max(parseInt(limit ?? '', 10) || 30, 1), 100);
     return this.storesService.getPromociones(cantidad);
+  }
+
+  @Get(':id/public-catalog')
+  @Header('Cache-Control', 'public, max-age=30')
+  async getPublicCatalog(@Param('id') id: string) {
+    return this.storesService.getCatalogoPublico(id);
   }
 
   // Cuántas ferreterías cubren una obra: alimenta el deslizador de rango del cliente.

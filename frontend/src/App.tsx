@@ -5,6 +5,7 @@ import { AdminPanel } from './views/AdminPanel';
 import { StorePanel } from './views/StorePanel';
 import { CatalogManager } from './components/CatalogManager';
 import { HomeView } from './views/HomeView';
+import { CatalogoPublico } from './views/CatalogoPublico';
 import { UnifiedProfile } from './views/UnifiedProfile';
 import { UserQuotesInbox } from './views/UserQuotesInbox';
 import { LoginScreen } from './views/LoginScreen';
@@ -54,6 +55,8 @@ const App: React.FC = () => {
   const isResetPasswordPage = window.location.pathname.includes('reset-password') && Boolean(resetToken);
   const isVerifyEmailPage   = window.location.pathname.includes('verify-email');
   const verifyToken         = isVerifyEmailPage ? urlParams.get('token') : null;
+  // QR de una ferretería: /catalogo/<id>, visible sin iniciar sesión
+  const catalogoPublicoId   = window.location.pathname.match(/^\/catalogo\/([^/]+)\/?$/)?.[1] ?? null;
 
   // Estado para geolocalización del usuario
   const [userLocation, setUserLocation] = useState<{ lat: number, lng: number } | null>(null);
@@ -296,6 +299,8 @@ const App: React.FC = () => {
       </div>
     );
   }
+
+  if (catalogoPublicoId) return <CatalogoPublico storeId={catalogoPublicoId} />;
 
   // ── Pantalla: restablecer contraseña (desde link del email) ─────────────
   if (isResetPasswordPage && resetToken) {

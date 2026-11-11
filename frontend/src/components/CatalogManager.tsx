@@ -5,8 +5,9 @@ import {
   Plus, Upload, Link2, Download, X, Check, AlertCircle, Loader2,
   ChevronLeft, Package, FileSpreadsheet, Trash2, Eye, RefreshCw,
   Image as ImageIcon, Percent, Tag, Copy, ClipboardPaste, Pencil,
-  Layers, FolderPlus, Search, SlidersHorizontal, Info,
+  Layers, FolderPlus, Search, SlidersHorizontal, Info, QrCode,
 } from 'lucide-react';
+import { CompartirCatalogo } from './CompartirCatalogo';
 import {
   CatalogProduct, CatalogProductStored,
   upsertProducts, getStoreCatalogProducts, deleteCatalogProduct,
@@ -148,6 +149,7 @@ const BulkPreviewTable: React.FC<{
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export const CatalogManager: React.FC<Props> = ({ storeId, storeName, onClose }) => {
+  const [compartir, setCompartir] = useState(false);
   const [tab, setTab] = useState<Tab>('list');
 
   // Catalog list
@@ -538,6 +540,7 @@ export const CatalogManager: React.FC<Props> = ({ storeId, storeName, onClose })
 
   return (
     <div className="flex flex-col h-full bg-gray-50">
+      {compartir && <CompartirCatalogo storeId={storeId} storeName={storeName} onClose={() => setCompartir(false)} />}
       {/* Header */}
       <div className="bg-white border-b border-slate-100 px-4 py-3 flex items-center gap-3">
         <button onClick={onClose} className="p-1.5 rounded-full hover:bg-slate-100 transition-colors">
@@ -547,6 +550,13 @@ export const CatalogManager: React.FC<Props> = ({ storeId, storeName, onClose })
           <h2 className="font-bold text-slate-800 text-sm leading-tight">Gestión de Catálogo</h2>
           <p className="text-xs text-slate-400">{storeName}</p>
         </div>
+        <button
+          onClick={() => setCompartir(true)}
+          aria-label="Compartir catálogo con QR"
+          className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors"
+        >
+          <QrCode className="w-4 h-4" />
+        </button>
         <span className="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded-lg font-medium">
           {catalogItems.length} productos
         </span>

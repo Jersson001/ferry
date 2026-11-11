@@ -8,6 +8,7 @@ import { Quote } from '../quotes/entities/quote.entity';
 import { contarTiendasQueCubren } from './cobertura';
 import { Punto } from '../quotes/ubicacion';
 import { User } from '../users/user.entity';
+import { armarCatalogoPublico, esIdValido, ProductoPublico } from './catalogo-publico';
 import { armarPromociones, FilaPromocion, Promocion } from './promociones';
 import { ordenarTiendasPorCalificacion, TiendaTop, FilaCalificacion } from './top-stores';
 
@@ -66,6 +67,26 @@ export class StoresService {
       .limit(limite * 3)
       .getRawMany<FilaPromocion>();
     return armarPromociones(filas, limite);
+  }
+
+  // Catálogo que se ve al escanear el QR de una tienda: sin sesión, solo datos públicos.
+  async getCatalogoPublico(id: string): Promise<{ store: { id: string; name: string; photoUrl: string | null; specialties: string[] }; products: ProductoPublico[] }> {
+    if (!esIdValido(id)) throw new NotFoundException('Ferretería no encontrada');
+    const tienda = await this.dataSource.getRepository(User).findOne({
+      where: { uid: id, role: 'STORE' as any },
+      select: ['uid', 'displayName', 'photoURL', 'specialties'],
+    });
+    if (!tienda) throw new NotFoundException('Ferretería no encontrada');
+    const productos = await this.catalogRepository.find({ where: { storeId: id }, order: { createdAt: 'DESC' }, take: 1000 });
+    return {
+      store: {
+        id: tienda.uid,
+        name: tienda.displayName || 'Ferretería',
+        photoUrl: tienda.photoURL || null,
+        specialties: tienda.specialties ?? [],
+      },
+      products: armarCatalogoPublico(productos as any),
+    };
   }
 
   // Ferreterías que recibirían una solicitud con esta categoría y este radio: solo el número, nunca quiénes son.
