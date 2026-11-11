@@ -14,6 +14,7 @@ import { AiModule } from './ai/ai.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { ProjectsModule } from './projects/projects.module';
 import { AdminModule } from './admin/admin.module';
+import { ReferralsModule } from './referrals/referrals.module';
 import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
@@ -53,7 +54,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     AiModule,
     SubscriptionsModule,
     ProjectsModule,
-    AdminModule,
+    AdminModule, ReferralsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

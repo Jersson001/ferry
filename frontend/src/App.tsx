@@ -18,10 +18,14 @@ import { Home, ShoppingBag, Briefcase, User, CheckCircle2, Inbox, Package, Shiel
 import ferryLogo from './assets/logo.svg';
 import { getCurrentUser, signOut as logoutUser, verifyEmailToken } from './services/authService';
 import { getStorePendingRequestsCount } from './services/quoteService';
+import { recordarCodigoDeLlegada, reclamarCodigoPendiente } from './services/referralService';
 import { loadGuestCart, GuestCart } from './hooks/useGuestCart';
 import { APIProvider } from '@vis.gl/react-google-maps';
 
 // --- APP PRINCIPAL ---
+
+// Si llegó con ?ref=CODIGO, se recuerda para atribuir la cuenta cuando termine de registrarse
+recordarCodigoDeLlegada();
 
 const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -48,6 +52,11 @@ const App: React.FC = () => {
     const timer = setTimeout(() => setToast(null), 4000);
     return () => clearTimeout(timer);
   };
+
+  // Con sesión iniciada, atribuye la cuenta al código de referido con el que llegó (si lo hubo)
+  useEffect(() => {
+    if (isLoggedIn && !isGuest && currentUserProfile) reclamarCodigoPendiente();
+  }, [isLoggedIn, isGuest, currentUserProfile?.uid]);
 
   // ── Reset password desde URL (?token=xxx) ─────────────────────────────────
   const urlParams = new URLSearchParams(window.location.search);
