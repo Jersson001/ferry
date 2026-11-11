@@ -848,19 +848,9 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
                   {uso && <UsoDelPlan uso={uso} />}
                 </>
               ) : (
-                <div>
-                  <div className="flex justify-between text-xs font-bold text-slate-700 mb-1">
-                    <span>🎯 Leads Calificados</span>
-                    <span>{subscription?.creditsBalance ?? 10} / {subscription?.plan?.maxLeadsOrApplications === -1 ? 'Ilimitados' : (subscription?.plan?.maxLeadsOrApplications ?? 10)} disponibles</span>
-                  </div>
-                  {subscription?.plan?.maxLeadsOrApplications !== -1 && (
-                    <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-green-500 rounded-full transition-all duration-500"
-                        style={{ width: `${Math.min(100, ((subscription?.creditsBalance ?? 10) / Math.max(1, subscription?.plan?.maxLeadsOrApplications ?? 10)) * 100)}%` }}
-                      />
-                    </div>
-                  )}
+                <div className="flex justify-between text-xs font-bold text-slate-700">
+                  <span>📨 Solicitudes para cotizar al día</span>
+                  <span>{uso ? (uso.limites.cotizacionesDiarias === -1 ? 'Ilimitadas' : uso.limites.cotizacionesDiarias) : '—'}</span>
                 </div>
               )}
             </div>

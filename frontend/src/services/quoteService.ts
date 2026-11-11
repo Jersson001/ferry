@@ -151,6 +151,7 @@ export interface ReceivedQuote {
   requestId: string;
   storeId: string;
   storeName: string;
+  storeVerified?: boolean; // La ferretería tiene un plan con sello de verificada
   store?: {
     phoneNumber?: string;
     email?: string;

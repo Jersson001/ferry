@@ -26,6 +26,8 @@ const armar = (opciones: { especialidades?: unknown; solicitud?: any } = {}) => 
     getRepository: jest.fn(() => ({
       findOne: jest.fn(async () => ({ uid: 'tienda-1', specialties: opciones.especialidades })),
     })),
+    // Para el sello de verificado (plan vigente de la ferretería): sin plan en la base.
+    manager: { findOne: jest.fn(async () => null) },
   };
   return { service: new QuotesService(requestRepository, quoteRepository, dataSource), qbSolicitudes, qbCotizaciones, requestRepository, quoteRepository };
 };

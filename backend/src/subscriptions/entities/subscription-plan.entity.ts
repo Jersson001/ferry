@@ -40,7 +40,11 @@ export class SubscriptionPlan {
   maxQuotesPerRequest: number; // Ferreterías que pueden cotizar cada solicitud suya
 
   @Column({ type: 'integer', default: 0 })
-  includedContactsPerMonth: number; // Contrataciones con el contacto del cliente incluido; las demás se pagan
+  includedContactsPerMonth: number;
+
+  // Ferreterías: solicitudes que puede cotizar por día (-1 = sin límite).
+  @Column({ type: 'integer', default: 5 })
+  maxQuotesPerDay: number; // Contrataciones con el contacto del cliente incluido; las demás se pagan
 
   @Column({ type: 'jsonb', nullable: true })
   features: string[]; // ['Sello Verificado', 'Estadísticas de éxito']

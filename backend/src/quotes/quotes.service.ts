@@ -6,13 +6,12 @@ import { Quote, QuoteStatus } from './entities/quote.entity';
 import { QuoteItem } from './entities/quote-item.entity';
 import { User } from '../users/user.entity';
 import { categoriasDeLaTienda, contactoPublico } from '../users/perfil';
-import { UserSubscription, SubscriptionStatus } from '../subscriptions/entities/user-subscription.entity';
 import { limpiarTexto } from '../stores/opiniones';
 import { armarHistorial, HistorialCliente } from './historial-cliente';
 import { PushService } from '../push/push.service';
 import { leerUbicacion, leerRadioKm, estaEnRadio, distanciaKm, Punto } from './ubicacion';
 import { planVigente } from '../subscriptions/plan-vigente';
-import { COTIZACIONES_POR_SOLICITUD, COTIZACIONES_DIARIAS_GRATIS, inicioDelDiaColombia, itemsDeCotizacionValidos } from './cupos';
+import { COTIZACIONES_POR_SOLICITUD, inicioDelDiaColombia, itemsDeCotizacionValidos } from './cupos';
 
 // Solicitudes que aún tienen cupo: las que ya recibieron todas sus cotizaciones salen de la bandeja.
 // Cada solicitud guarda su tope según el plan de quien la creó; las anteriores a los planes usan el general.
@@ -220,13 +219,12 @@ export class QuotesService {
     const usadas = await this.quoteRepository.count({
       where: { storeId, createdAt: MoreThanOrEqual(inicioDelDiaColombia()) },
     });
-    const planPago = await this.dataSource.getRepository(UserSubscription).findOne({
-      where: { userId: storeId, status: SubscriptionStatus.ACTIVE },
-      relations: ['plan'],
-    });
-    const conPlanDePago = !!planPago?.plan && planPago.plan.priceInCents > 0;
-    return { limite: conPlanDePago ? null : COTIZACIONES_DIARIAS_GRATIS, usadas };
+    // El tope sale del plan vigente de la ferretería (un plan de pago vencido vuelve al gratuito).
+    const plan = await planVigente(this.dataSource.manager, storeId);
+    const limite = plan.limites.cotizacionesDiarias;
+    return { limite: limite === -1 ? null : limite, usadas };
   }
+
 
   async createQuote(storeId: string, requestId: string, data: any): Promise<Quote> {
     const request = await this.requestRepository.findOne({ where: { id: requestId } });
@@ -248,7 +246,7 @@ export class QuotesService {
 
     const cupo = await this.getCupoDiario(storeId);
     if (cupo.limite !== null && cupo.usadas >= cupo.limite) {
-      throw new ForbiddenException(`Llegaste al máximo de ${cupo.limite} cotizaciones por día. Mañana se reinicia, o suscríbete para cotizar sin límite.`);
+      throw new ForbiddenException(`Llegaste al máximo de ${cupo.limite} cotizaciones por día. Mañana se reinicia, o mejora tu plan para cotizar más.`);
     }
 
     // 1. Calcular totales desde el servidor (INMUTABILIDAD FINANCIERA)
@@ -330,6 +328,13 @@ export class QuotesService {
       .orderBy('quote.createdAt', 'DESC')
       .getMany();
 
+    // Sello de verificado del plan de cada ferretería. No revela quién es, así que se muestra aunque la
+    // cotización siga a ciegas.
+    const verificadas = new Set<string>();
+    for (const storeId of new Set(quotes.map(q => q.storeId))) {
+      if ((await planVigente(this.dataSource.manager, storeId)).verificado) verificadas.add(storeId);
+    }
+
     // 3. APLICAR BLIND STRATEGY (Ocultar datos si está PENDING/ACCEPTED/REJECTED)
     return quotes.map(quote => {
       let mappedStatus = quote.status as string;
@@ -343,6 +348,7 @@ export class QuotesService {
         status: mappedStatus,
         total: quote.clientFinalTotal,
         storeName: quote.store?.displayName || quote.store?.email || 'Tienda',
+        storeVerified: verificadas.has(quote.storeId),
         items: quote.items.map(item => ({
           ...item,
           unitPrice: item.clientFinalUnitPrice,

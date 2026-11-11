@@ -60,7 +60,7 @@ export interface UsoPlan {
   verificado: boolean;
   inicio: string;
   fin: string;
-  limites: { transcripcionesIa: number; proyectos: number; tiendasPorSolicitud: number; postulaciones: number; contactosIncluidos: number };
+  limites: { transcripcionesIa: number; proyectos: number; tiendasPorSolicitud: number; postulaciones: number; contactosIncluidos: number; cotizacionesDiarias: number };
   usados: { transcripcionesIa: number; proyectos: number; postulaciones: number; contactosIncluidos: number };
   precioContactoInCents: number;
 }

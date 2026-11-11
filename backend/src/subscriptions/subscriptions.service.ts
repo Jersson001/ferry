@@ -7,6 +7,7 @@ import { CreditLedger, LedgerType } from './entities/credit-ledger.entity';
 import { UsageLog } from './entities/usage-log.entity';
 import { planVigente, usoDesde, quedaCupo, precioContacto, mensajeSinCupo } from './plan-vigente';
 import { PLANES_USUARIO } from './planes-usuario';
+import { PLANES_TIENDA } from './planes-tienda';
 
 @Injectable()
 export class SubscriptionsService {
@@ -158,50 +159,7 @@ export class SubscriptionsService {
 
     await this.planRepository.save([
       // ─── SEGMENTO: FERRETERÍAS Y TIENDAS ───────────────────────────────
-      {
-        name: 'Gratuito',
-        targetRole: 'STORE',
-        priceInCents: 0,
-        credits: 10,
-        maxLeadsOrApplications: 10,
-        maxPortfolioItems: 6,
-        hasVerifiedBadge: false,
-        isPopular: false,
-        features: ['Edición perfil, subida de catálogo.'],
-      },
-      {
-        name: 'Profesional',
-        targetRole: 'STORE',
-        priceInCents: 6000000, // $60.000 COP en centavos
-        credits: 40,
-        maxLeadsOrApplications: 40,
-        maxPortfolioItems: 20,
-        hasVerifiedBadge: false,
-        isPopular: true,
-        features: ['Visibilidad en Home, productos destacados.'],
-      },
-      {
-        name: 'Empresarial',
-        targetRole: 'STORE',
-        priceInCents: 11000000, // $110.000 COP
-        credits: 100,
-        maxLeadsOrApplications: 100,
-        maxPortfolioItems: 50,
-        hasVerifiedBadge: false,
-        isPopular: false,
-        features: ['Push notifications (radio 5km).'],
-      },
-      {
-        name: 'Distribuidor Elite',
-        targetRole: 'STORE',
-        priceInCents: 20000000, // $200.000 COP
-        credits: 9999,
-        maxLeadsOrApplications: -1, // Ilimitado
-        maxPortfolioItems: -1, // Ilimitado
-        hasVerifiedBadge: true,
-        isPopular: false,
-        features: ['Analítica avanzada de precios y prioridad máxima.'],
-      },
+      ...PLANES_TIENDA.map(({ nombresAnteriores, ...plan }) => plan),
 
       // ─── SEGMENTO: CONTRATISTAS Y PROFESIONALES ────────────────────────
       ...PLANES_USUARIO.map(({ nombresAnteriores, ...plan }) => plan),
@@ -209,15 +167,16 @@ export class SubscriptionsService {
   }
 
   /**
-   * Deja los planes de usuario (targetRole CONTRACTOR) como dice PLANES_USUARIO. Corre en cada arranque:
-   * seedPlans solo siembra con la tabla vacía, y así los cambios de precios y cupos llegan a producción.
-   * Busca cada plan por su nombre actual o uno anterior, para conservar su id y las suscripciones.
+   * Deja los planes de usuario y de ferretería como dicen PLANES_USUARIO y PLANES_TIENDA. Corre en cada
+   * arranque: seedPlans solo siembra con la tabla vacía, y así los cambios de precios y cupos llegan a
+   * producción. Busca cada plan por su segmento y su nombre actual o uno anterior, para conservar su id y
+   * las suscripciones.
    */
-  async sincronizarPlanesUsuario(): Promise<void> {
-    const existentes = await this.planRepository.find({ where: { targetRole: 'CONTRACTOR' } });
-    for (const { nombresAnteriores, ...def } of PLANES_USUARIO) {
+  async sincronizarPlanes(): Promise<void> {
+    const existentes = await this.planRepository.find();
+    for (const { nombresAnteriores, ...def } of [...PLANES_USUARIO, ...PLANES_TIENDA]) {
       const nombres = [def.name, ...nombresAnteriores];
-      const plan = existentes.find(p => nombres.includes(p.name));
+      const plan = existentes.find(p => p.targetRole === def.targetRole && nombres.includes(p.name));
       await this.planRepository.save(plan ? Object.assign(plan, def) : this.planRepository.create(def));
     }
   }

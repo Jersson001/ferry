@@ -926,8 +926,8 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
             {cupo && cupo.limite !== null && (
               <div className={`rounded-xl border px-3 py-2 text-xs ${cupo.usadas >= cupo.limite ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
                 {cupo.usadas >= cupo.limite
-                  ? `Ya enviaste tus ${cupo.limite} cotizaciones de hoy. Mañana se reinicia, o suscríbete para cotizar sin límite.`
-                  : `Cotizaciones de hoy: ${cupo.usadas} de ${cupo.limite}. Cada solicitud recibe máximo 5 cotizaciones: gana quien responde primero.`}
+                  ? `Ya enviaste tus ${cupo.limite} cotizaciones de hoy. Mañana se reinicia, o mejora tu plan para cotizar más.`
+                  : `Cotizaciones de hoy: ${cupo.usadas} de ${cupo.limite}. Cada solicitud recibe un número limitado de cotizaciones: gana quien responde primero.`}
               </div>
             )}
 

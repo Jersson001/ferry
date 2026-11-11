@@ -653,6 +653,7 @@ const QuoteDetailModal: React.FC<{
             <div>
               <h3 className="font-bold text-slate-800 text-sm leading-tight">
                 {isPaid ? quote.storeName : alias}
+                {quote.storeVerified && <span className="inline-flex items-center gap-0.5 ml-1.5 align-middle text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full"><ShieldCheck className="w-3 h-3" /> Verificada</span>}
               </h3>
               {isPaid && (
                 <p className="text-[10px] text-slate-400 mt-0.5">Proveedor confirmado</p>
@@ -1039,6 +1040,7 @@ const QuoteCard: React.FC<{
               <div className="flex-1 min-w-0">
                 <h3 className="font-bold text-slate-800 text-sm leading-tight truncate">
                   {isPaid || isAccepted ? quote.storeName : alias}
+                  {quote.storeVerified && <span className="inline-flex items-center gap-0.5 ml-1.5 align-middle text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full"><ShieldCheck className="w-3 h-3" /> Verificada</span>}
                 </h3>
                 {quote.requestTitle && (
                   <p className="text-xs font-semibold text-slate-700 truncate mt-0.5">

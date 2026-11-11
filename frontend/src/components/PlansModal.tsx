@@ -100,7 +100,7 @@ export const PlansModal: React.FC<Props> = ({ isOpen, onClose, userRole, current
           <h2 className="text-3xl font-black tracking-tight">Desbloquea tu Máximo Potencial</h2>
           <p className="text-slate-100 text-sm mt-2 max-w-xl font-medium">
             {userRole === UserRole.STORE 
-              ? 'Recibe leads calificados de cotizaciones en tu zona, destaca tus productos y aumenta las ventas de tu ferretería.'
+              ? 'Cotiza más solicitudes al día, destaca tus productos y gana la confianza de los clientes con el sello de verificada.'
               : 'Cotiza con más ferreterías, publica más proyectos y consigue clientes con su contacto incluido.'}
           </p>
         </div>
@@ -169,10 +169,7 @@ export const PlansModal: React.FC<Props> = ({ isOpen, onClose, userRole, current
                           <span>{plan.maxPortfolioItems === -1 || plan.maxPortfolioItems >= 999 ? 'Fotos ilimitadas en portafolio' : `Hasta ${plan.maxPortfolioItems ?? 6} fotos en galería`}</span>
                         </div>
                       )}
-                      {userRole === UserRole.STORE && <div className="flex items-center gap-2 text-slate-900 font-bold">
-                        <Check className="w-4 h-4 text-ferry-500 shrink-0" />
-                        <span>{plan.maxLeadsOrApplications === -1 || plan.maxLeadsOrApplications >= 999 ? (userRole === UserRole.STORE ? 'Leads ilimitados/mes' : 'Postulaciones ilimitadas') : `${plan.maxLeadsOrApplications ?? 10} ${userRole === UserRole.STORE ? 'leads calificados/mes' : 'postulaciones/mes'}`}</span>
-                      </div>}
+
                       
                       {plan.features && plan.features.map((feat, idx) => (
                         <div key={idx} className="flex items-center gap-2 text-slate-700">

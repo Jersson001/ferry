@@ -16,11 +16,19 @@ const armar = (opts: { cotizacionesDeLaTienda?: number; delDia?: number; recibid
     count: jest.fn(async () => opts.recibidasAlGuardar ?? 0),
     save: jest.fn(async (_c, q) => q),
   };
+  // planVigente consulta el rol, la suscripción y, si no hay plan de pago vigente, el gratuito de tiendas.
+  const gratuito = { name: 'Gratuito', targetRole: 'STORE', priceInCents: 0, maxQuotesPerDay: 5 };
   const dataSource: any = {
     getRepository: (entidad: any) => {
       if (entidad.name === 'User') return { findOne: async () => ({ uid: 't1', specialties: ['Plomería'] }) };
-      if (entidad.name === 'UserSubscription') return { findOne: async () => opts.plan ?? null };
       return { create: (x: any) => x };
+    },
+    manager: {
+      findOne: async (entidad: any) => {
+        if (entidad.name === 'User') return { uid: 't1', role: 'STORE' };
+        if (entidad.name === 'UserSubscription') return opts.plan ?? null;
+        return gratuito;
+      },
     },
     transaction: async (fn: any) => fn(manager),
   };
@@ -51,14 +59,31 @@ describe('createQuote — topes', () => {
     await expect(service.createQuote('t1', 'r1', cotizacion)).rejects.toThrow(ForbiddenException);
   });
 
-  it('con plan de pago activo no hay tope diario', async () => {
-    const { service, manager } = armar({ delDia: 40, plan: { plan: { priceInCents: 6000000 } } });
+  const enUnMes = new Date(Date.now() + 30 * 86_400_000);
+  const suscripcion = (maxQuotesPerDay: number, vence: Date = enUnMes) => ({
+    status: 'ACTIVE', currentPeriodEnd: vence,
+    plan: { name: 'Plan', targetRole: 'STORE', priceInCents: 6000000, maxQuotesPerDay, hasVerifiedBadge: true },
+  });
+
+  it('el plan Profesional (40 al día) deja enviar la cotización 40', async () => {
+    const { service, manager } = armar({ delDia: 39, plan: suscripcion(40) });
     await service.createQuote('t1', 'r1', cotizacion);
     expect(manager.save).toHaveBeenCalled();
   });
 
-  it('un plan gratuito sigue teniendo el tope', async () => {
-    const { service } = armar({ delDia: 5, plan: { plan: { priceInCents: 0 } } });
+  it('el plan Profesional rechaza la cotización 41 del día', async () => {
+    const { service } = armar({ delDia: 40, plan: suscripcion(40) });
+    await expect(service.createQuote('t1', 'r1', cotizacion)).rejects.toThrow(ForbiddenException);
+  });
+
+  it('un plan sin tope diario (-1) deja cotizar siempre', async () => {
+    const { service, manager } = armar({ delDia: 500, plan: suscripcion(-1) });
+    await service.createQuote('t1', 'r1', cotizacion);
+    expect(manager.save).toHaveBeenCalled();
+  });
+
+  it('un plan de pago vencido vuelve al tope del gratuito', async () => {
+    const { service } = armar({ delDia: 5, plan: suscripcion(40, new Date(Date.now() - 86_400_000)) });
     await expect(service.createQuote('t1', 'r1', cotizacion)).rejects.toThrow(ForbiddenException);
   });
 

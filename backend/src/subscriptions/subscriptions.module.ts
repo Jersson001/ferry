@@ -23,6 +23,6 @@ export class SubscriptionsModule implements OnModuleInit {
   async onModuleInit() {
     // Autollenar la tabla de planes al iniciar si está vacía
     await this.subscriptionsService.seedPlans();
-    await this.subscriptionsService.sincronizarPlanesUsuario();
+    await this.subscriptionsService.sincronizarPlanes();
   }
 }

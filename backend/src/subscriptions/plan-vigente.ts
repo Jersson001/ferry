@@ -16,6 +16,9 @@ export const PRECIO_CONTACTO_GRATIS = 1_400_000; // $14.000 en el plan gratuito
 // Cotizaciones por solicitud si no hay plan que diga otra cosa (y para solicitudes anteriores a los cupos).
 export const COTIZACIONES_POR_DEFECTO = 5;
 
+// Solicitudes que una ferretería puede cotizar por día si no hay plan en la base.
+export const COTIZACIONES_DIARIAS_POR_DEFECTO = 5;
+
 const SIN_LIMITE = -1;
 const OFFSET_BOGOTA_MS = 5 * 60 * 60 * 1000; // Colombia es UTC-5 todo el año
 
@@ -25,6 +28,7 @@ export interface Limites {
   tiendasPorSolicitud: number;
   postulaciones: number;
   contactosIncluidos: number;
+  cotizacionesDiarias: number; // Ferreterías: solicitudes que puede cotizar por día
 }
 
 export interface PlanVigente {
@@ -57,6 +61,7 @@ const limitesDe = (p: SubscriptionPlan | null): Limites => ({
   tiendasPorSolicitud: p?.maxQuotesPerRequest ?? COTIZACIONES_POR_DEFECTO,
   postulaciones: p?.maxLeadsOrApplications ?? SIN_LIMITE,
   contactosIncluidos: p?.includedContactsPerMonth ?? 0,
+  cotizacionesDiarias: p?.maxQuotesPerDay ?? COTIZACIONES_DIARIAS_POR_DEFECTO,
 });
 
 /**
@@ -70,7 +75,7 @@ export async function planVigente(manager: EntityManager, userId: string, ahora:
   if (user?.role === 'ADMIN') {
     return {
       nombre: 'Administrador', pago: true, verificado: true, ...mes,
-      limites: { transcripcionesIa: SIN_LIMITE, proyectos: SIN_LIMITE, tiendasPorSolicitud: 10, postulaciones: SIN_LIMITE, contactosIncluidos: SIN_LIMITE },
+      limites: { transcripcionesIa: SIN_LIMITE, proyectos: SIN_LIMITE, tiendasPorSolicitud: 10, postulaciones: SIN_LIMITE, contactosIncluidos: SIN_LIMITE, cotizacionesDiarias: SIN_LIMITE },
     };
   }
 
