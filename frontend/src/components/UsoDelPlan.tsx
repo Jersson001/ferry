@@ -31,12 +31,12 @@ export const UsoDelPlan: React.FC<{ uso: UsoPlan }> = ({ uso }) => (
     {uso.limites.postulaciones !== -1 && (
       <Barra etiqueta="📝 Postulaciones" usados={uso.usados.postulaciones} limite={uso.limites.postulaciones} color="bg-blue-500" />
     )}
-    {uso.limites.contactosIncluidos > 0 && (
+    {uso.limites.contactosIncluidos !== 0 && (
       <Barra etiqueta="📞 Contactos de clientes incluidos" usados={uso.usados.contactosIncluidos} limite={uso.limites.contactosIncluidos} color="bg-green-500" />
     )}
     <p className="text-[11px] text-slate-500">
       Cada solicitud de materiales recibe hasta {uso.limites.tiendasPorSolicitud} cotizaciones.
-      {' '}Contacto adicional de un cliente: {pesos(uso.precioContactoInCents)}.
+      {uso.limites.contactosIncluidos !== -1 && <>{' '}Contacto adicional de un cliente: {pesos(uso.precioContactoInCents)}.</>}
       {' '}{uso.pago ? `Tu plan vence el ${fecha(uso.fin)}.` : `Los cupos se renuevan el ${fecha(uso.fin)}.`}
     </p>
   </div>

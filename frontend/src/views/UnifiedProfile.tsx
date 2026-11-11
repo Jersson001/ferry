@@ -819,7 +819,7 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
                 </h3>
               </div>
               <Badge type={subscription?.plan?.priceInCents && subscription.plan.priceInCents > 0 ? 'success' : 'info'}>
-                {subscription?.status === 'active' ? 'ACTIVO' : 'GRATUITO'}
+                {(profile?.role !== UserRole.STORE && uso ? uso.pago : subscription?.status?.toUpperCase() === 'ACTIVE' && (subscription?.plan?.priceInCents ?? 0) > 0) ? 'ACTIVO' : 'GRATUITO'}
               </Badge>
             </div>
 

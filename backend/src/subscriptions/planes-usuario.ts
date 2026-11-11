@@ -7,8 +7,8 @@ type DefinicionPlan = Partial<SubscriptionPlan> & { name: string; nombresAnterio
 // y $14.000 en el gratuito (ver plan-vigente.ts).
 export const PLANES_USUARIO: DefinicionPlan[] = [
   {
-    name: 'Gratuito',
-    nombresAnteriores: [],
+    name: 'Ferry Free',
+    nombresAnteriores: ['Gratuito'],
     targetRole: 'CONTRACTOR',
     priceInCents: 0,
     credits: 0,
@@ -29,8 +29,8 @@ export const PLANES_USUARIO: DefinicionPlan[] = [
     ],
   },
   {
-    name: 'Maestro Sub',
-    nombresAnteriores: [],
+    name: 'Ferry Maestro',
+    nombresAnteriores: ['Maestro Sub'],
     targetRole: 'CONTRACTOR',
     priceInCents: 3_000_000, // $30.000
     credits: 0,
@@ -52,8 +52,8 @@ export const PLANES_USUARIO: DefinicionPlan[] = [
     ],
   },
   {
-    name: 'Especialista',
-    nombresAnteriores: [],
+    name: 'Ferry Experto',
+    nombresAnteriores: ['Especialista'],
     targetRole: 'CONTRACTOR',
     priceInCents: 5_500_000, // $55.000
     credits: 0,
@@ -78,13 +78,13 @@ export const PLANES_USUARIO: DefinicionPlan[] = [
     name: 'Ferry Pro',
     nombresAnteriores: ['Constructor Pro'],
     targetRole: 'CONTRACTOR',
-    priceInCents: 9_000_000, // $90.000
+    priceInCents: 33_000_000, // $330.000
     credits: 0,
     aiTranscriptionsPerMonth: -1,
     maxProjectsPerMonth: 100,
     maxQuotesPerRequest: 10,
     maxLeadsOrApplications: -1,
-    includedContactsPerMonth: 45,
+    includedContactsPerMonth: -1, // Sin tope: nunca paga por el contacto
     maxPortfolioItems: -1,
     hasVerifiedBadge: true,
     isPopular: false,
@@ -93,8 +93,7 @@ export const PLANES_USUARIO: DefinicionPlan[] = [
       'Hasta 100 proyectos publicados al mes',
       'Cotizaciones de hasta 10 ferreterías expertas',
       'Perfil verificado con calificaciones y comentarios',
-      '45 contrataciones al mes con el contacto del cliente incluido',
-      'Postulaciones adicionales: contacto a $9.900 por cliente',
+      'Contacto del cliente incluido en todas tus contrataciones, sin tope',
     ],
   },
 ];

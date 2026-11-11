@@ -6,7 +6,7 @@ export class SubscriptionPlan {
   id: string;
 
   @Column({ type: 'varchar' })
-  name: string; // ej: 'Gratuito', 'Profesional', 'Constructor Pro'
+  name: string; // ej: 'Ferry Free', 'Profesional', 'Ferry Pro'
 
   @Column({ type: 'varchar', default: 'CONTRACTOR' })
   targetRole: string; // 'STORE' | 'CONTRACTOR' | 'CLIENT'
