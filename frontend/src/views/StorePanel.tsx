@@ -1,4 +1,5 @@
 
+import { InsigniaCliente } from '../components/InsigniaCliente';
 import React, { useState, useEffect } from 'react';
 import { MaterialRequest, RequestStatus, UserProfile } from '../types';
 import { Package, Clock, Truck, CheckCircle2, Store, AlertCircle, X, Inbox, RefreshCw, FileText, MapPin, Send, Trash2, RotateCcw, Eye } from 'lucide-react';
@@ -1066,6 +1067,7 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
                               Ref: {req.displayId}
                             </span>
                           )}
+                          <InsigniaCliente historial={req.client} />
                         </div>
                         <p className="text-[10px] text-slate-400">{formatRelativeTime(req.createdAt)}</p>
                       </div>

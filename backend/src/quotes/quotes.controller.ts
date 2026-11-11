@@ -21,6 +21,12 @@ export class QuotesController {
     return this.quotesService.createRequest(req.user.uid, data);
   }
 
+  // Cuánto ha usado Ferry quien consulta: solicitudes hechas y pedidos entregados
+  @Get('my-activity')
+  async getMyActivity(@Req() req: RequestWithUser) {
+    return (await this.quotesService.historialDeClientes([req.user.uid])).get(req.user.uid);
+  }
+
   @Get('requests/own')
   async getOwnRequests(@Req() req: RequestWithUser) {
     return this.quotesService.getOwnRequests(req.user.uid);

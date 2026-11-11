@@ -8,6 +8,7 @@ import { User } from '../users/user.entity';
 import { categoriasDeLaTienda, contactoPublico } from '../users/perfil';
 import { UserSubscription, SubscriptionStatus } from '../subscriptions/entities/user-subscription.entity';
 import { limpiarTexto } from '../stores/opiniones';
+import { armarHistorial, HistorialCliente } from './historial-cliente';
 import { PushService } from '../push/push.service';
 import { leerUbicacion, leerRadioKm, estaEnRadio, distanciaKm, Punto } from './ubicacion';
 import { COTIZACIONES_POR_SOLICITUD, COTIZACIONES_DIARIAS_GRATIS, inicioDelDiaColombia, itemsDeCotizacionValidos } from './cupos';
@@ -105,7 +106,7 @@ export class QuotesService {
       });
   }
 
-  async getPendingRequests(storeId: string): Promise<MaterialRequest[]> {
+  async getPendingRequests(storeId: string): Promise<Array<MaterialRequest & { client: HistorialCliente }>> {
     const categorias = await this.categoriasDeLaTienda(storeId);
     if (categorias.length === 0) return [];
 
@@ -128,7 +129,40 @@ export class QuotesService {
     }
 
     const solicitudes = await query.orderBy('request.createdAt', 'DESC').getMany();
-    return this.dentroDelRadio(solicitudes, await this.ubicacionDeLaTienda(storeId));
+    const enRadio = this.dentroDelRadio(solicitudes, await this.ubicacionDeLaTienda(storeId));
+    // Cuánto ha usado Ferry quien pide: solo cifras, nunca quién es.
+    const historial = await this.historialDeClientes(enRadio.map(r => r.userId));
+    return enRadio.map(r => ({ ...r, client: historial.get(r.userId) ?? armarHistorial(0, 0) }));
+  }
+
+  // Solicitudes hechas y pedidos entregados de cada cliente, en dos consultas agrupadas.
+  async historialDeClientes(userIds: string[]): Promise<Map<string, HistorialCliente>> {
+    const ids = [...new Set(userIds.filter(Boolean))];
+    const r = new Map<string, HistorialCliente>();
+    if (ids.length === 0) return r;
+    const [hechas, entregadas] = await Promise.all([
+      this.requestRepository
+        .createQueryBuilder('r')
+        .select('r.userId', 'userId')
+        .addSelect('COUNT(*)', 'n')
+        .where('r.userId IN (:...ids)', { ids })
+        .andWhere('r.status <> :borrador', { borrador: RequestStatus.DRAFT })
+        .groupBy('r.userId')
+        .getRawMany<{ userId: string; n: string }>(),
+      this.quoteRepository
+        .createQueryBuilder('q')
+        .innerJoin('q.request', 'r')
+        .select('r.userId', 'userId')
+        .addSelect('COUNT(*)', 'n')
+        .where('r.userId IN (:...ids)', { ids })
+        .andWhere('q.status = :entregado', { entregado: QuoteStatus.DELIVERED })
+        .groupBy('r.userId')
+        .getRawMany<{ userId: string; n: string }>(),
+    ]);
+    const h = new Map(hechas.map(x => [x.userId, x.n]));
+    const e = new Map(entregadas.map(x => [x.userId, x.n]));
+    for (const id of ids) r.set(id, armarHistorial(h.get(id), e.get(id)));
+    return r;
   }
 
   async getPendingRequestsCount(storeId: string): Promise<number> {

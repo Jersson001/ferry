@@ -59,7 +59,14 @@ export interface QuoteRequestPayload {
   imageUrl?: string | null;
 }
 
+export interface HistorialCliente {
+  solicitudes: number;
+  entregados: number;
+  nivel: 'nuevo' | 'activo' | 'frecuente';
+}
+
 export interface IncomingQuoteRequest {
+  client?: HistorialCliente;
   id: string;
   userId: string;
   category: string;
@@ -301,6 +308,15 @@ export const getTopRatedStores = async (limit = 50): Promise<TopStore[]> => {
     return await apiRequest<TopStore[]>(`/stores/top-rated?limit=${limit}`);
   } catch {
     return [];
+  }
+};
+
+// Cuánto ha usado Ferry quien consulta. null si no se pudo saber.
+export const getMyActivity = async (): Promise<HistorialCliente | null> => {
+  try {
+    return await apiRequest<HistorialCliente>('/quotes/my-activity');
+  } catch {
+    return null;
   }
 };
 

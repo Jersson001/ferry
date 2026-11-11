@@ -6,7 +6,8 @@ import { User, MapPin, Shield, LogOut, Edit2, Camera, Briefcase, Star, CheckCirc
 import { UserProfile, UserRole, PortfolioItem } from '../types';
 import { useApi } from '../hooks/useApi';
 import { ESPECIALIDADES } from '../config/especialidades';
-import { getMyStoreRating, StoreRating } from '../services/quoteService';
+import { getMyStoreRating, getMyActivity, StoreRating, HistorialCliente } from '../services/quoteService';
+import { nombreDeNivel, detalleDeUso } from '../components/InsigniaCliente';
 import { MisOpiniones } from '../components/OpinionesDeTienda';
 import { AddPortfolioItemModal } from '../components/AddPortfolioItemModal';
 import { PortfolioLightbox } from '../components/PortfolioLightbox';
@@ -44,6 +45,7 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
   );
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [myRating, setMyRating] = useState<StoreRating | null>(null);
+  const [myActivity, setMyActivity] = useState<HistorialCliente | null>(null);
   const [profileSaveStatus, setProfileSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [showBalance, setShowBalance] = useState(false);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
@@ -90,6 +92,13 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
     if (profile?.role !== UserRole.STORE) return;
     let cancelled = false;
     getMyStoreRating().then(r => { if (!cancelled) setMyRating(r); });
+    return () => { cancelled = true; };
+  }, [profile?.role]);
+
+  useEffect(() => {
+    if (!profile || profile.role === UserRole.STORE) return;
+    let cancelled = false;
+    getMyActivity().then(a => { if (!cancelled) setMyActivity(a); });
     return () => { cancelled = true; };
   }, [profile?.role]);
 
@@ -431,8 +440,11 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
 
           <div className="flex items-center gap-2 mt-2">
             <Badge type={profile?.role === UserRole.STORE ? 'success' : 'info'}>
-              {profile?.role === UserRole.STORE ? 'Ferretería Aliada' : 'Cliente Premium'}
+              {profile?.role === UserRole.STORE ? 'Ferretería Aliada' : myActivity ? nombreDeNivel(myActivity) : 'Cliente'}
             </Badge>
+            {profile?.role !== UserRole.STORE && myActivity && myActivity.solicitudes > 0 && (
+              <span className="text-xs text-slate-400">{detalleDeUso(myActivity)}</span>
+            )}
             {profile?.role === UserRole.STORE && myRating && (
               myRating.rating !== null ? (
                 <div className="flex items-center gap-1 text-yellow-500 font-bold text-sm">
