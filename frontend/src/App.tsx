@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { MaterialFlow } from './views/MaterialFlow';
 import { ProjectHub } from './views/ProjectHub';
 import { AdminPanel } from './views/AdminPanel';
@@ -223,6 +223,19 @@ const App: React.FC = () => {
   const ongoingRequest = requests.find(r => r.status === RequestStatus.PENDING_QUOTES || r.status === RequestStatus.QUOTED || r.status === RequestStatus.PAID);
   const currentUserRole = currentUserProfile?.role || UserRole.USER;
 
+  // El botón Usuario/Tienda/Admin cambia solo la vista (currentUserProfile.role), y al cargar la sesión el
+  // perfil convierte ADMIN en USER. El rol real se lee del token que firmó el servidor: el botón es solo
+  // para administradores. Es solo para mostrarlo; las rutas de administración las protege el backend.
+  const esAdmin = useMemo(() => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const payload = token ? JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))) : null;
+      return payload?.role === 'ADMIN';
+    } catch {
+      return false;
+    }
+  }, [currentUserProfile?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Lógica de Negocio
   const handleManualQuote = (reqId: string) => {
     setRequests(prev => {
@@ -275,8 +288,9 @@ const App: React.FC = () => {
         getStorePendingRequestsCount().then(setPendingStoreRequestsCount).catch(console.error);
       }
     }
-    if (!currentUserProfile) return;
-    const roles = [UserRole.USER, UserRole.STORE, UserRole.ADMIN];
+    if (!currentUserProfile || !esAdmin) return;
+    // Admin va justo después de Usuario: la vista Tienda pide completar el perfil de ferretería y lo tapa todo.
+    const roles = [UserRole.USER, UserRole.ADMIN, UserRole.STORE];
     const nextRole = roles[(roles.indexOf(currentUserRole) + 1) % roles.length];
     setCurrentUserProfile({ ...currentUserProfile, role: nextRole });
   };
@@ -479,11 +493,13 @@ const App: React.FC = () => {
           <span className="text-ferry-500 text-[10px] font-bold align-top -ml-1">V2</span>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={handleCycleRole} className="text-[10px] text-slate-500 font-medium border border-slate-200 bg-slate-50 rounded px-2 py-1 hover:bg-slate-100 transition-colors">
-            {currentUserRole === UserRole.USER && 'Usuario'}
-            {currentUserRole === UserRole.STORE && 'Tienda'}
-            {currentUserRole === UserRole.ADMIN && 'Admin'}
-          </button>
+          {esAdmin && (
+            <button onClick={handleCycleRole} className="text-[10px] text-slate-500 font-medium border border-slate-200 bg-slate-50 rounded px-2 py-1 hover:bg-slate-100 transition-colors">
+              {currentUserRole === UserRole.USER && 'Usuario'}
+              {currentUserRole === UserRole.STORE && 'Tienda'}
+              {currentUserRole === UserRole.ADMIN && 'Admin'}
+            </button>
+          )}
           
           {!isGuest ? (
             <button 
