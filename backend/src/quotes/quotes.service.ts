@@ -11,7 +11,7 @@ import { armarHistorial, HistorialCliente } from './historial-cliente';
 import { PushService } from '../push/push.service';
 import { leerUbicacion, leerRadioKm, estaEnRadio, distanciaKm, Punto } from './ubicacion';
 import { planVigente } from '../subscriptions/plan-vigente';
-import { COTIZACIONES_POR_SOLICITUD, inicioDelDiaColombia, itemsDeCotizacionValidos } from './cupos';
+import { COTIZACIONES_POR_SOLICITUD, VIGENCIA_SOLICITUD_MS, publicadaEn, solicitudVigente, inicioDelDiaColombia, itemsDeCotizacionValidos } from './cupos';
 
 // Solicitudes que aún tienen cupo: las que ya recibieron todas sus cotizaciones salen de la bandeja.
 // Cada solicitud guarda su tope según el plan de quien la creó; las anteriores a los planes usan el general.
@@ -70,11 +70,30 @@ export class QuotesService {
     });
   }
 
-  async getOwnRequests(userId: string): Promise<MaterialRequest[]> {
-    return this.requestRepository.find({
+  // Las del cliente, con su vigencia: una abierta de más de una hora ya no la ven las ferreterías.
+  async getOwnRequests(userId: string): Promise<Array<MaterialRequest & { vencida: boolean; venceEn: Date }>> {
+    const solicitudes = await this.requestRepository.find({
       where: { userId },
       order: { createdAt: 'DESC' },
     });
+    const ahora = new Date();
+    return solicitudes.map(r => ({
+      ...r,
+      vencida: r.status === RequestStatus.OPEN && !solicitudVigente(r, ahora),
+      venceEn: new Date(new Date(publicadaEn(r)).getTime() + VIGENCIA_SOLICITUD_MS),
+    }));
+  }
+
+  /** El cliente vuelve a enviar una solicitud vencida: corre otra hora y se avisa de nuevo a las ferreterías. */
+  async republicarSolicitud(requestId: string, userId: string) {
+    const request = await this.requestRepository.findOne({ where: { id: requestId } });
+    if (!request || request.userId !== userId) throw new NotFoundException('Solicitud no encontrada');
+    if (request.status !== RequestStatus.OPEN) throw new BadRequestException('Esta solicitud ya no está abierta');
+    if (solicitudVigente(request)) throw new BadRequestException('La solicitud sigue publicada; espera a que venza para volver a enviarla');
+    request.publishedAt = new Date();
+    const guardada = await this.requestRepository.save(request);
+    void this.push?.avisarSolicitud(guardada);
+    return { ...guardada, vencida: false, venceEn: new Date(guardada.publishedAt!.getTime() + VIGENCIA_SOLICITUD_MS) };
   }
 
   async getQuoteCountForRequest(requestId: string): Promise<number> {
@@ -125,7 +144,11 @@ export class QuotesService {
     const query = this.requestRepository.createQueryBuilder('request')
       .where('request.status = :status', { status: RequestStatus.OPEN })
       .andWhere('request.category IN (:...categorias)', { categorias })
-      .andWhere(CON_CUPO, { cupoSolicitud: COTIZACIONES_POR_SOLICITUD });
+      .andWhere(CON_CUPO, { cupoSolicitud: COTIZACIONES_POR_SOLICITUD })
+      // Solo las de la última hora: las viejas no aparecen, ni siquiera a una ferretería que entra después.
+      .andWhere('COALESCE(request.publishedAt, request.createdAt) >= :vigenteDesde', {
+        vigenteDesde: new Date(Date.now() - VIGENCIA_SOLICITUD_MS),
+      });
 
     if (quotedRequestIds.length > 0) {
       query.andWhere('request.id NOT IN (:...quotedRequestIds)', { quotedRequestIds });
@@ -230,6 +253,7 @@ export class QuotesService {
     const request = await this.requestRepository.findOne({ where: { id: requestId } });
     if (!request) throw new NotFoundException('Solicitud no encontrada');
     if (request.status !== RequestStatus.OPEN) throw new ForbiddenException('La solicitud ya no está abierta');
+    if (!solicitudVigente(request)) throw new ForbiddenException('Esta solicitud ya venció: solo se puede cotizar durante su primera hora');
 
     // Solo cotiza quien tiene la categoría habilitada: la bandeja ya la filtra, pero la ruta se puede llamar directo
     const categorias = await this.categoriasDeLaTienda(storeId);

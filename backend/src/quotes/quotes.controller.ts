@@ -32,6 +32,12 @@ export class QuotesController {
     return this.quotesService.getOwnRequests(req.user.uid);
   }
 
+  /** POST /quotes/requests/:id/republish — El cliente vuelve a enviar una solicitud vencida (otra hora) */
+  @Post('requests/:id/republish')
+  async republish(@Param('id') id: string, @Req() req: RequestWithUser) {
+    return this.quotesService.republicarSolicitud(id, req.user.uid);
+  }
+
   @Get('requests/:id/quote-count')
   async getQuoteCount(@Param('id') id: string, @Req() req: RequestWithUser) {
     // Verify ownership: only the request owner may query its quote count

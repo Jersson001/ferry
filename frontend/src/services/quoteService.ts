@@ -185,6 +185,9 @@ export interface UserOwnRequest {
   items: Array<{ name: string; quantity: number; unit: string }>;
   isExpandedSearch?: boolean;
   parentRequestId?: string;
+  // Una solicitud solo la ven las ferreterías durante 1 hora desde que se publicó o se volvió a enviar.
+  vencida?: boolean;
+  venceEn?: string;
 }
 
 export interface RecentPendingQuote {
@@ -242,6 +245,11 @@ export const getStorePendingRequestsCount = async (): Promise<number> => {
 
 export const getUserOwnRequests = async (): Promise<UserOwnRequest[]> => {
   return apiRequest<UserOwnRequest[]>('/quotes/requests/own');
+};
+
+// Vuelve a publicar una solicitud vencida: las ferreterías la ven otra hora y reciben el aviso de nuevo.
+export const republicarSolicitud = async (requestId: string): Promise<Partial<UserOwnRequest>> => {
+  return apiRequest<Partial<UserOwnRequest>>(`/quotes/requests/${requestId}/republish`, { method: 'POST' });
 };
 
 export const rejectQuoteRequest = async (requestId: string): Promise<void> => {

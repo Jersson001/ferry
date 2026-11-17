@@ -64,6 +64,11 @@ export class MaterialRequest {
   @Column({ type: 'integer', default: 10 })
   radioKm: number;
 
+  // Cuándo se publicó por última vez (al volver a enviarla). Vacío = se publicó al crearla.
+  // La solicitud solo se puede cotizar durante la hora siguiente (ver cupos.ts).
+  @Column({ type: 'timestamp', nullable: true, name: 'published_at' })
+  publishedAt?: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }

@@ -16,6 +16,7 @@ import {
 import {
   getUserReceivedQuotes,
   getUserOwnRequests,
+  republicarSolicitud,
   acceptQuote,
   rejectQuote,
   verifyWompiPayment,
@@ -1273,7 +1274,12 @@ const REQUEST_STATUS: Record<string, { label: string; color: string }> = {
   accepted:         { label: 'Aceptada',                 color: 'text-green-600 bg-green-50' },
   accepted_partial: { label: 'Aceptada parcialmente',    color: 'text-orange-600 bg-orange-50' },
   paid:             { label: 'Pagada',                   color: 'text-green-700 bg-green-100' },
+  // Estados que manda el backend
+  OPEN:             { label: 'Recibiendo cotizaciones',  color: 'text-blue-600 bg-blue-50' },
+  COMPLETED:        { label: 'Completada',               color: 'text-green-700 bg-green-100' },
+  CANCELLED:        { label: 'Cancelada',                color: 'text-slate-500 bg-slate-100' },
 };
+const VENCIDA = { label: 'Vencida', color: 'text-amber-700 bg-amber-50' };
 
 // Compact item preview strip — shared by RequestCard and QuoteCard
 const ItemPreview: React.FC<{ items: Array<{ name: string; quantity: number; unit?: string }> }> = ({ items }) => {
@@ -1294,8 +1300,24 @@ const ItemPreview: React.FC<{ items: Array<{ name: string; quantity: number; uni
   );
 };
 
-const RequestCard: React.FC<{ request: UserOwnRequest }> = ({ request }) => {
-  const statusInfo = REQUEST_STATUS[request.status] ?? { label: request.status, color: 'text-slate-500 bg-slate-50' };
+const RequestCard: React.FC<{ request: UserOwnRequest; onRepublicada?: (r: UserOwnRequest) => void }> = ({ request, onRepublicada }) => {
+  const statusInfo = request.vencida ? VENCIDA : REQUEST_STATUS[request.status] ?? { label: request.status, color: 'text-slate-500 bg-slate-50' };
+  const [reenviando, setReenviando] = useState(false);
+  const [errorReenvio, setErrorReenvio] = useState<string | null>(null);
+  const abierta = request.status === 'OPEN' || request.status === 'open';
+  const horaVence = request.venceEn ? new Date(request.venceEn).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' }) : null;
+
+  const reenviar = async () => {
+    setReenviando(true); setErrorReenvio(null);
+    try {
+      const r = await republicarSolicitud(request.id);
+      onRepublicada?.({ ...request, ...r, vencida: false });
+    } catch (err: any) {
+      setErrorReenvio(err?.message || 'No se pudo volver a enviar');
+    } finally {
+      setReenviando(false);
+    }
+  };
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
       <div className="flex items-start gap-3">
@@ -1335,8 +1357,28 @@ const RequestCard: React.FC<{ request: UserOwnRequest }> = ({ request }) => {
               <span>Búsqueda extendida activa</span>
             </div>
           )}
+          {abierta && !request.vencida && horaVence && (
+            <p className="mt-1.5 text-[10px] text-green-700 flex items-center gap-1">
+              <Clock className="w-3 h-3" /> Las ferreterías pueden cotizarla hasta las {horaVence}
+            </p>
+          )}
         </div>
       </div>
+      {abierta && request.vencida && (
+        <div className="mt-3 p-3 rounded-xl bg-amber-50 border border-amber-200">
+          <p className="text-xs text-amber-900">
+            Pasó más de una hora: las ferreterías ya no la ven. Puedes volver a enviarla para que la coticen otra hora.
+          </p>
+          {errorReenvio && <p className="text-xs text-red-600 mt-1">{errorReenvio}</p>}
+          <button
+            onClick={reenviar}
+            disabled={reenviando}
+            className="mt-2 w-full py-2 rounded-lg bg-ferry-600 text-white text-xs font-bold hover:bg-ferry-700 disabled:opacity-50 flex items-center justify-center gap-1.5"
+          >
+            {reenviando ? 'Enviando…' : 'Volver a enviar'}
+          </button>
+        </div>
+      )}
     </div>
   );
 };
@@ -1588,7 +1630,8 @@ export const UserQuotesInbox: React.FC<{ initialTab?: 'enviadas' | 'recibidas' |
   };
 
   // ── Lifecycle buckets ────────────────────────────────────────────────────
-  const enviadasItems  = ownRequests.filter(r => ['pending', 'searching', 'cotizando'].includes(r.status));
+  // El backend manda OPEN para las abiertas (vigentes o vencidas); los otros nombres son de una versión anterior.
+  const enviadasItems  = ownRequests.filter(r => ['OPEN', 'pending', 'searching', 'cotizando'].includes(r.status));
   const recibidasQuotes = quotes.filter(q => ['sent', 'accepted', 'accepted_partial'].includes(q.status));
   const enCaminoQuotes  = quotes.filter(q => ['paid', 'processing', 'shipped', 'pending_validation', 'preparing'].includes(q.status));
   const entregadasQuotes = quotes.filter(q => ['delivered', 'completed', 'DELIVERED'].includes(q.status));
@@ -1706,7 +1749,7 @@ export const UserQuotesInbox: React.FC<{ initialTab?: 'enviadas' | 'recibidas' |
         ) : (
           <div className="space-y-3">
             {enviadasItems.map(r => (
-              <RequestCard key={r.id} request={r} />
+              <RequestCard key={r.id} request={r} onRepublicada={(nueva) => setOwnRequests(prev => prev.map(x => x.id === nueva.id ? nueva : x))} />
             ))}
           </div>
         )

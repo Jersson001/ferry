@@ -3,13 +3,16 @@ import { QuotesService } from './quotes.service';
 import { RequestStatus } from './entities/material-request.entity';
 
 // Solicitud de Plomería abierta; la tienda tiene la especialidad 'Plomería'.
-const armar = (opts: { cotizacionesDeLaTienda?: number; delDia?: number; recibidasAlGuardar?: number; plan?: any } = {}) => {
+const armar = (opts: { cotizacionesDeLaTienda?: number; delDia?: number; recibidasAlGuardar?: number; plan?: any; publicadaHace?: number } = {}) => {
   const quoteRepository: any = {
     count: jest.fn(async ({ where }: any) => ('requestId' in where ? opts.cotizacionesDeLaTienda ?? 0 : opts.delDia ?? 0)),
     create: jest.fn((x) => x),
   };
   const requestRepository: any = {
-    findOne: jest.fn(async () => ({ id: 'r1', status: RequestStatus.OPEN, category: 'Plomería' })),
+    findOne: jest.fn(async () => ({
+      id: 'r1', status: RequestStatus.OPEN, category: 'Plomería',
+      createdAt: new Date(Date.now() - (opts.publicadaHace ?? 5 * 60 * 1000)),
+    })),
   };
   const manager = {
     findOne: jest.fn(),
@@ -90,6 +93,18 @@ describe('createQuote — topes', () => {
   it('si la solicitud ya tiene sus 5 cotizaciones, la tienda que llega tarde no entra', async () => {
     const { service, manager } = armar({ recibidasAlGuardar: 5 });
     await expect(service.createQuote('t1', 'r1', cotizacion)).rejects.toThrow(ConflictException);
+    expect(manager.save).not.toHaveBeenCalled();
+  });
+
+  it('una solicitud de hace 59 minutos todavía se puede cotizar', async () => {
+    const { service, manager } = armar({ publicadaHace: 59 * 60 * 1000 });
+    await service.createQuote('t1', 'r1', cotizacion);
+    expect(manager.save).toHaveBeenCalled();
+  });
+
+  it('una solicitud de más de una hora ya no se puede cotizar', async () => {
+    const { service, manager } = armar({ publicadaHace: 61 * 60 * 1000 });
+    await expect(service.createQuote('t1', 'r1', cotizacion)).rejects.toThrow('ya venció');
     expect(manager.save).not.toHaveBeenCalled();
   });
 
