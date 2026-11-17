@@ -15,6 +15,7 @@ import { PortfolioLightbox } from '../components/PortfolioLightbox';
 import { Crown, Sparkles } from 'lucide-react';
 import { getMySubscription, getMyUsage, UserSubscription, UsoPlan } from '../services/subscriptionService';
 import { UsoDelPlan } from '../components/UsoDelPlan';
+import { rolDeLaSesion } from '../utils/sesion';
 import { PlansModal } from '../components/PlansModal';
 import { Map, AdvancedMarker } from '@vis.gl/react-google-maps';
 import { usePlacesAutocomplete, PlacePick } from '../hooks/usePlacesAutocomplete';
@@ -51,6 +52,9 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
   const [myRating, setMyRating] = useState<StoreRating | null>(null);
   const [myActivity, setMyActivity] = useState<HistorialCliente | null>(null);
   const [profileSaveStatus, setProfileSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [profileSaveError, setProfileSaveError] = useState('');
+  // ¿La cuenta es de verdad una ferretería? Un administrador puede estar mirando esta vista.
+  const esFerreteriaReal = rolDeLaSesion() === 'STORE';
   const [showBalance, setShowBalance] = useState(false);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
   const [uso, setUso] = useState<UsoPlan | null>(null);
@@ -270,6 +274,13 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
 
   const handleSaveStoreProfile = async () => {
     if (!profile) return;
+    // Un administrador puede mirar la vista de ferretería, pero su cuenta no es una ferretería: el
+    // backend rechaza el guardado (403). Se le explica en vez de dejar que falle.
+    if (!esFerreteriaReal) {
+      setProfileSaveError('Estás viendo la vista de ferretería como administrador: tu cuenta no es una ferretería, así que estos datos no se guardan. Para editar una ferretería, entra con la cuenta de esa ferretería.');
+      setProfileSaveStatus('error');
+      return;
+    }
     setIsSavingProfile(true);
     setProfileSaveStatus('idle');
     try {
@@ -285,8 +296,13 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
       setTimeout(() => setProfileSaveStatus('idle'), 3500);
     } catch (error) {
       console.error('Error saving store profile:', error);
+      // Solo un fallo de red es "revisa tu conexión"; si el servidor respondió, se muestra lo que dijo.
+      const sinRed = error instanceof TypeError;
+      setProfileSaveError(sinRed || !(error instanceof Error) || !error.message || error.message === 'Error en la petición'
+        ? 'No se pudo conectar con Ferry. Verifica tu conexión e inténtalo de nuevo.'
+        : error.message);
       setProfileSaveStatus('error');
-      setTimeout(() => setProfileSaveStatus('idle'), 4000);
+      setTimeout(() => setProfileSaveStatus('idle'), 6000);
     } finally {
       setIsSavingProfile(false);
     }
@@ -653,9 +669,14 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
                     ¡Perfil guardado con éxito!
                   </div>
                 )}
+                {!esFerreteriaReal && (
+                  <div className="mb-3 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs">
+                    Vista de ferretería en modo administrador: puedes revisar la pantalla, pero tu cuenta no es una ferretería y no se guarda nada.
+                  </div>
+                )}
                 {profileSaveStatus === 'error' && (
                   <div className="mb-3 px-4 py-2.5 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm font-semibold animate-in fade-in">
-                    Error al guardar. Verifica tu conexión e inténtalo de nuevo.
+                    {profileSaveError}
                   </div>
                 )}
                 <Button

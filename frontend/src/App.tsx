@@ -17,6 +17,7 @@ import { UserRole, MaterialRequest, RequestStatus, Quote, Product, QuoteLineItem
 import { Home, ShoppingBag, Briefcase, User, CheckCircle2, Inbox, Package, ShieldAlert, X, Store, LogOut } from 'lucide-react';
 import ferryLogo from './assets/logo.svg';
 import { getCurrentUser, signOut as logoutUser, verifyEmailToken } from './services/authService';
+import { rolDeLaSesion } from './utils/sesion';
 import { getStorePendingRequestsCount } from './services/quoteService';
 import { recordarCodigoDeLlegada, reclamarCodigoPendiente } from './services/referralService';
 import { loadGuestCart, GuestCart } from './hooks/useGuestCart';
@@ -226,15 +227,7 @@ const App: React.FC = () => {
   // El botón Usuario/Tienda/Admin cambia solo la vista (currentUserProfile.role), y al cargar la sesión el
   // perfil convierte ADMIN en USER. El rol real se lee del token que firmó el servidor: el botón es solo
   // para administradores. Es solo para mostrarlo; las rutas de administración las protege el backend.
-  const esAdmin = useMemo(() => {
-    try {
-      const token = localStorage.getItem('access_token');
-      const payload = token ? JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))) : null;
-      return payload?.role === 'ADMIN';
-    } catch {
-      return false;
-    }
-  }, [currentUserProfile?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
+  const esAdmin = useMemo(() => rolDeLaSesion() === 'ADMIN', [currentUserProfile?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Lógica de Negocio
   const handleManualQuote = (reqId: string) => {
