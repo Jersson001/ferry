@@ -1,6 +1,6 @@
 import { Injectable, Optional, NotFoundException, ForbiddenException, BadRequestException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, MoreThanOrEqual } from 'typeorm';
+import { Repository, DataSource, MoreThanOrEqual, In } from 'typeorm';
 import { MaterialRequest, RequestStatus, PublicationType } from './entities/material-request.entity';
 import { Quote, QuoteStatus } from './entities/quote.entity';
 import { QuoteItem } from './entities/quote-item.entity';
@@ -14,6 +14,34 @@ import { planVigente } from '../subscriptions/plan-vigente';
 import { COTIZACIONES_POR_SOLICITUD, VIGENCIA_SOLICITUD_MS, publicadaEn, solicitudVigente, inicioDelDiaColombia, itemsDeCotizacionValidos } from './cupos';
 
 // Solicitudes que aún tienen cupo: las que ya recibieron todas sus cotizaciones salen de la bandeja.
+// Una solicitud abierta y sin respuesta durante 48 h se puede borrar o guardar como lista.
+export const ARCHIVABLE_DESDE_MS = 48 * 60 * 60 * 1000;
+
+// Artículos que el cliente edita en una lista guardada: se conservan los demás datos de cada artículo
+// (nombre comercial, medida…) y se validan nombre, cantidad y unidad.
+export function articulosDeLista(valor: unknown): any[] {
+  if (!Array.isArray(valor) || valor.length === 0) throw new BadRequestException('La lista debe tener al menos un artículo');
+  if (valor.length > 200) throw new BadRequestException('La lista tiene demasiados artículos');
+  return valor.map((it: any) => {
+    const name = typeof it?.name === 'string' ? it.name.trim() : '';
+    const cantidad = Number(it?.quantity);
+    if (!name || name.length > 200) throw new BadRequestException('Cada artículo necesita un nombre');
+    if (!Number.isFinite(cantidad) || cantidad <= 0 || cantidad > 100000) throw new BadRequestException(`Cantidad inválida para "${name}"`);
+    const unit = typeof it?.unit === 'string' && it.unit.trim() ? it.unit.trim().slice(0, 30) : 'und';
+    return { ...it, name, quantity: String(cantidad), unit };
+  });
+}
+
+// Pone los artículos cotizados en el mismo orden en que el cliente los pidió (por nombre); los que no
+// coinciden quedan al final, en el orden en que llegaron.
+export function ordenarComoSolicitud<T extends { name: string }>(cotizados: T[], pedidos?: Array<{ name?: string }> | null): T[] {
+  if (!Array.isArray(pedidos) || pedidos.length === 0) return cotizados;
+  const posicion = new Map<string, number>();
+  pedidos.forEach((p, i) => { const k = (p?.name ?? '').trim().toLowerCase(); if (k && !posicion.has(k)) posicion.set(k, i); });
+  const lugar = (it: T) => posicion.get((it.name ?? '').trim().toLowerCase()) ?? Number.MAX_SAFE_INTEGER;
+  return cotizados.map((it, i) => ({ it, i })).sort((a, b) => lugar(a.it) - lugar(b.it) || a.i - b.i).map(x => x.it);
+}
+
 // Cada solicitud guarda su tope según el plan de quien la creó; las anteriores a los planes usan el general.
 const CON_CUPO = '(SELECT COUNT(*) FROM quotes q WHERE q.request_id = request.id) < COALESCE(request.max_quotes, :cupoSolicitud)';
 
@@ -81,7 +109,98 @@ export class QuotesService {
       ...r,
       vencida: r.status === RequestStatus.OPEN && !solicitudVigente(r, ahora),
       venceEn: new Date(new Date(publicadaEn(r)).getTime() + VIGENCIA_SOLICITUD_MS),
+      // Abierta y sin respuesta hace más de 48 h: el cliente puede borrarla o guardarla como lista
+      archivable: r.status === RequestStatus.OPEN && ahora.getTime() - new Date(publicadaEn(r)).getTime() >= ARCHIVABLE_DESDE_MS,
     }));
+  }
+
+  // Solicitud propia, abierta y sin una cotización ya aceptada o pagada (esas siguen su curso).
+  private async solicitudArchivable(requestId: string, userId: string): Promise<MaterialRequest> {
+    const request = await this.requestRepository.findOne({ where: { id: requestId } });
+    if (!request || request.userId !== userId) throw new NotFoundException('Solicitud no encontrada');
+    if (request.status !== RequestStatus.OPEN) throw new BadRequestException('Esta solicitud ya no está abierta');
+    if (Date.now() - new Date(publicadaEn(request)).getTime() < ARCHIVABLE_DESDE_MS) {
+      throw new BadRequestException('Solo se pueden borrar o guardar las solicitudes de más de 48 horas');
+    }
+    const enCurso = await this.quoteRepository.count({
+      where: { requestId, status: In([QuoteStatus.ACCEPTED, QuoteStatus.PAID, QuoteStatus.PREPARING, QuoteStatus.SHIPPED, QuoteStatus.DELIVERED]) },
+    });
+    if (enCurso > 0) throw new BadRequestException('Esta solicitud tiene una cotización aceptada; no se puede borrar');
+    return request;
+  }
+
+  /** Borra una solicitud vieja: queda cancelada y sale de "Enviadas" (los datos se conservan). */
+  async borrarSolicitud(requestId: string, userId: string): Promise<{ ok: true }> {
+    const request = await this.solicitudArchivable(requestId, userId);
+    request.status = RequestStatus.CANCELLED;
+    await this.requestRepository.save(request);
+    return { ok: true };
+  }
+
+  /** Guarda los artículos de una solicitud vieja como lista reutilizable (borrador) y cancela la solicitud. */
+  async guardarComoLista(requestId: string, userId: string): Promise<MaterialRequest> {
+    const request = await this.solicitudArchivable(requestId, userId);
+    const lista = await this.requestRepository.save(this.requestRepository.create({
+      userId,
+      title: request.title,
+      category: request.category,
+      items: request.items,
+      deliveryAddress: request.deliveryAddress,
+      imageUrl: request.imageUrl,
+      userLat: request.userLat,
+      userLng: request.userLng,
+      radioKm: request.radioKm,
+      publicationType: request.publicationType,
+      status: RequestStatus.DRAFT,
+      displayId: `LISTA-${Math.floor(10000 + Math.random() * 90000)}`,
+    }));
+    request.status = RequestStatus.CANCELLED;
+    await this.requestRepository.save(request);
+    return lista;
+  }
+
+  private async listaPropia(listaId: string, userId: string): Promise<MaterialRequest> {
+    const lista = await this.requestRepository.findOne({ where: { id: listaId } });
+    if (!lista || lista.userId !== userId || lista.status !== RequestStatus.DRAFT) throw new NotFoundException('Lista no encontrada');
+    return lista;
+  }
+
+  /** Edita el nombre y los artículos de una lista guardada. */
+  async editarLista(listaId: string, userId: string, data: { title?: unknown; items?: unknown }): Promise<MaterialRequest> {
+    const lista = await this.listaPropia(listaId, userId);
+    if (data.title !== undefined) {
+      const titulo = typeof data.title === 'string' ? data.title.trim() : '';
+      if (!titulo || titulo.length > 120) throw new BadRequestException('Escribe un nombre para la lista (máximo 120 caracteres)');
+      lista.title = titulo;
+    }
+    if (data.items !== undefined) lista.items = articulosDeLista(data.items);
+    return this.requestRepository.save(lista);
+  }
+
+  /** Publica una solicitud nueva con los artículos de la lista; la lista sigue guardada para otra vez. */
+  async enviarLista(listaId: string, userId: string): Promise<MaterialRequest & { vencida: boolean; venceEn: Date }> {
+    const lista = await this.listaPropia(listaId, userId);
+    if (!Array.isArray(lista.items) || lista.items.length === 0) throw new BadRequestException('La lista no tiene artículos');
+    const nueva = await this.createRequest(userId, {
+      title: lista.title,
+      category: lista.category,
+      items: lista.items,
+      deliveryAddress: lista.deliveryAddress,
+      imageUrl: lista.imageUrl,
+      userLat: lista.userLat,
+      userLng: lista.userLng,
+      radioKm: lista.radioKm,
+      publicationType: lista.publicationType,
+    });
+    return { ...nueva, vencida: false, venceEn: new Date(new Date(publicadaEn(nueva) ?? new Date()).getTime() + VIGENCIA_SOLICITUD_MS) };
+  }
+
+  /** Borra una lista guardada. */
+  async borrarLista(listaId: string, userId: string): Promise<{ ok: true }> {
+    const lista = await this.listaPropia(listaId, userId);
+    lista.status = RequestStatus.CANCELLED;
+    await this.requestRepository.save(lista);
+    return { ok: true };
   }
 
   /** El cliente vuelve a enviar una solicitud vencida: corre otra hora y se avisa de nuevo a las ferreterías. */
@@ -348,6 +467,9 @@ export class QuotesService {
     const quotes = await this.quoteRepository.createQueryBuilder('quote')
       .leftJoinAndSelect('quote.items', 'items')
       .leftJoinAndSelect('quote.store', 'store')
+      // Solo el nombre y el código de la solicitud (son del mismo cliente), para mostrarlos en el aviso
+      .leftJoin('quote.request', 'request')
+      .addSelect(['request.id', 'request.title', 'request.displayId', 'request.category', 'request.items'])
       .where('quote.requestId IN (:...requestIds)', { requestIds })
       .orderBy('quote.createdAt', 'DESC')
       .getMany();
@@ -373,7 +495,12 @@ export class QuotesService {
         total: quote.clientFinalTotal,
         storeName: quote.store?.displayName || quote.store?.email || 'Tienda',
         storeVerified: verificadas.has(quote.storeId),
-        items: quote.items.map(item => ({
+        request: undefined,
+        requestTitle: quote.request?.title,
+        requestDisplayId: quote.request?.displayId,
+        requestCategory: quote.request?.category,
+        // Los artículos de la cotización no guardan orden: se muestran en el de la solicitud
+        items: ordenarComoSolicitud(quote.items, quote.request?.items).map(item => ({
           ...item,
           unitPrice: item.clientFinalUnitPrice,
           subtotal: item.clientFinalSubtotal,

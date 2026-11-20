@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, UseGuards, Req, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Post, Put, Body, Param, UseGuards, Req, ForbiddenException } from '@nestjs/common';
 import { QuotesService } from './quotes.service';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { Request } from 'express';
@@ -36,6 +36,36 @@ export class QuotesController {
   @Post('requests/:id/republish')
   async republish(@Param('id') id: string, @Req() req: RequestWithUser) {
     return this.quotesService.republicarSolicitud(id, req.user.uid);
+  }
+
+  /** POST /quotes/requests/:id/delete — Borra una solicitud abierta de más de 48 h sin respuesta */
+  @Post('requests/:id/delete')
+  async deleteRequest(@Param('id') id: string, @Req() req: RequestWithUser) {
+    return this.quotesService.borrarSolicitud(id, req.user.uid);
+  }
+
+  /** POST /quotes/requests/:id/save-list — La guarda como lista reutilizable y la cancela */
+  @Post('requests/:id/save-list')
+  async saveAsList(@Param('id') id: string, @Req() req: RequestWithUser) {
+    return this.quotesService.guardarComoLista(id, req.user.uid);
+  }
+
+  /** PUT /quotes/lists/:id — Edita nombre y artículos de una lista guardada */
+  @Put('lists/:id')
+  async editList(@Param('id') id: string, @Body() body: any, @Req() req: RequestWithUser) {
+    return this.quotesService.editarLista(id, req.user.uid, body ?? {});
+  }
+
+  /** POST /quotes/lists/:id/send — Publica una solicitud nueva con la lista (la lista se conserva) */
+  @Post('lists/:id/send')
+  async sendList(@Param('id') id: string, @Req() req: RequestWithUser) {
+    return this.quotesService.enviarLista(id, req.user.uid);
+  }
+
+  /** POST /quotes/lists/:id/delete — Borra una lista guardada */
+  @Post('lists/:id/delete')
+  async deleteList(@Param('id') id: string, @Req() req: RequestWithUser) {
+    return this.quotesService.borrarLista(id, req.user.uid);
   }
 
   @Get('requests/:id/quote-count')

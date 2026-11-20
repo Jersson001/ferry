@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { MaterialRequest, RequestStatus } from '../types';
 import { TopStoresSection } from '../components/TopStoresSection';
 import { PromocionesSection } from '../components/PromocionesSection';
-import { ShoppingBag, Briefcase, Store, TrendingUp, FileText, Package, ChevronRight, UserCog, ArrowRight } from 'lucide-react';
+import { ShoppingBag, Briefcase, Store, TrendingUp, FileText, Package, ChevronRight, ChevronDown, UserCog, ArrowRight } from 'lucide-react';
 import { getRecentPendingQuotes, RecentPendingQuote, rejectQuote } from '../services/quoteService';
 
 // ---------------------------------------------------------------------------
@@ -29,6 +29,41 @@ const useRecentQuotes = (enabled: boolean) => {
 };
 
 const pesos = (n?: number) => (typeof n === 'number' ? `$${n.toLocaleString('es-CO')}` : '');
+
+// Nombre de la solicitud y su primer artículo; si hay más, una flecha despliega el resto.
+const ResumenSolicitud: React.FC<{ q: RecentPendingQuote }> = ({ q }) => {
+  const [abierto, setAbierto] = useState(false);
+  const items = q.items ?? [];
+  if (!q.requestTitle && items.length === 0) return null;
+  const linea = (it: NonNullable<RecentPendingQuote['items']>[number], i: number) => (
+    <li key={i} className={`flex gap-1.5 text-xs ${it.available === false ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
+      <span className="font-bold shrink-0">{it.quantity}x</span>
+      <span className="truncate">{it.name}</span>
+    </li>
+  );
+  return (
+    <div className="mt-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
+      <div className="flex items-start gap-2">
+        <div className="flex-1 min-w-0">
+          {q.requestTitle && <p className="text-sm font-bold text-slate-800 truncate">{q.requestTitle}</p>}
+          {items[0] && <ul className="mt-0.5">{linea(items[0], 0)}</ul>}
+        </div>
+        {items.length > 1 && (
+          <button
+            onClick={() => setAbierto(a => !a)}
+            className="shrink-0 flex items-center gap-0.5 text-[11px] font-semibold text-ferry-600 px-2 py-1 rounded-lg hover:bg-ferry-50"
+            aria-expanded={abierto}
+            aria-label={abierto ? 'Ocultar artículos' : 'Ver todos los artículos'}
+          >
+            +{items.length - 1}
+            <ChevronDown className={`w-4 h-4 transition-transform ${abierto ? 'rotate-180' : ''}`} />
+          </button>
+        )}
+      </div>
+      {abierto && <ul className="mt-1.5 space-y-1 border-t border-slate-200 pt-1.5">{items.slice(1).map((it, i) => linea(it, i + 1))}</ul>}
+    </div>
+  );
+};
 
 const buildNotificationMessage = (q: RecentPendingQuote, idx: number): string => {
   const alias = `Experto Local #${idx + 1}`;
@@ -214,6 +249,7 @@ export const HomeView: React.FC<Props> = ({
                   {/* Chevron */}
                   <ChevronRight className="w-5 h-5 text-gray-400 shrink-0" />
                 </button>
+                <ResumenSolicitud q={q} />
                 {/* Respuesta rápida: precio, rechazar o aceptar (aceptar abre el pago) */}
                 {(!q.status || q.status === 'sent') && (
                   <div className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-2">

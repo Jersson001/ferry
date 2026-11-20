@@ -4,7 +4,7 @@ import { QuoteStatus } from './entities/quote.entity';
 
 const encadenable = () => {
   const qb: any = {};
-  for (const metodo of ['where', 'andWhere', 'orderBy', 'leftJoinAndSelect']) qb[metodo] = jest.fn(() => qb);
+  for (const metodo of ['where', 'andWhere', 'orderBy', 'leftJoinAndSelect', 'leftJoin', 'addSelect']) qb[metodo] = jest.fn(() => qb);
   qb.getMany = jest.fn(async () => []);
   qb.getCount = jest.fn(async () => 0);
   return qb;
@@ -122,5 +122,17 @@ describe('Datos de otras cuentas en las respuestas', () => {
     for (const secreto of ['password', 'emailVerificationToken', 'resetPasswordToken', 'resetPasswordExpiry', 'priceMemory']) {
       expect(tienda).not.toHaveProperty(secreto);
     }
+  });
+
+  it('el cliente recibe el nombre de su solicitud, pero no la fila completa', async () => {
+    const { service, qbCotizaciones } = armar();
+    qbCotizaciones.getMany.mockResolvedValue([
+      { id: 'q1', status: QuoteStatus.PENDING, items: [], store: usuarioConSecretos, clientFinalTotal: 100,
+        request: { id: 'r1', title: 'Pedido Depósito', displayId: 'REQ-1', category: 'Depósito', items: [] } },
+    ]);
+    const [cotizacion] = await service.getReceivedQuotes('cliente-1');
+    expect(cotizacion.requestTitle).toBe('Pedido Depósito');
+    expect(cotizacion.requestDisplayId).toBe('REQ-1');
+    expect(cotizacion.request).toBeUndefined();
   });
 });

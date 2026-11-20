@@ -17,6 +17,12 @@ import {
   getUserReceivedQuotes,
   getUserOwnRequests,
   republicarSolicitud,
+  borrarSolicitud,
+  guardarComoLista,
+  editarLista,
+  enviarLista,
+  borrarLista,
+  ArticuloLista,
   acceptQuote,
   rejectQuote,
   verifyWompiPayment,
@@ -1310,8 +1316,28 @@ const RequestCard: React.FC<{
   cotizaciones?: Array<{ quote: ReceivedQuote; alias: string }>;
   onAceptar?: (q: ReceivedQuote) => void;
   onRechazar?: (q: ReceivedQuote) => Promise<void>;
-}> = ({ request, onRepublicada, cotizaciones = [], onAceptar, onRechazar }) => {
+  // Solicitud de más de 48 h: se borra, o se guarda como lista (que reemplaza a la solicitud)
+  onBorrada?: (id: string) => void;
+  onGuardadaComoLista?: (id: string, lista: UserOwnRequest) => void;
+}> = ({ request, onRepublicada, cotizaciones = [], onAceptar, onRechazar, onBorrada, onGuardadaComoLista }) => {
   const [rechazandoId, setRechazandoId] = useState<string | null>(null);
+  const [archivando, setArchivando] = useState<null | 'borrar' | 'guardar'>(null);
+
+  const archivar = async (accion: 'borrar' | 'guardar') => {
+    const pregunta = accion === 'borrar'
+      ? '¿Borrar esta solicitud? Ya no aparecerá en tus solicitudes.'
+      : '¿Guardar esta lista? La encontrarás en "Guardadas" para editarla y enviarla cuando quieras.';
+    if (!window.confirm(pregunta)) return;
+    setArchivando(accion); setErrorReenvio(null);
+    try {
+      if (accion === 'borrar') { await borrarSolicitud(request.id); onBorrada?.(request.id); }
+      else { const lista = await guardarComoLista(request.id); onGuardadaComoLista?.(request.id, lista); }
+    } catch (err: any) {
+      setErrorReenvio(err?.message || 'No se pudo completar la acción');
+    } finally {
+      setArchivando(null);
+    }
+  };
   const statusInfo = request.vencida ? VENCIDA : REQUEST_STATUS[request.status] ?? { label: request.status, color: 'text-slate-500 bg-slate-50' };
   const [reenviando, setReenviando] = useState(false);
   const [errorReenvio, setErrorReenvio] = useState<string | null>(null);
@@ -1422,8 +1448,184 @@ const RequestCard: React.FC<{
           >
             {reenviando ? 'Enviando…' : 'Volver a enviar'}
           </button>
+          {request.archivable && (
+            <div className="mt-2 flex gap-2">
+              <button
+                onClick={() => archivar('borrar')}
+                disabled={!!archivando}
+                className="flex-1 py-2 rounded-lg border-2 border-red-200 text-red-600 text-xs font-bold hover:bg-red-50 disabled:opacity-50"
+              >
+                {archivando === 'borrar' ? 'Borrando…' : 'Borrar'}
+              </button>
+              <button
+                onClick={() => archivar('guardar')}
+                disabled={!!archivando}
+                className="flex-1 py-2 rounded-lg border-2 border-slate-300 text-slate-700 text-xs font-bold hover:bg-white disabled:opacity-50"
+              >
+                {archivando === 'guardar' ? 'Guardando…' : 'Guardar lista'}
+              </button>
+            </div>
+          )}
         </div>
       )}
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Lista guardada: se edita (nombre y artículos) y se envía como solicitud nueva
+// ---------------------------------------------------------------------------
+
+const ListaGuardadaCard: React.FC<{
+  lista: UserOwnRequest;
+  onCambiada: (l: UserOwnRequest) => void;
+  onBorrada: (id: string) => void;
+  onEnviada: (nueva: UserOwnRequest) => void;
+}> = ({ lista, onCambiada, onBorrada, onEnviada }) => {
+  const [editando, setEditando] = useState(false);
+  const [titulo, setTitulo] = useState(lista.title);
+  const [articulos, setArticulos] = useState<ArticuloLista[]>(() => (lista.items ?? []).map(i => ({ ...i })));
+  const [ocupado, setOcupado] = useState<null | 'guardar' | 'enviar' | 'borrar'>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const cambiar = (i: number, campo: 'name' | 'quantity' | 'unit', valor: string) =>
+    setArticulos(prev => prev.map((a, j) => (j === i ? { ...a, [campo]: valor } : a)));
+
+  const accion = async (tipo: 'guardar' | 'enviar' | 'borrar') => {
+    if (tipo === 'borrar' && !window.confirm('¿Borrar esta lista guardada?')) return;
+    setOcupado(tipo); setError(null);
+    try {
+      if (tipo === 'guardar') {
+        const l = await editarLista(lista.id, { title: titulo, items: articulos });
+        onCambiada(l); setEditando(false);
+      } else if (tipo === 'enviar') {
+        onEnviada(await enviarLista(lista.id));
+      } else {
+        await borrarLista(lista.id); onBorrada(lista.id);
+      }
+    } catch (err: any) {
+      setError(err?.message || 'No se pudo completar la acción');
+    } finally {
+      setOcupado(null);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center flex-shrink-0">
+          <FileText className="w-5 h-5 text-slate-500" />
+        </div>
+        <div className="flex-1 min-w-0">
+          {editando ? (
+            <input
+              value={titulo}
+              onChange={e => setTitulo(e.target.value)}
+              maxLength={120}
+              className="w-full font-bold text-slate-800 text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-ferry-400"
+            />
+          ) : (
+            <h3 className="font-bold text-slate-800 text-sm leading-tight truncate">{lista.title}</h3>
+          )}
+          <div className="flex items-center gap-2 mt-1">
+            {lista.category && (
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${categoryColor(lista.category)}`}>{lista.category}</span>
+            )}
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full text-slate-600 bg-slate-100">Lista guardada</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 space-y-1.5">
+        {articulos.map((a, i) => editando ? (
+          <div key={i} className="flex items-center gap-1.5">
+            <input
+              type="number" min={1} inputMode="numeric"
+              value={String(a.quantity)}
+              onChange={e => cambiar(i, 'quantity', e.target.value)}
+              className="w-14 text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-ferry-400"
+              aria-label="Cantidad"
+            />
+            <input
+              value={a.unit ?? 'und'}
+              onChange={e => cambiar(i, 'unit', e.target.value)}
+              className="w-14 text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-ferry-400"
+              aria-label="Unidad"
+            />
+            <input
+              value={a.name}
+              onChange={e => cambiar(i, 'name', e.target.value)}
+              className="flex-1 min-w-0 text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-ferry-400"
+              aria-label="Artículo"
+            />
+            <button
+              onClick={() => setArticulos(prev => prev.filter((_, j) => j !== i))}
+              disabled={articulos.length === 1}
+              className="p-1.5 text-slate-400 hover:text-red-500 disabled:opacity-30"
+              aria-label="Quitar artículo"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        ) : (
+          <div key={i} className="flex gap-1.5 text-sm text-slate-700 bg-slate-50 rounded-lg px-3 py-1.5">
+            <span className="font-bold">{a.quantity}x</span><span className="truncate">{a.name}</span>
+          </div>
+        ))}
+        {editando && (
+          <button
+            onClick={() => setArticulos(prev => [...prev, { name: '', quantity: '1', unit: 'und' }])}
+            className="text-xs font-bold text-ferry-600 hover:text-ferry-700 py-1"
+          >
+            + Agregar artículo
+          </button>
+        )}
+      </div>
+
+      {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
+
+      <div className="mt-3 flex gap-2">
+        {editando ? (
+          <>
+            <button
+              onClick={() => { setEditando(false); setTitulo(lista.title); setArticulos((lista.items ?? []).map(i => ({ ...i }))); setError(null); }}
+              className="flex-1 py-2 rounded-xl border border-slate-200 text-slate-600 text-xs font-bold hover:bg-slate-50"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={() => accion('guardar')}
+              disabled={!!ocupado}
+              className="flex-1 py-2 rounded-xl bg-slate-800 text-white text-xs font-bold hover:bg-slate-900 disabled:opacity-50"
+            >
+              {ocupado === 'guardar' ? 'Guardando…' : 'Guardar cambios'}
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={() => accion('borrar')}
+              disabled={!!ocupado}
+              className="px-3 py-2 rounded-xl border-2 border-red-200 text-red-600 text-xs font-bold hover:bg-red-50 disabled:opacity-50"
+            >
+              {ocupado === 'borrar' ? '…' : 'Borrar'}
+            </button>
+            <button
+              onClick={() => setEditando(true)}
+              className="px-3 py-2 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50"
+            >
+              Editar
+            </button>
+            <button
+              onClick={() => accion('enviar')}
+              disabled={!!ocupado}
+              className="flex-1 py-2 rounded-xl bg-ferry-600 text-white text-xs font-bold hover:bg-ferry-700 disabled:opacity-50"
+            >
+              {ocupado === 'enviar' ? 'Enviando…' : 'Enviar a ferreterías'}
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 };
@@ -1438,7 +1640,7 @@ export const UserQuotesInbox: React.FC<{
   abrirPagoDe?: string | null;
   onPagoAbierto?: () => void;
 }> = ({ initialTab = 'enviadas', abrirPagoDe, onPagoAbierto }) => {
-  const [activeTab, setActiveTab] = useState<'enviadas' | 'recibidas' | 'en-camino' | 'entregadas'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'enviadas' | 'recibidas' | 'en-camino' | 'entregadas' | 'guardadas'>(initialTab);
   const [quotes, setQuotes] = useState<ReceivedQuote[]>([]);
   const [ownRequests, setOwnRequests] = useState<UserOwnRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1691,6 +1893,8 @@ export const UserQuotesInbox: React.FC<{
   // ── Lifecycle buckets ────────────────────────────────────────────────────
   // El backend manda OPEN para las abiertas (vigentes o vencidas); los otros nombres son de una versión anterior.
   const enviadasItems  = ownRequests.filter(r => ['OPEN', 'pending', 'searching', 'cotizando'].includes(r.status));
+  // Listas guardadas (borradores reutilizables)
+  const guardadasItems = ownRequests.filter(r => r.status === 'DRAFT');
   const recibidasQuotes = quotes.filter(q => ['sent', 'accepted', 'accepted_partial'].includes(q.status));
   const enCaminoQuotes  = quotes.filter(q => ['paid', 'processing', 'shipped', 'pending_validation', 'preparing'].includes(q.status));
   const entregadasQuotes = quotes.filter(q => ['delivered', 'completed', 'DELIVERED'].includes(q.status));
@@ -1746,6 +1950,7 @@ export const UserQuotesInbox: React.FC<{
             { key: 'recibidas',   label: 'Recibidas',   count: recibidasQuotes.length },
             { key: 'en-camino',   label: 'En camino',   count: enCaminoQuotes.length },
             { key: 'entregadas',  label: 'Entregadas',  count: entregadasQuotes.length },
+            { key: 'guardadas',   label: 'Guardadas',   count: guardadasItems.length },
           ] as const
         ).map(tab => (
           <button
@@ -1817,6 +2022,35 @@ export const UserQuotesInbox: React.FC<{
                   .map(q => ({ quote: q, alias: quoteAliases[q.id] ?? 'Experto Local' }))}
                 onAceptar={handleOpenCheckout}
                 onRechazar={handleReject}
+                onBorrada={(id) => setOwnRequests(prev => prev.filter(x => x.id !== id))}
+                onGuardadaComoLista={(id, lista) => setOwnRequests(prev => [lista, ...prev.filter(x => x.id !== id)])}
+              />
+            ))}
+          </div>
+        )
+      )}
+
+      {/* ── GUARDADAS (listas reutilizables) ─────────────────────────────── */}
+      {activeTab === 'guardadas' && !loading && !error && (
+        guardadasItems.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+            <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-4">
+              <FileText className="w-10 h-10 text-slate-300" />
+            </div>
+            <h3 className="font-bold text-slate-700 mb-2">Sin listas guardadas</h3>
+            <p className="text-sm text-slate-400 max-w-[260px] leading-relaxed">
+              Las solicitudes de más de 48 horas sin respuesta se pueden guardar aquí para editarlas y enviarlas otra vez.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {guardadasItems.map(l => (
+              <ListaGuardadaCard
+                key={l.id}
+                lista={l}
+                onCambiada={(nueva) => setOwnRequests(prev => prev.map(x => x.id === nueva.id ? { ...x, ...nueva } : x))}
+                onBorrada={(id) => setOwnRequests(prev => prev.filter(x => x.id !== id))}
+                onEnviada={(nueva) => { setOwnRequests(prev => [nueva, ...prev]); setActiveTab('enviadas'); }}
               />
             ))}
           </div>

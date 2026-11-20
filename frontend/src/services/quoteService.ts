@@ -188,6 +188,8 @@ export interface UserOwnRequest {
   // Una solicitud solo la ven las ferreterías durante 1 hora desde que se publicó o se volvió a enviar.
   vencida?: boolean;
   venceEn?: string;
+  archivable?: boolean; // Abierta y sin respuesta hace más de 48 h: se puede borrar o guardar como lista
+  deliveryAddress?: string;
 }
 
 export interface RecentPendingQuote {
@@ -195,6 +197,7 @@ export interface RecentPendingQuote {
   requestId: string;
   status?: string; // 'sent' = pendiente de que el cliente la acepte o la rechace
   total?: number;
+  items?: Array<{ name: string; quantity: number | string; unit?: string; available?: boolean }>;
   requestTitle?: string;
   requestDisplayId?: string;
   availableItems: number;
@@ -248,6 +251,26 @@ export const getStorePendingRequestsCount = async (): Promise<number> => {
 export const getUserOwnRequests = async (): Promise<UserOwnRequest[]> => {
   return apiRequest<UserOwnRequest[]>('/quotes/requests/own');
 };
+
+// ─── Solicitudes viejas y listas guardadas ────────────────────────────────────
+// Una solicitud abierta de más de 48 h se puede borrar o guardar como lista. Las listas (status DRAFT)
+// se editan y se envían como solicitud nueva cuantas veces se quiera.
+export type ArticuloLista = { name: string; quantity: number | string; unit?: string; [k: string]: unknown };
+
+export const borrarSolicitud = (requestId: string) =>
+  apiRequest<{ ok: true }>(`/quotes/requests/${requestId}/delete`, { method: 'POST' });
+
+export const guardarComoLista = (requestId: string) =>
+  apiRequest<UserOwnRequest>(`/quotes/requests/${requestId}/save-list`, { method: 'POST' });
+
+export const editarLista = (listaId: string, data: { title?: string; items?: ArticuloLista[] }) =>
+  apiRequest<UserOwnRequest>(`/quotes/lists/${listaId}`, { method: 'PUT', body: JSON.stringify(data) });
+
+export const enviarLista = (listaId: string) =>
+  apiRequest<UserOwnRequest>(`/quotes/lists/${listaId}/send`, { method: 'POST' });
+
+export const borrarLista = (listaId: string) =>
+  apiRequest<{ ok: true }>(`/quotes/lists/${listaId}/delete`, { method: 'POST' });
 
 // Vuelve a publicar una solicitud vencida: las ferreterías la ven otra hora y reciben el aviso de nuevo.
 export const republicarSolicitud = async (requestId: string): Promise<Partial<UserOwnRequest>> => {
