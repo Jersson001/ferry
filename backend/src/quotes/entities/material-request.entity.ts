@@ -1,5 +1,6 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
 import { User } from '../../users/user.entity';
+import { decimalComoNumero } from './decimal';
 
 export enum RequestStatus {
   OPEN = 'OPEN',
@@ -50,10 +51,10 @@ export class MaterialRequest {
   @Column({ type: 'text', nullable: true, name: 'image_url' })
   imageUrl?: string | null;
 
-  @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true })
+  @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true, transformer: decimalComoNumero })
   userLat: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true })
+  @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true, transformer: decimalComoNumero })
   userLng: number;
 
   // Cotizaciones que puede recibir, según el plan de quien la creó. Vacío en solicitudes anteriores (usan 5).

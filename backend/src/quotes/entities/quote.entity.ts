@@ -2,6 +2,7 @@ import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, ManyToOne, Jo
 import { User } from '../../users/user.entity';
 import { MaterialRequest } from './material-request.entity';
 import { QuoteItem } from './quote-item.entity';
+import { decimalComoNumero } from './decimal';
 
 export enum QuoteStatus {
   PENDING = 'PENDING',
@@ -56,7 +57,7 @@ export class Quote {
   @Column({ type: 'text', nullable: true })
   message?: string;
 
-  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
+  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true, transformer: decimalComoNumero })
   distanceKm?: number;
 
   @Column({ type: 'integer', nullable: true })

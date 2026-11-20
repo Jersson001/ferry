@@ -2,6 +2,7 @@ import { Injectable, Logger, BadRequestException, Inject, forwardRef } from '@ne
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { ProjectApplication, ApplicationStatus } from '../projects/entities/project-application.entity';
+import { QuoteStatus } from '../quotes/entities/quote.entity';
 import { PRECIO_CONTACTO_SUSCRITO } from '../subscriptions/plan-vigente';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
@@ -241,6 +242,12 @@ export class PaymentsService {
     }
 
     if (tx && tx.status === PaymentStatus.APPROVED) {
+      // Confirmar dos veces el mismo pago (al volver de Wompi y en la ventana, o tras el aviso de Wompi)
+      // no es un error: si la ferretería ya avanzó el pedido, payQuote lo rechazaría por estado.
+      if (tx.quoteId && tx.quoteId !== quoteId) throw new BadRequestException('La transacción no corresponde a esta cotización.');
+      const actual = await this.quotesService.findOneById(quoteId);
+      const yaPagada = [QuoteStatus.PAID, QuoteStatus.PREPARING, QuoteStatus.SHIPPED, QuoteStatus.DELIVERED].includes(actual?.status as QuoteStatus);
+      if (yaPagada && actual?.request?.userId === userId) return { success: true };
       // Usamos el userId proveído para que payQuote valide que el quote pertenece a este usuario
       await this.quotesService.payQuote(quoteId, userId);
       return { success: true };

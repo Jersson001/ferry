@@ -281,7 +281,9 @@ const PaymentCheckoutModal: React.FC<{
           requestId: quote.requestId, 
           amountInCents: backendAmountInCents,
           reference,
-          signature
+          signature,
+          // En el celular Wompi termina en su propia página: al volver, App.tsx confirma el pago.
+          redirectUrl: `${window.location.origin}/?pago=cotizacion&cotizacion=${quote.id}`,
         },
         (result) => {
           if (result.transaction.status === 'APPROVED') {
@@ -1084,10 +1086,11 @@ const QuoteCard: React.FC<{
               <p className="text-xl font-bold text-ferry-700">{formatCOP(quote.total)}</p>
               <span className="flex items-center gap-0.5 text-sm text-slate-500">
                 <MapPin className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                {quote.distanceKm != null
-                  ? quote.distanceKm < 1
-                    ? `${(quote.distanceKm * 1000).toFixed(0)} m`
-                    : `${quote.distanceKm.toFixed(1)} km`
+                {/* Number(): versiones anteriores del servidor la mandaban como texto ("3.40") y rompían la pantalla */}
+                {quote.distanceKm != null && Number.isFinite(Number(quote.distanceKm))
+                  ? Number(quote.distanceKm) < 1
+                    ? `${(Number(quote.distanceKm) * 1000).toFixed(0)} m`
+                    : `${Number(quote.distanceKm).toFixed(1)} km`
                   : '—'}
               </span>
             </div>
@@ -1300,7 +1303,15 @@ const ItemPreview: React.FC<{ items: Array<{ name: string; quantity: number; uni
   );
 };
 
-const RequestCard: React.FC<{ request: UserOwnRequest; onRepublicada?: (r: UserOwnRequest) => void }> = ({ request, onRepublicada }) => {
+const RequestCard: React.FC<{
+  request: UserOwnRequest;
+  onRepublicada?: (r: UserOwnRequest) => void;
+  // Cotizaciones recibidas para esta solicitud que esperan respuesta, con su alias
+  cotizaciones?: Array<{ quote: ReceivedQuote; alias: string }>;
+  onAceptar?: (q: ReceivedQuote) => void;
+  onRechazar?: (q: ReceivedQuote) => Promise<void>;
+}> = ({ request, onRepublicada, cotizaciones = [], onAceptar, onRechazar }) => {
+  const [rechazandoId, setRechazandoId] = useState<string | null>(null);
   const statusInfo = request.vencida ? VENCIDA : REQUEST_STATUS[request.status] ?? { label: request.status, color: 'text-slate-500 bg-slate-50' };
   const [reenviando, setReenviando] = useState(false);
   const [errorReenvio, setErrorReenvio] = useState<string | null>(null);
@@ -1364,6 +1375,40 @@ const RequestCard: React.FC<{ request: UserOwnRequest; onRepublicada?: (r: UserO
           )}
         </div>
       </div>
+      {cotizaciones.length > 0 && (
+        <div className="mt-3 space-y-2">
+          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+            {cotizaciones.length === 1 ? 'Cotización recibida' : `${cotizaciones.length} cotizaciones recibidas`}
+          </p>
+          {cotizaciones.map(({ quote: q, alias }) => (
+            <div key={q.id} className="p-3 rounded-xl border border-slate-100 bg-slate-50">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <span className="text-xs font-semibold text-slate-600 truncate">{alias}</span>
+                <span className="text-base font-black text-ferry-700">{formatCOP(q.total)}</span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={async () => {
+                    if (!onRechazar || !window.confirm(`¿Rechazar la cotización de ${formatCOP(q.total)}?`)) return;
+                    setRechazandoId(q.id);
+                    try { await onRechazar(q); } finally { setRechazandoId(null); }
+                  }}
+                  disabled={rechazandoId === q.id}
+                  className="flex-1 py-2 rounded-xl border-2 border-red-200 text-red-600 text-xs font-bold hover:bg-red-50 disabled:opacity-50"
+                >
+                  {rechazandoId === q.id ? '...' : 'Rechazar'}
+                </button>
+                <button
+                  onClick={() => onAceptar?.(q)}
+                  className="flex-1 py-2 rounded-xl bg-green-600 text-white text-xs font-bold hover:bg-green-700"
+                >
+                  Aceptar
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       {abierta && request.vencida && (
         <div className="mt-3 p-3 rounded-xl bg-amber-50 border border-amber-200">
           <p className="text-xs text-amber-900">
@@ -1387,7 +1432,12 @@ const RequestCard: React.FC<{ request: UserOwnRequest; onRepublicada?: (r: UserO
 // Main View
 // ---------------------------------------------------------------------------
 
-export const UserQuotesInbox: React.FC<{ initialTab?: 'enviadas' | 'recibidas' | 'en-camino' | 'entregadas' }> = ({ initialTab = 'enviadas' }) => {
+export const UserQuotesInbox: React.FC<{
+  initialTab?: 'enviadas' | 'recibidas' | 'en-camino' | 'entregadas';
+  // Cotización que el cliente aceptó desde el inicio: al cargar se abre su pago
+  abrirPagoDe?: string | null;
+  onPagoAbierto?: () => void;
+}> = ({ initialTab = 'enviadas', abrirPagoDe, onPagoAbierto }) => {
   const [activeTab, setActiveTab] = useState<'enviadas' | 'recibidas' | 'en-camino' | 'entregadas'>(initialTab);
   const [quotes, setQuotes] = useState<ReceivedQuote[]>([]);
   const [ownRequests, setOwnRequests] = useState<UserOwnRequest[]>([]);
@@ -1616,6 +1666,15 @@ export const UserQuotesInbox: React.FC<{ initialTab?: 'enviadas' | 'recibidas' |
     }
   }, [checkoutQuote, loadQuotes]);
 
+  // Aceptada desde el inicio: en cuanto llegan las cotizaciones se abre su pago (una sola vez)
+  useEffect(() => {
+    if (!abrirPagoDe || quotes.length === 0) return;
+    const q = quotes.find(x => x.id === abrirPagoDe);
+    onPagoAbierto?.();
+    if (q && q.status === 'sent') handleOpenCheckout(q);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abrirPagoDe, quotes]);
+
   const handleReject = async (quote: ReceivedQuote) => {
     // Optimistic: remove immediately
     setQuotes(prev => prev.filter(q => q.id !== quote.id));
@@ -1749,7 +1808,16 @@ export const UserQuotesInbox: React.FC<{ initialTab?: 'enviadas' | 'recibidas' |
         ) : (
           <div className="space-y-3">
             {enviadasItems.map(r => (
-              <RequestCard key={r.id} request={r} onRepublicada={(nueva) => setOwnRequests(prev => prev.map(x => x.id === nueva.id ? nueva : x))} />
+              <RequestCard
+                key={r.id}
+                request={r}
+                onRepublicada={(nueva) => setOwnRequests(prev => prev.map(x => x.id === nueva.id ? nueva : x))}
+                cotizaciones={quotes
+                  .filter(q => q.requestId === r.id && q.status === 'sent')
+                  .map(q => ({ quote: q, alias: quoteAliases[q.id] ?? 'Experto Local' }))}
+                onAceptar={handleOpenCheckout}
+                onRechazar={handleReject}
+              />
             ))}
           </div>
         )

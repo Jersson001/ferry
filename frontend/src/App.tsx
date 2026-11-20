@@ -18,8 +18,9 @@ import { Home, ShoppingBag, Briefcase, User, CheckCircle2, Inbox, Package, Shiel
 import ferryLogo from './assets/logo.svg';
 import { getCurrentUser, signOut as logoutUser, verifyEmailToken } from './services/authService';
 import { rolDeLaSesion } from './utils/sesion';
+import { ErrorDePantalla } from './components/ErrorDePantalla';
 import { verifySubscriptionWompiPayment } from './services/subscriptionService';
-import { getStorePendingRequestsCount } from './services/quoteService';
+import { getStorePendingRequestsCount, verifyWompiPayment } from './services/quoteService';
 import { recordarCodigoDeLlegada, reclamarCodigoPendiente } from './services/referralService';
 import { loadGuestCart, GuestCart } from './hooks/useGuestCart';
 import { APIProvider } from '@vis.gl/react-google-maps';
@@ -38,6 +39,8 @@ const App: React.FC = () => {
   const [autoSubmitAfterLogin, setAutoSubmitAfterLogin] = useState(false);
   const [currentView, setCurrentView] = useState<'HOME' | 'SHOP' | 'HUB' | 'PROFILE' | 'ADMIN' | 'QUOTES' | 'CATALOG'>('HOME');
   const [quotesInitialTab, setQuotesInitialTab] = useState<'enviadas' | 'recibidas' | 'en-camino' | 'entregadas'>('enviadas');
+  // Cotización aceptada desde el inicio: la bandeja abre su pago al cargar
+  const [pagoDeCotizacion, setPagoDeCotizacion] = useState<string | null>(null);
   const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   // Controla si ya se hizo la primera verificación de sesión al cargar la app
@@ -60,21 +63,33 @@ const App: React.FC = () => {
     if (isLoggedIn && !isGuest && currentUserProfile) reclamarCodigoPendiente();
   }, [isLoggedIn, isGuest, currentUserProfile?.uid]);
 
-  // ── Regreso desde Wompi tras pagar un plan (?pago=plan&id=<transacción>) ────
+  // ── Regreso desde Wompi (?pago=plan|cotizacion&id=<transacción>) ───────────
   // En el celular Wompi termina en su página de comprobante y no avisa a la ventana de pago: Ferry se
-  // entera al volver con el id. El servidor consulta el pago a Wompi y activa el plan solo si es real,
-  // está aprobado y es de esta cuenta; si ya se había activado, no lo repite.
-  const pagoPlanRef = useRef(false);
+  // entera al volver con el id. El servidor consulta el pago a Wompi y lo aplica solo si es real, está
+  // aprobado, es de esta cuenta y es por el valor correcto; si ya se había aplicado, no lo repite.
+  const pagoWompiRef = useRef(false);
   useEffect(() => {
-    if (!isLoggedIn || isGuest || pagoPlanRef.current) return;
+    if (!isLoggedIn || isGuest || pagoWompiRef.current) return;
     const p = new URLSearchParams(window.location.search);
     const transaccion = p.get('id');
-    if (p.get('pago') !== 'plan' || !transaccion) return;
-    pagoPlanRef.current = true;
+    const tipo = p.get('pago');
+    const cotizacion = p.get('cotizacion');
+    if (!transaccion || (tipo !== 'plan' && !(tipo === 'cotizacion' && cotizacion))) return;
+    pagoWompiRef.current = true;
     window.history.replaceState({}, '', window.location.pathname + window.location.hash);
-    verifySubscriptionWompiPayment(transaccion)
-      .then(() => { showToast('¡Pago recibido! Tu plan ya está activo.', 'success'); setCurrentView('PROFILE'); })
-      .catch((err: any) => showToast(err?.message || 'No se pudo confirmar el pago del plan.', 'error'));
+    if (tipo === 'plan') {
+      verifySubscriptionWompiPayment(transaccion)
+        .then(() => { showToast('¡Pago recibido! Tu plan ya está activo.', 'success'); setCurrentView('PROFILE'); })
+        .catch((err: any) => showToast(err?.message || 'No se pudo confirmar el pago del plan.', 'error'));
+    } else {
+      verifyWompiPayment(cotizacion!, transaccion)
+        .then(() => {
+          showToast('¡Pago confirmado! La ferretería ya recibió tu pedido.', 'success');
+          setQuotesInitialTab('en-camino');
+          setCurrentView('QUOTES');
+        })
+        .catch((err: any) => showToast(err?.message || 'No se pudo confirmar el pago del pedido.', 'error'));
+    }
   }, [isLoggedIn, isGuest]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Reset password desde URL (?token=xxx) ─────────────────────────────────
@@ -542,6 +557,7 @@ const App: React.FC = () => {
       </header>
 
       <main className="flex-1 overflow-y-auto p-4 no-scrollbar">
+        <ErrorDePantalla clave={`${currentView}-${currentUserRole}`}>
         {currentUserRole === UserRole.ADMIN && <AdminPanel requests={requests} onManualQuote={handleManualQuote} />}
 
         {currentView === 'PROFILE' ? (
@@ -562,6 +578,7 @@ const App: React.FC = () => {
                   userName={currentUserProfile?.displayName || 'Usuario'}
                   ongoingRequest={ongoingRequest}
                   onNavigate={(view) => setCurrentView(view)}
+                  onAceptarCotizacion={(quoteId) => { setPagoDeCotizacion(quoteId); setQuotesInitialTab('recibidas'); setCurrentView('QUOTES'); }}
                   onOpenRequest={(id) => { setActiveRequestId(id); setCurrentView('SHOP'); }}
                   userLocation={userLocation || currentUserProfile?.location || null}
                   calcularDistancia={calcularDistancia}
@@ -604,12 +621,13 @@ const App: React.FC = () => {
                       <button onClick={() => setShowAuthGate(true)} className="px-6 py-3 bg-ferry-500 text-white font-semibold rounded-2xl">Crear cuenta gratis</button>
                       <button onClick={() => { setIsGuest(false); setCurrentUserProfile(null); }} className="text-sm text-ferry-600 font-semibold hover:text-ferry-700 transition-colors">¿Ya tienes cuenta? Inicia sesión</button>
                     </div>
-                  : <UserQuotesInbox initialTab={quotesInitialTab} />
+                  : <UserQuotesInbox initialTab={quotesInitialTab} abrirPagoDe={pagoDeCotizacion} onPagoAbierto={() => setPagoDeCotizacion(null)} />
                 )}
               </>
             )}
           </>
         )}
+        </ErrorDePantalla>
       </main>
 
       {(currentUserRole === UserRole.USER || currentUserRole === UserRole.STORE) && (

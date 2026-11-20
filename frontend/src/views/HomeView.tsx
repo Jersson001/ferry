@@ -4,7 +4,7 @@ import { MaterialRequest, RequestStatus } from '../types';
 import { TopStoresSection } from '../components/TopStoresSection';
 import { PromocionesSection } from '../components/PromocionesSection';
 import { ShoppingBag, Briefcase, Store, TrendingUp, FileText, Package, ChevronRight, UserCog, ArrowRight } from 'lucide-react';
-import { getRecentPendingQuotes, RecentPendingQuote } from '../services/quoteService';
+import { getRecentPendingQuotes, RecentPendingQuote, rejectQuote } from '../services/quoteService';
 
 // ---------------------------------------------------------------------------
 // Notification feed hook
@@ -19,13 +19,16 @@ const useRecentQuotes = (enabled: boolean) => {
     if (!enabled) return;
     let cancelled = false;
     getRecentPendingQuotes(3)
-      .then(data => { if (!cancelled) setQuotes(data); })
+      // Solo las que esperan respuesta del cliente; las aceptadas o pagadas ya no son "¡Cotización lista!"
+      .then(data => { if (!cancelled) setQuotes(data.filter(q => !q.status || q.status === 'sent').slice(0, 3)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [enabled]);
 
-  return { quotes, loading };
+  return { quotes, setQuotes, loading };
 };
+
+const pesos = (n?: number) => (typeof n === 'number' ? `$${n.toLocaleString('es-CO')}` : '');
 
 const buildNotificationMessage = (q: RecentPendingQuote, idx: number): string => {
   const alias = `Experto Local #${idx + 1}`;
@@ -47,12 +50,28 @@ interface Props {
   calcularDistancia?: (lat1: number, lon1: number, lat2: number, lon2: number) => number;
   isGuest?: boolean;
   onRegister?: (role: 'constructor' | 'ferreteria') => void;
+  // Aceptar una cotización lleva a pagarla (aceptar y pagar es un solo paso)
+  onAceptarCotizacion?: (quoteId: string) => void;
 }
 
 export const HomeView: React.FC<Props> = ({
-  userName, ongoingRequest, onNavigate, onOpenRequest, userLocation, calcularDistancia, isGuest = false, onRegister,
+  userName, ongoingRequest, onNavigate, onOpenRequest, userLocation, calcularDistancia, isGuest = false, onRegister, onAceptarCotizacion,
 }) => {
-  const { quotes: recentQuotes, loading: quotesLoading } = useRecentQuotes(!isGuest);
+  const { quotes: recentQuotes, setQuotes: setRecentQuotes, loading: quotesLoading } = useRecentQuotes(!isGuest);
+  const [rechazando, setRechazando] = useState<string | null>(null);
+
+  const rechazar = async (q: RecentPendingQuote) => {
+    if (!window.confirm(`¿Rechazar esta cotización de ${pesos(q.total)}?`)) return;
+    setRechazando(q.id);
+    try {
+      await rejectQuote(q.id, q.requestId);
+      setRecentQuotes(prev => prev.filter(x => x.id !== q.id));
+    } catch {
+      alert('No se pudo rechazar. Intenta de nuevo.');
+    } finally {
+      setRechazando(null);
+    }
+  };
 
   return (
     <div className="space-y-6 pb-20">
@@ -169,10 +188,10 @@ export const HomeView: React.FC<Props> = ({
             recentQuotes.map((q, idx) => {
               const isPartial = q.availableItems < q.totalItems;
               return (
+                <div key={q.id} className={`bg-white rounded-2xl shadow-sm border border-gray-100 p-4 ${isPartial ? 'border-l-4 border-l-orange-500' : ''}`}>
                 <button
-                  key={q.id}
                   onClick={() => onNavigate('QUOTES')}
-                  className={`w-full text-left bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex items-center gap-4 cursor-pointer hover:shadow-md transition-shadow active:scale-[0.98] ${isPartial ? 'border-l-4 border-l-orange-500' : ''}`}
+                  className="w-full text-left flex items-center gap-4 cursor-pointer active:scale-[0.98] transition-transform"
                 >
                   {/* Icon */}
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isPartial ? 'bg-amber-100' : 'bg-orange-100'}`}>
@@ -195,6 +214,28 @@ export const HomeView: React.FC<Props> = ({
                   {/* Chevron */}
                   <ChevronRight className="w-5 h-5 text-gray-400 shrink-0" />
                 </button>
+                {/* Respuesta rápida: precio, rechazar o aceptar (aceptar abre el pago) */}
+                {(!q.status || q.status === 'sent') && (
+                  <div className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-2">
+                    {typeof q.total === 'number' && (
+                      <span className="text-base font-black text-ferry-700 mr-auto">{pesos(q.total)}</span>
+                    )}
+                    <button
+                      onClick={() => rechazar(q)}
+                      disabled={rechazando === q.id}
+                      className="px-4 py-2 rounded-xl border-2 border-red-200 text-red-600 text-xs font-bold hover:bg-red-50 disabled:opacity-50"
+                    >
+                      {rechazando === q.id ? '...' : 'Rechazar'}
+                    </button>
+                    <button
+                      onClick={() => (onAceptarCotizacion ? onAceptarCotizacion(q.id) : onNavigate('QUOTES'))}
+                      className="px-4 py-2 rounded-xl bg-green-600 text-white text-xs font-bold hover:bg-green-700"
+                    >
+                      Aceptar
+                    </button>
+                  </div>
+                )}
+                </div>
               );
             })
           )}

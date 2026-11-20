@@ -193,6 +193,8 @@ export interface UserOwnRequest {
 export interface RecentPendingQuote {
   id: string;
   requestId: string;
+  status?: string; // 'sent' = pendiente de que el cliente la acepte o la rechace
+  total?: number;
   requestTitle?: string;
   requestDisplayId?: string;
   availableItems: number;
