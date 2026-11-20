@@ -251,8 +251,20 @@ export class PaymentsService {
 
   // Verificación explícita de Suscripciones (Frontend Redirect)
   async verifyWompiSubscriptionTransaction(transactionId: string, userId: string): Promise<{ success: boolean }> {
+    if (!transactionId || typeof transactionId !== 'string') throw new BadRequestException('Falta la transacción de Wompi.');
     let tx = await this.transactionRepository.findOne({ where: { transactionId } });
-    
+
+    // Ya registrada (por el aviso de Wompi o por una verificación anterior): el plan ya se activó con ella.
+    // Volver a llamar purchasePlan reiniciaría el mes y sumaría créditos otra vez.
+    if (tx) {
+      const parts = tx.reference.split('_');
+      if (!tx.reference.startsWith('SUB_') || parts[1] !== userId) {
+        throw new BadRequestException('La transacción no corresponde a una suscripción de esta cuenta.');
+      }
+      if (tx.status === PaymentStatus.APPROVED) return { success: true };
+      throw new BadRequestException('El pago no ha sido aprobado por Wompi aún.');
+    }
+
     if (!tx) {
       try {
         const useProduction = this.configService.get<string>('WOMPI_ENV') === 'production';
@@ -304,10 +316,10 @@ export class PaymentsService {
           await this.transactionRepository.save(tx);
         } catch (dbErr: any) {
           if (dbErr.code === '23505' || dbErr.code === 'SQLITE_CONSTRAINT') {
-            tx = await this.transactionRepository.findOne({ where: { transactionId } });
-          } else {
-            throw dbErr;
+            // La registró otro camino al mismo tiempo (el aviso de Wompi): ese ya activó el plan.
+            return { success: true };
           }
+          throw dbErr;
         }
 
       } catch (err: any) {

@@ -18,6 +18,7 @@ import { Home, ShoppingBag, Briefcase, User, CheckCircle2, Inbox, Package, Shiel
 import ferryLogo from './assets/logo.svg';
 import { getCurrentUser, signOut as logoutUser, verifyEmailToken } from './services/authService';
 import { rolDeLaSesion } from './utils/sesion';
+import { verifySubscriptionWompiPayment } from './services/subscriptionService';
 import { getStorePendingRequestsCount } from './services/quoteService';
 import { recordarCodigoDeLlegada, reclamarCodigoPendiente } from './services/referralService';
 import { loadGuestCart, GuestCart } from './hooks/useGuestCart';
@@ -58,6 +59,23 @@ const App: React.FC = () => {
   useEffect(() => {
     if (isLoggedIn && !isGuest && currentUserProfile) reclamarCodigoPendiente();
   }, [isLoggedIn, isGuest, currentUserProfile?.uid]);
+
+  // ── Regreso desde Wompi tras pagar un plan (?pago=plan&id=<transacción>) ────
+  // En el celular Wompi termina en su página de comprobante y no avisa a la ventana de pago: Ferry se
+  // entera al volver con el id. El servidor consulta el pago a Wompi y activa el plan solo si es real,
+  // está aprobado y es de esta cuenta; si ya se había activado, no lo repite.
+  const pagoPlanRef = useRef(false);
+  useEffect(() => {
+    if (!isLoggedIn || isGuest || pagoPlanRef.current) return;
+    const p = new URLSearchParams(window.location.search);
+    const transaccion = p.get('id');
+    if (p.get('pago') !== 'plan' || !transaccion) return;
+    pagoPlanRef.current = true;
+    window.history.replaceState({}, '', window.location.pathname + window.location.hash);
+    verifySubscriptionWompiPayment(transaccion)
+      .then(() => { showToast('¡Pago recibido! Tu plan ya está activo.', 'success'); setCurrentView('PROFILE'); })
+      .catch((err: any) => showToast(err?.message || 'No se pudo confirmar el pago del plan.', 'error'));
+  }, [isLoggedIn, isGuest]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Reset password desde URL (?token=xxx) ─────────────────────────────────
   const urlParams = new URLSearchParams(window.location.search);

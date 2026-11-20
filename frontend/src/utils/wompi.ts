@@ -73,10 +73,13 @@ export const openWompiCheckout = async (
     reference:     string;
     signature:     string;
     currency?:     string;
+    // A dónde vuelve el navegador al terminar, si Wompi sale de la página (pasa en el celular).
+    // Wompi le agrega ?id=<transacción>. Sin esto, el pago se aprueba pero Ferry no se entera.
+    redirectUrl?:  string;
   },
   onResult: (result: WompiWidgetResult) => void,
 ): Promise<void> => {
-  const { quoteId, requestId, amountInCents, reference, signature, currency = 'COP' } = params;
+  const { quoteId, requestId, amountInCents, reference, signature, currency = 'COP', redirectUrl } = params;
 
   // Guardar contexto como respaldo en caso de refresco o cierre inesperado
   saveWompiCtx({ quoteId, requestId, amount: amountInCents / 100 });
@@ -87,6 +90,7 @@ export const openWompiCheckout = async (
     reference,
     publicKey: WOMPI_PUBLIC_KEY,
     signature: { integrity: signature },
+    ...(redirectUrl ? { redirectUrl } : {}),
   });
 
   checkout.open(onResult);

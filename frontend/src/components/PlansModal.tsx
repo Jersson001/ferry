@@ -54,7 +54,9 @@ export const PlansModal: React.FC<Props> = ({ isOpen, onClose, userRole, current
              requestId: '',
              amountInCents,
              reference,
-             signature
+             signature,
+             // En el celular Wompi termina en su propia página: al volver, App.tsx confirma el pago (?pago=plan&id=...)
+             redirectUrl: `${window.location.origin}/?pago=plan`,
           },
           async (result) => {
             if (result.transaction.status === 'APPROVED') {
