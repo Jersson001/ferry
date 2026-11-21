@@ -11,6 +11,8 @@ import { getConfigProducto, inferirMedidaNominal, inferirCaracteristica, corregi
 import { usePlacesAutocomplete, PlacePick } from '../hooks/usePlacesAutocomplete';
 import { PlaceSuggestionsDropdown } from '../components/PlaceSuggestionsDropdown';
 import { RangoCobertura } from '../components/RangoCobertura';
+import { sugerirTienda } from '../config/sugerirTienda';
+import { IconoTienda } from '../components/IconoTienda';
 
 interface Props {
   onRequestCreate: (req: MaterialRequest) => void;
@@ -62,140 +64,154 @@ interface BroadcastDiagramProps {
 }
 
 const BroadcastDiagram: React.FC<BroadcastDiagramProps> = ({ arrivedCount, phase }) => {
-  const CX = 150, CY = 190, R = 106;
+  // Usuario (la obra) en el centro y las tiendas regadas por el mapa, a propósito sin orden
+  const CX = 150, CY = 128;
+  const stores = [
+    { x: 54, y: 52 }, { x: 150, y: 30 }, { x: 252, y: 58 }, { x: 40, y: 178 }, { x: 258, y: 170 },
+  ].map((p, i) => ({ ...p, i }));
 
-  // 5 store positions: fan arc 210° → 330° (SVG coords, y-down)
-  const stores = [210, 240, 270, 300, 330].map((deg, i) => {
-    const rad = (deg * Math.PI) / 180;
-    return { i, x: Math.round(CX + R * Math.cos(rad)), y: Math.round(CY + R * Math.sin(rad)) };
-  });
-  // Results: (58,137), (97,98), (150,84), (203,98), (242,137)
+  // Fachada de tienda (toldo + local), la misma de IconoTienda, centrada en (x, y)
+  const tiendita = (x: number, y: number, color: string, fondo: string) => (
+    <g transform={`translate(${x - 15} ${y - 14}) scale(0.625)`}>
+      <rect x="6" y="17" width="36" height="24" rx="2" fill={fondo} stroke={color} strokeWidth="2.4" />
+      <path d="M8 4h32l6 11H2L8 4Z" fill={fondo} stroke={color} strokeWidth="2.4" strokeLinejoin="round" />
+      <path d="M16.5 4 13 15M24 4v11M31.5 4 35 15" stroke={color} strokeWidth="1.6" strokeOpacity="0.6" />
+      <path d="M2 15c0 2.5 2 4 5.5 4S13 17.5 13 15c0 2.5 2 4 5.5 4S24 17.5 24 15c0 2.5 2 4 5.5 4S35 17.5 35 15c0 2.5 2 4 5.5 4S46 17.5 46 15Z" fill="white" />
+      <path d="M2 15c0 2.5 2 4 5.5 4S13 17.5 13 15c0 2.5 2 4 5.5 4S24 17.5 24 15c0 2.5 2 4 5.5 4S35 17.5 35 15c0 2.5 2 4 5.5 4S46 17.5 46 15Z" fill={fondo} stroke={color} strokeWidth="2.4" strokeLinejoin="round" />
+      <rect x="20" y="27" width="8" height="14" rx="1" fill="white" stroke={color} strokeWidth="1.8" />
+    </g>
+  );
 
   return (
     <div className="w-full select-none">
-      <svg viewBox="0 0 300 232" className="w-full max-w-[288px] mx-auto" aria-hidden="true">
-
-        {/* ── Subtle city-grid map background ── */}
+      <svg viewBox="0 0 300 232" className="w-full max-w-[300px] mx-auto rounded-2xl" aria-hidden="true">
         <defs>
-          <pattern id="ferry-grid" width="22" height="22" patternUnits="userSpaceOnUse">
-            <path d="M22 0 L0 0 0 22" fill="none" stroke="#e2e8f0" strokeWidth="0.6"/>
-          </pattern>
+          <clipPath id="ferry-mapa-recorte"><rect width="300" height="232" rx="16" /></clipPath>
+          <radialGradient id="ferry-mapa-vineta" cx="50%" cy="52%" r="65%">
+            <stop offset="60%" stopColor="white" stopOpacity="0" />
+            <stop offset="100%" stopColor="white" stopOpacity="0.85" />
+          </radialGradient>
         </defs>
-        <rect width="300" height="232" fill="url(#ferry-grid)" opacity="0.6" rx="14"/>
 
-        {/* ── Static dashed connection lines ── */}
-        {stores.map(s => (
-          <line key={`l-${s.i}`}
-            x1={CX} y1={CY} x2={s.x} y2={s.y}
-            stroke={s.i < arrivedCount ? '#16a34a' : '#cbd5e1'}
-            strokeWidth={s.i < arrivedCount ? 2 : 1}
-            strokeDasharray={s.i < arrivedCount ? undefined : '5 4'}
-            opacity={s.i < arrivedCount ? 1 : 0.55}
-          />
-        ))}
+        <g clipPath="url(#ferry-mapa-recorte)">
+          {/* ── Mapa dibujado, más grande que el cuadro, que se desplaza despacio ── */}
+          <g>
+            <animateTransform attributeName="transform" type="translate" values="0 0; -36 -18; -12 -34; 0 0" dur="24s" repeatCount="indefinite" />
+            <rect x="-20" y="-20" width="380" height="300" fill="#eef2f6" />
+            {/* Manzanas */}
+            {Array.from({ length: 6 }).flatMap((_, f) => Array.from({ length: 7 }).map((__, c) => (
+              <rect key={`m-${f}-${c}`} x={-14 + c * 54} y={-14 + f * 50} width="44" height="40" rx="4" fill="#e2e8f0" />
+            )))}
+            {/* Parque */}
+            <rect x="148" y="186" width="44" height="40" rx="6" fill="#d9f2df" />
+            <circle cx="162" cy="200" r="5" fill="#b7e4c2" /><circle cx="178" cy="212" r="6" fill="#b7e4c2" />
+            {/* Río */}
+            <path d="M-20 92 C 40 72, 70 118, 130 100 S 230 70, 360 104" fill="none" stroke="#cfe8f7" strokeWidth="11" strokeLinecap="round" />
+            {/* Avenidas */}
+            <path d="M-20 140 H360" stroke="white" strokeWidth="7" />
+            <path d="M94 -20 V300" stroke="white" strokeWidth="7" />
+            <path d="M-20 10 L360 250" stroke="white" strokeWidth="5" opacity="0.9" />
+            <path d="M-20 140 H360 M94 -20 V300" stroke="#fde68a" strokeWidth="1" strokeDasharray="6 6" />
+          </g>
 
-        {/* ── Orange traveling pulses (broadcast phase only) ── */}
-        {phase === 'broadcast' && stores.map(s => {
-          const dur = `${1.0 + s.i * 0.1}s`;
-          const beg = `${s.i * 0.16}s`;
-          return (
-            <circle key={`p-${s.i}`} r="5" fill="#f97316">
-              <animateMotion path={`M${CX},${CY} L${s.x},${s.y}`} dur={dur} begin={beg} repeatCount="indefinite" calcMode="linear"/>
-              <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.08;0.82;1" dur={dur} begin={beg} repeatCount="indefinite"/>
-            </circle>
-          );
-        })}
+          {/* Desvanecido en los bordes para que el mapa no compita con las tiendas */}
+          <rect width="300" height="232" fill="url(#ferry-mapa-vineta)" />
 
-        {/* ── Green return data line (per responded store) ── */}
-        {stores.map(s => {
-          if (s.i >= arrivedCount) return null;
-          const len = Math.round(Math.hypot(CX - s.x, CY - s.y));
-          return (
-            <line key={`rl-${s.i}`}
-              x1={s.x} y1={s.y} x2={CX} y2={CY}
-              stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round"
-              strokeDasharray={len} strokeDashoffset={len}
-            >
-              <animate attributeName="stroke-dashoffset" from={len} to={0} dur="0.7s" fill="freeze"/>
-            </line>
-          );
-        })}
+          {/* ── Rutas del usuario a cada tienda ── */}
+          {stores.map(s => {
+            const ok = s.i < arrivedCount;
+            return (
+              <line key={`l-${s.i}`} x1={CX} y1={CY} x2={s.x} y2={s.y}
+                stroke={ok ? '#16a34a' : '#94a3b8'} strokeWidth={ok ? 2 : 1.2}
+                strokeDasharray={ok ? undefined : '4 4'} opacity={ok ? 0.9 : 0.5} />
+            );
+          })}
 
-        {/* ── Store nodes ── */}
-        {stores.map(s => {
-          const responded = s.i < arrivedCount;
-          return (
-            <g key={`st-${s.i}`}>
+          {/* ── Pulsos naranja del pedido viajando a las tiendas (al enviar) ── */}
+          {phase === 'broadcast' && stores.map(s => {
+            const dur = `${1.1 + s.i * 0.12}s`;
+            const beg = `${s.i * 0.18}s`;
+            return (
+              <circle key={`p-${s.i}`} r="4.5" fill="#f97316">
+                <animateMotion path={`M${CX},${CY} L${s.x},${s.y}`} dur={dur} begin={beg} repeatCount="indefinite" />
+                <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.08;0.82;1" dur={dur} begin={beg} repeatCount="indefinite" />
+              </circle>
+            );
+          })}
 
-              {/* Pulsing indigo ring (analyze phase) */}
-              {phase === 'analyze' && !responded && (
-                <circle cx={s.x} cy={s.y} r="18" fill="none" stroke="#6366f1" strokeWidth="1.5">
-                  <animate attributeName="r" values="18;27;18" dur={`${2.0 + s.i * 0.28}s`} repeatCount="indefinite"/>
-                  <animate attributeName="opacity" values="0.5;0;0.5" dur={`${2.0 + s.i * 0.28}s`} repeatCount="indefinite"/>
-                </circle>
-              )}
+          {/* ── Respuesta: línea verde de la tienda al usuario ── */}
+          {stores.map(s => {
+            if (s.i >= arrivedCount) return null;
+            const len = Math.round(Math.hypot(CX - s.x, CY - s.y));
+            return (
+              <line key={`rl-${s.i}`} x1={s.x} y1={s.y} x2={CX} y2={CY}
+                stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeDasharray={len} strokeDashoffset={len}>
+                <animate attributeName="stroke-dashoffset" from={len} to={0} dur="0.7s" fill="freeze" />
+              </line>
+            );
+          })}
 
-              {/* Green burst ring (on respond) */}
-              {responded && (
-                <circle cx={s.x} cy={s.y} r="18" fill="none" stroke="#22c55e" strokeWidth="2">
-                  <animate attributeName="r" from="18" to="33" dur="0.55s" fill="freeze"/>
-                  <animate attributeName="opacity" from="0.8" to="0" dur="0.55s" fill="freeze"/>
-                </circle>
-              )}
+          {/* ── Tienditas ── */}
+          {stores.map(s => {
+            const ok = s.i < arrivedCount;
+            const revisando = phase === 'analyze' && !ok;
+            const color = ok ? '#16a34a' : revisando ? '#6366f1' : '#94a3b8';
+            const fondo = ok ? '#dcfce7' : revisando ? '#eef2ff' : '#f8fafc';
+            return (
+              <g key={`st-${s.i}`}>
+                {/* Sombra y halo */}
+                <ellipse cx={s.x} cy={s.y + 15} rx="14" ry="3" fill="#0f172a" opacity="0.12" />
+                {revisando && (
+                  <circle cx={s.x} cy={s.y} r="20" fill="none" stroke="#6366f1" strokeWidth="1.2">
+                    <animate attributeName="r" values="18;26;18" dur={`${2 + s.i * 0.3}s`} repeatCount="indefinite" />
+                    <animate attributeName="opacity" values="0.45;0;0.45" dur={`${2 + s.i * 0.3}s`} repeatCount="indefinite" />
+                  </circle>
+                )}
+                {ok && (
+                  <circle cx={s.x} cy={s.y} r="18" fill="none" stroke="#22c55e" strokeWidth="2">
+                    <animate attributeName="r" from="18" to="32" dur="0.55s" fill="freeze" />
+                    <animate attributeName="opacity" from="0.8" to="0" dur="0.55s" fill="freeze" />
+                  </circle>
+                )}
 
-              {/* Main circle */}
-              <circle cx={s.x} cy={s.y} r="18"
-                fill={responded ? '#dcfce7' : '#f8fafc'}
-                stroke={responded ? '#16a34a' : phase === 'analyze' ? '#6366f1' : '#94a3b8'}
-                strokeWidth={responded ? 2.5 : 1.5}
-              />
+                {tiendita(s.x, s.y, color, fondo)}
 
-              {/* Icon — store / magnifying glass / checkmark */}
-              {responded ? (
-                <polyline
-                  points={`${s.x - 6},${s.y + 1} ${s.x - 2},${s.y + 5} ${s.x + 7},${s.y - 5}`}
-                  fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                />
-              ) : phase === 'analyze' ? (
-                <g>
-                  <circle cx={s.x - 1.5} cy={s.y - 2} r="6" fill="none" stroke="#6366f1" strokeWidth="1.8"/>
-                  <line x1={s.x + 3} y1={s.y + 3} x2={s.x + 7} y2={s.y + 7} stroke="#6366f1" strokeWidth="1.8" strokeLinecap="round"/>
-                </g>
-              ) : (
-                <g fill="#94a3b8">
-                  <polygon points={`${s.x},${s.y - 9} ${s.x - 8},${s.y - 3} ${s.x + 8},${s.y - 3}`}/>
-                  <rect x={s.x - 6} y={s.y - 3} width="12" height="10" rx="1"/>
-                  <rect x={s.x - 2.5} y={s.y + 2} width="5" height="5" rx="0.5" fill="white"/>
-                </g>
-              )}
+                {/* Lupa que recorre la tienda mientras revisa la lista */}
+                {revisando && (
+                  <g>
+                    <animateTransform attributeName="transform" type="translate"
+                      values={`0 0; 6 -4; 9 3; 2 6; -5 2; 0 0`} dur={`${2.4 + s.i * 0.35}s`} repeatCount="indefinite" />
+                    <circle cx={s.x + 9} cy={s.y - 12} r="6" fill="white" fillOpacity="0.85" stroke="#4f46e5" strokeWidth="2" />
+                    <line x1={s.x + 13.5} y1={s.y - 7.5} x2={s.x + 18} y2={s.y - 3} stroke="#4f46e5" strokeWidth="2.4" strokeLinecap="round" />
+                  </g>
+                )}
 
-              {/* Label */}
-              <text x={s.x} y={s.y + 30} textAnchor="middle" fontSize="6.5"
-                fill={responded ? '#16a34a' : '#64748b'}
-                fontFamily="system-ui, sans-serif"
-                fontWeight={responded ? '700' : '500'}
-              >
-                Experta {s.i + 1}
-              </text>
-            </g>
-          );
-        })}
+                {/* ✓ cuando la tienda ya respondió */}
+                {ok && (
+                  <g>
+                    <circle cx={s.x + 13} cy={s.y - 13} r="7" fill="#16a34a" stroke="white" strokeWidth="1.5" />
+                    <polyline points={`${s.x + 9.5},${s.y - 13} ${s.x + 12},${s.y - 10.5} ${s.x + 16.5},${s.y - 15.5}`}
+                      fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </g>
+                )}
+              </g>
+            );
+          })}
 
-        {/* ── Central user node ── */}
-        <g>
-          {/* Broadcast pulse ring */}
-          {phase === 'broadcast' && (
-            <circle cx={CX} cy={CY} r="22" fill="none" stroke="#fb923c" strokeWidth="2">
-              <animate attributeName="r" values="22;44;22" dur="1.7s" repeatCount="indefinite"/>
-              <animate attributeName="opacity" values="0.6;0;0.6" dur="1.7s" repeatCount="indefinite"/>
-            </circle>
-          )}
-          <circle cx={CX} cy={CY} r="22" fill="#fff7ed" stroke="#f97316" strokeWidth="2.5"/>
-          {/* Person silhouette */}
-          <circle cx={CX} cy={CY - 7} r="6.5" fill="#f97316"/>
-          <path d={`M ${CX - 13} ${CY + 14} Q ${CX} ${CY + 4} ${CX + 13} ${CY + 14}`} fill="#f97316"/>
+          {/* ── Usuario (la obra) en el centro ── */}
+          <g>
+            {phase === 'broadcast' && (
+              <circle cx={CX} cy={CY} r="20" fill="none" stroke="#fb923c" strokeWidth="2">
+                <animate attributeName="r" values="20;42;20" dur="1.7s" repeatCount="indefinite" />
+                <animate attributeName="opacity" values="0.6;0;0.6" dur="1.7s" repeatCount="indefinite" />
+              </circle>
+            )}
+            <ellipse cx={CX} cy={CY + 22} rx="16" ry="3.5" fill="#0f172a" opacity="0.12" />
+            <circle cx={CX} cy={CY} r="20" fill="#fff7ed" stroke="#f97316" strokeWidth="2.5" />
+            <circle cx={CX} cy={CY - 6} r="6" fill="#f97316" />
+            <path d={`M ${CX - 12} ${CY + 13} Q ${CX} ${CY + 3} ${CX + 12} ${CY + 13}`} fill="#f97316" />
+          </g>
         </g>
-
       </svg>
     </div>
   );
@@ -398,6 +414,21 @@ const WaitingForQuotes: React.FC<WaitingProps> = ({ activeRequest, onBack, onNav
 export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, onAcceptQuote, onRejectQuote, onBack, onFinishOrder, onNavigate, userLocation, isGuest = false, onNeedsAuth, restoredCart, autoSubmitAfterLogin = false }) => {
   const [mode, setMode] = useState<'INITIAL' | 'SCANNING' | 'EDITING' | 'QUOTES' | 'PAYMENT' | 'TRACKING' | 'RATING' | 'TEXT_INPUT'>('INITIAL');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  // Segunda tienda experta (máximo 2): el pedido también llega a las ferreterías de esa especialidad
+  const [segundaTienda, setSegundaTienda] = useState<string | null>(null);
+  const [avisoMaxTiendas, setAvisoMaxTiendas] = useState(false);
+  const tiendasElegidas = [selectedCategory, segundaTienda].filter((t): t is string => !!t);
+  const nombreTiendas = tiendasElegidas.join(' y ');
+  const alternarTienda = (t: string) => {
+    setCategoryError(false);
+    setAvisoMaxTiendas(false);
+    if (selectedCategory === t) { setSelectedCategory(segundaTienda); setSegundaTienda(null); return; }
+    if (segundaTienda === t) { setSegundaTienda(null); return; }
+    if (!selectedCategory) { setSelectedCategory(t); return; }
+    if (!segundaTienda) { setSegundaTienda(t); return; }
+    setAvisoMaxTiendas(true); // ya hay dos
+  };
+  const limpiarTiendas = () => { setSelectedCategory(null); setSegundaTienda(null); setAvisoMaxTiendas(false); };
   const [textInput, setTextInput] = useState('');
   const [items, setItems] = useState<MaterialItem[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -449,6 +480,10 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
   const [showAddressSuggestions, setShowAddressSuggestions] = useState(false);
   const [addressError, setAddressError] = useState(false);
   const [categoryError, setCategoryError] = useState(false);
+  // Ventana flotante que pide lo que falta para cotizar (dirección, luego tienda experta). Se abre sola una
+  // vez al guardar un artículo, para no tener que bajar a buscar los campos, y otra vez si al enviar aún falta algo.
+  const [pedirDatos, setPedirDatos] = useState<null | 'direccion' | 'tienda' | 'listo'>(null);
+  const yaPidioDatos = useRef(false);
   const [showIncompleteModal, setShowIncompleteModal] = useState(false);
   const [incompleteItems, setIncompleteItems] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -458,6 +493,7 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
     if (restoredCart && restoredCart.items.length > 0) {
       setItems(restoredCart.items);
       setSelectedCategory(restoredCart.selectedCategory);
+      setSegundaTienda(restoredCart.segundaTienda ?? null);
       setDeliveryAddress(restoredCart.deliveryAddress);
       setQuoteTitle(restoredCart.quoteTitle);
       setMode('EDITING');
@@ -477,8 +513,8 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
   // === AUTO-SAVE CARRITO INVITADO a localStorage ===
   useEffect(() => {
     if (!isGuest || items.length === 0) return;
-    saveGuestCart({ items, selectedCategory, deliveryAddress, quoteTitle });
-  }, [isGuest, items, selectedCategory, deliveryAddress, quoteTitle]);
+    saveGuestCart({ items, selectedCategory, segundaTienda, deliveryAddress, quoteTitle });
+  }, [isGuest, items, selectedCategory, segundaTienda, deliveryAddress, quoteTitle]);
 
   // === DICTADO POR VOZ ===
   const [isListening, setIsListening] = useState(false);
@@ -780,6 +816,10 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
     };
     setItems(newItems);
     setEditingIndex(null);
+    if (ncFinal && !yaPidioDatos.current && !quoteSentSuccess) {
+      const falta = !deliveryAddress.trim() ? 'direccion' : !selectedCategory ? 'tienda' : null;
+      if (falta) { yaPidioDatos.current = true; setPedirDatos(falta); }
+    }
   };
 
   const openNewItemForm = (currentItems: MaterialItem[]) => {
@@ -937,7 +977,7 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
   const submitRequest = async () => {
     // Intercepción invitado: guardar carrito y pedir registro
     if (isGuest) {
-      saveGuestCart({ items, selectedCategory, deliveryAddress, quoteTitle });
+      saveGuestCart({ items, selectedCategory, segundaTienda, deliveryAddress, quoteTitle });
       onNeedsAuth?.();
       return;
     }
@@ -952,17 +992,20 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
       }
     }
 
-    if (!selectedCategory) {
-      setCategoryError(true);
-      return;
-    }
-    setCategoryError(false);
-
+    // Lo que falte se pide en la ventana flotante: primero la dirección, luego la tienda experta
     if (!deliveryAddress.trim()) {
       setAddressError(true);
+      setPedirDatos('direccion');
       return;
     }
     setAddressError(false);
+
+    if (!selectedCategory) {
+      setCategoryError(true);
+      setPedirDatos('tienda');
+      return;
+    }
+    setCategoryError(false);
     setGpsError(null);
     setIsSendingQuote(true);
 
@@ -997,12 +1040,13 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
       };
     });
 
-    const finalTitle = quoteTitle.trim() || (selectedCategory ? `Pedido ${selectedCategory}` : `Pedido ${new Date().toLocaleDateString()}`);
+    const finalTitle = quoteTitle.trim() || (selectedCategory ? `Pedido ${nombreTiendas}` : `Pedido ${new Date().toLocaleDateString()}`);
 
     let backendRequestId: string = Date.now().toString(); // fallback
     try {
       backendRequestId = await sendQuoteRequest({
         category: selectedCategory || 'General',
+        categories: tiendasElegidas,
         items: itemsLimpios,
         userLocation: resolvedLocation,
         radioKm,
@@ -1406,7 +1450,7 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
 
         {selectedCategory && (
           <div className="mb-4">
-            <Badge type="info">Categoría: {selectedCategory}</Badge>
+            <Badge type="info">Categoría: {nombreTiendas}</Badge>
           </div>
         )}
 
@@ -1606,7 +1650,7 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
             </div>
           )}
           {!quoteSentSuccess && (
-            <RangoCobertura radioKm={radioKm} onChange={setRadioKm} categoria={selectedCategory} ubicacion={deliveryCoordinates ?? userLocation ?? null} />
+            <RangoCobertura radioKm={radioKm} onChange={setRadioKm} categoria={tiendasElegidas.join(',') || null} ubicacion={deliveryCoordinates ?? userLocation ?? null} />
           )}
           {/* GPS error banner */}
           {gpsError && !quoteSentSuccess && (
@@ -1639,9 +1683,9 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
                   Obteniendo ubicación...
                 </span>
               ) : selectedCategory ? (
-                `Cotizar con expertos en ${selectedCategory}`
+                `Cotizar con expertos en ${nombreTiendas}`
               ) : (
-                'Selecciona una especialidad ↓'
+                'Selecciona tienda experta ↓'
               )}
             </Button>
           )}
@@ -1652,23 +1696,23 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
                 <h2 className="text-sm font-bold text-slate-700">Activar tienda experta</h2>
                 {selectedCategory && (
                   <button
-                    onClick={() => setSelectedCategory(null)}
+                    onClick={limpiarTiendas}
                     className="text-xs text-ferry-500 font-semibold hover:underline"
                   >
                     Limpiar filtro
                   </button>
                 )}
               </div>
-              <p className="text-xs text-slate-400 mb-3">Filtra por categoría (obligatorio)</p>
+              <p className="text-xs text-slate-400 mb-3">Elige una o dos (obligatorio)</p>
               <div className="grid grid-cols-5 gap-2">
                 {SPECIALTIES.map((spec) => (
                   <button
                     key={spec.id}
-                    onClick={() => { setSelectedCategory(selectedCategory === spec.id ? null : spec.id); setCategoryError(false); }}
-                    className={`group flex flex-col items-center justify-center p-2 rounded-2xl transition-all duration-300 ${selectedCategory === spec.id ? 'bg-ferry-50 ring-2 ring-ferry-500 scale-105 shadow-md' : 'bg-transparent hover:bg-slate-50 border border-transparent hover:border-slate-100 hover:shadow-lg'}`}
+                    onClick={() => alternarTienda(spec.id)}
+                    className={`group flex flex-col items-center justify-center p-2 rounded-2xl transition-all duration-300 ${tiendasElegidas.includes(spec.id) ? 'bg-ferry-50 ring-2 ring-ferry-500 scale-105 shadow-md' : 'bg-transparent hover:bg-slate-50 border border-transparent hover:border-slate-100 hover:shadow-lg'}`}
                   >
                     <div
-                      className={`relative w-11 h-11 mb-2 rounded-full flex items-center justify-center transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${selectedCategory === spec.id ? 'scale-110 -translate-y-1' : 'group-hover:scale-110 group-hover:-translate-y-1'} bg-gradient-to-br ${spec.bg}`}
+                      className={`relative w-11 h-11 mb-2 rounded-full flex items-center justify-center transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${tiendasElegidas.includes(spec.id) ? 'scale-110 -translate-y-1' : 'group-hover:scale-110 group-hover:-translate-y-1'} bg-gradient-to-br ${spec.bg}`}
                       style={{ boxShadow: 'inset 4px 4px 6px rgba(255,255,255,0.8), inset -4px -6px 8px rgba(0,0,0,0.15), 0 6px 10px -3px rgba(0,0,0,0.15), 0 3px 5px -2px rgba(0,0,0,0.05)' }}
                     >
                       <div className="absolute top-0.5 left-1.5 w-5 h-2.5 bg-white/70 rounded-full blur-[1px] rotate-[-25deg] transition-opacity duration-300 opacity-90 group-hover:opacity-100" />
@@ -1678,18 +1722,186 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
                         strokeWidth={2.2}
                       />
                     </div>
-                    <span className={`text-[10px] font-bold leading-tight text-center transition-colors ${selectedCategory === spec.id ? 'text-ferry-800' : 'text-slate-600 group-hover:text-slate-800'}`}>{spec.id}</span>
+                    <span className={`text-[10px] font-bold leading-tight text-center transition-colors ${tiendasElegidas.includes(spec.id) ? 'text-ferry-800' : 'text-slate-600 group-hover:text-slate-800'}`}>{spec.id}</span>
                   </button>
                 ))}
               </div>
+              {avisoMaxTiendas && (
+                <p className="text-xs text-amber-600 font-medium mt-2 pl-1">
+                  Máximo 2 tiendas expertas. Quita una para elegir otra.
+                </p>
+              )}
               {categoryError && (
                 <p className="text-xs text-red-500 font-medium mt-2 pl-1">
-                  Selecciona una especialidad antes de cotizar.
+                  Selecciona una tienda experta antes de cotizar.
                 </p>
               )}
             </div>
           )}
         </div>
+
+        {/* === VENTANA FLOTANTE: LO QUE FALTA PARA COTIZAR (dirección y tienda experta) === */}
+        {pedirDatos && (() => {
+          const sugerencia = sugerirTienda(items.map(i => i.nombreComercial || i.name || ''));
+          const faltaTienda = !selectedCategory;
+          const seguirDesdeDireccion = () => {
+            deliveryPlaces.clear();
+            setAddressError(false);
+            setPedirDatos(faltaTienda ? 'tienda' : 'listo');
+          };
+          const espSugerida = sugerencia && SPECIALTIES.find(s => s.id === sugerencia.tienda);
+          return (
+            <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center" onClick={() => setPedirDatos(null)}>
+              <div
+                className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md p-5 pb-7 shadow-2xl animate-in slide-in-from-bottom-10 duration-300"
+                onClick={e => e.stopPropagation()}
+                role="dialog"
+                aria-label={pedirDatos === 'direccion' ? 'Dirección de entrega' : pedirDatos === 'tienda' ? 'Tienda experta' : 'Listo para cotizar'}
+              >
+                <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-4" />
+
+                {pedirDatos === 'direccion' ? (
+                  <>
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-11 h-11 rounded-2xl bg-ferry-100 text-ferry-600 flex items-center justify-center shrink-0">
+                        <MapPin className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="font-black text-slate-900">¿A dónde llevamos los materiales?</h3>
+                        <p className="text-xs text-slate-500">Así te cotizan las ferreterías que están cerca de tu obra.</p>
+                      </div>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        autoFocus
+                        value={deliveryAddress}
+                        onChange={e => { setDeliveryAddress(e.target.value); localStorage.setItem('ferry_direccion_entrega', e.target.value); if (e.target.value.trim()) setAddressError(false); deliveryPlaces.search(e.target.value); }}
+                        onKeyDown={e => { if (e.key === 'Enter' && deliveryAddress.trim()) seguirDesdeDireccion(); }}
+                        placeholder="Ej: Calle 100 #15-20, Barrio X"
+                        className="w-full text-sm px-4 py-3 rounded-xl border border-slate-200 bg-white text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-ferry-300"
+                        maxLength={120}
+                      />
+                      <PlaceSuggestionsDropdown
+                        predictions={deliveryPlaces.predictions}
+                        onPickPrediction={async prediction => {
+                          const pick = await deliveryPlaces.select(prediction);
+                          if (pick) { applyDeliveryPick(pick); setPedirDatos(faltaTienda ? 'tienda' : 'listo'); }
+                        }}
+                      />
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1.5 pl-1">Elige una de las sugerencias para ubicar la obra en el mapa.</p>
+                    <button
+                      onClick={seguirDesdeDireccion}
+                      disabled={!deliveryAddress.trim()}
+                      className="w-full mt-4 py-3 rounded-xl bg-ferry-600 hover:bg-ferry-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold text-sm transition-colors"
+                    >
+                      Continuar
+                    </button>
+                  </>
+                ) : pedirDatos === 'tienda' ? (
+                  <>
+                    <h3 className="font-black text-slate-900">¿Qué tiendas expertas te cotizan?</h3>
+                    <p className="text-xs text-slate-500 mb-4">Elige una o dos. Solo te cotizan las ferreterías de esas especialidades.</p>
+                    {espSugerida && sugerencia && (
+                      <button
+                        onClick={() => { if (!tiendasElegidas.includes(sugerencia.tienda)) alternarTienda(sugerencia.tienda); }}
+                        className={`w-full flex items-center gap-3 p-3 mb-4 rounded-2xl border-2 text-left transition-colors ${tiendasElegidas.includes(sugerencia.tienda) ? 'border-ferry-500 bg-ferry-50' : 'border-ferry-300 bg-white hover:bg-ferry-50'}`}
+                      >
+                        <span className="shrink-0">
+                          <IconoTienda icono={espSugerida.icon} color={espSugerida.color} tamano={52} seleccionada={tiendasElegidas.includes(sugerencia.tienda)} />
+                        </span>
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-[11px] font-bold text-ferry-600 uppercase tracking-wide">Te sugerimos</span>
+                          <span className="block font-black text-slate-900">{sugerencia.tienda}</span>
+                          <span className="block text-xs text-slate-500 truncate">Por {sugerencia.productos.slice(0, 2).join(', ')}{sugerencia.productos.length > 2 ? '…' : ''}</span>
+                        </span>
+                        {tiendasElegidas.includes(sugerencia.tienda)
+                          ? <CheckCircle2 className="w-6 h-6 text-ferry-600 shrink-0" />
+                          : <span className="shrink-0 px-3 py-2 rounded-xl bg-ferry-600 text-white text-xs font-bold">Elegir</span>}
+                      </button>
+                    )}
+                    <p className="text-xs font-semibold text-slate-500 mb-2">
+                      {espSugerida ? 'Puedes sumar otra (máximo 2):' : 'Elige una o dos:'}
+                    </p>
+                    <div className="grid grid-cols-5 gap-2">
+                      {SPECIALTIES.map(spec => {
+                        const elegida = tiendasElegidas.includes(spec.id);
+                        return (
+                          <button
+                            key={spec.id}
+                            onClick={() => alternarTienda(spec.id)}
+                            className={`relative flex flex-col items-center gap-1 p-1.5 rounded-xl hover:bg-slate-50 ${elegida ? 'ring-2 ring-ferry-500 bg-ferry-50' : ''}`}
+                          >
+                            {elegida && <CheckCircle2 className="absolute top-0.5 right-0.5 w-4 h-4 text-ferry-600 bg-white rounded-full" />}
+                            <IconoTienda icono={spec.icon} color={spec.color} tamano={44} seleccionada={elegida} />
+                            <span className="text-[10px] font-bold text-slate-600 leading-tight text-center">{spec.id}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {avisoMaxTiendas && (
+                      <p className="text-xs text-amber-600 font-medium mt-2 text-center">Máximo 2 tiendas expertas. Quita una para elegir otra.</p>
+                    )}
+                    <button
+                      onClick={() => setPedirDatos('listo')}
+                      disabled={tiendasElegidas.length === 0}
+                      className="w-full mt-4 py-3 rounded-xl bg-ferry-600 hover:bg-ferry-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold text-sm transition-colors"
+                    >
+                      {tiendasElegidas.length === 0 ? 'Elige al menos una' : `Continuar con ${nombreTiendas}`}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-11 h-11 rounded-2xl bg-green-100 text-green-600 flex items-center justify-center shrink-0">
+                        <CheckCircle2 className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h3 className="font-black text-slate-900">¡Todo listo para cotizar!</h3>
+                        <p className="text-xs text-slate-500">Revisa y envía tu pedido a las ferreterías.</p>
+                      </div>
+                    </div>
+                    <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3 space-y-2.5 text-sm">
+                      <p className="flex items-start gap-2 text-slate-700">
+                        <Inbox className="w-4 h-4 mt-0.5 text-slate-400 shrink-0" />
+                        <span><strong>{items.length}</strong> {items.length === 1 ? 'producto' : 'productos'}</span>
+                      </p>
+                      <p className="flex items-start gap-2 text-slate-700">
+                        <MapPin className="w-4 h-4 mt-0.5 text-slate-400 shrink-0" />
+                        <span className="min-w-0 break-words">{deliveryAddress || 'Sin dirección'}</span>
+                      </p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {tiendasElegidas.map(t => {
+                          const esp = SPECIALTIES.find(x => x.id === t);
+                          return esp ? (
+                            <span key={t} className="flex items-center gap-1.5 pr-2.5 rounded-full bg-white border border-slate-200 text-xs font-bold text-slate-700">
+                              <IconoTienda icono={esp.icon} color={esp.color} tamano={30} seleccionada />
+                              {t}
+                            </span>
+                          ) : null;
+                        })}
+                        <button onClick={() => setPedirDatos('tienda')} className="text-xs font-semibold text-ferry-600 hover:underline">Cambiar</button>
+                      </div>
+                      <p className="text-xs text-slate-500">Ferreterías hasta a {radioKm} km de la obra.</p>
+                    </div>
+                    <button
+                      onClick={() => { setPedirDatos(null); void submitRequest(); }}
+                      disabled={isSendingQuote || isUploadingImage || items.length === 0}
+                      className="w-full mt-4 py-3.5 rounded-xl bg-ferry-600 hover:bg-ferry-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold text-sm transition-colors"
+                    >
+                      Cotizar ahora
+                    </button>
+                  </>
+                )}
+
+                <button onClick={() => setPedirDatos(null)} className="w-full mt-3 py-2 text-sm font-medium text-slate-400 hover:text-slate-600">
+                  {pedirDatos === 'listo' ? 'Agregar más productos' : 'Ahora no'}
+                </button>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* === MODAL: PRODUCTOS INCOMPLETOS === */}
         {showIncompleteModal && (

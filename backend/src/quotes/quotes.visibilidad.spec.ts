@@ -36,19 +36,19 @@ describe('Solicitudes que ve cada ferretería', () => {
   it('solo las de su especialidad', async () => {
     const { service, qbSolicitudes } = armar({ especialidades: ['Iluminación'] });
     await service.getPendingRequests('tienda-1');
-    expect(qbSolicitudes.andWhere).toHaveBeenCalledWith('request.category IN (:...categorias)', { categorias: ['Iluminación'] });
+    expect(qbSolicitudes.andWhere).toHaveBeenCalledWith('(request.category IN (:...categorias) OR request.categoriaExtra IN (:...categorias))', { categorias: ['Iluminación'] });
   });
 
   it('varias especialidades, varias categorías', async () => {
     const { service, qbSolicitudes } = armar({ especialidades: ['Plomería', 'Gas'] });
     await service.getPendingRequests('tienda-1');
-    expect(qbSolicitudes.andWhere).toHaveBeenCalledWith('request.category IN (:...categorias)', { categorias: ['Plomería', 'Gas'] });
+    expect(qbSolicitudes.andWhere).toHaveBeenCalledWith('(request.category IN (:...categorias) OR request.categoriaExtra IN (:...categorias))', { categorias: ['Plomería', 'Gas'] });
   });
 
   it('tolera tildes y mayúsculas guardadas por versiones anteriores', async () => {
     const { service, qbSolicitudes } = armar({ especialidades: ['iluminacion'] });
     await service.getPendingRequests('tienda-1');
-    expect(qbSolicitudes.andWhere).toHaveBeenCalledWith('request.category IN (:...categorias)', { categorias: ['Iluminación'] });
+    expect(qbSolicitudes.andWhere).toHaveBeenCalledWith('(request.category IN (:...categorias) OR request.categoriaExtra IN (:...categorias))', { categorias: ['Iluminación'] });
   });
 
   it.each([[undefined], [null], [[]], [['Inventada']]])('sin especialidad válida (%p) no ve nada y ni consulta', async (valor) => {
@@ -61,7 +61,7 @@ describe('Solicitudes que ve cada ferretería', () => {
   it('el contador del panel filtra igual que la bandeja', async () => {
     const { service, qbSolicitudes } = armar({ especialidades: ['Iluminación'] });
     await service.getPendingRequestsCount('tienda-1');
-    expect(qbSolicitudes.andWhere).toHaveBeenCalledWith('request.category IN (:...categorias)', { categorias: ['Iluminación'] });
+    expect(qbSolicitudes.andWhere).toHaveBeenCalledWith('(request.category IN (:...categorias) OR request.categoriaExtra IN (:...categorias))', { categorias: ['Iluminación'] });
   });
 
   it('no carga los datos de quien pidió: la ferretería no los necesita ni debe recibirlos', async () => {

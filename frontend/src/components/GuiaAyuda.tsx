@@ -36,8 +36,8 @@ export const GUIAS: Record<RolAyuda, Guia[]> = {
         { objetivo: ['subir-lista', 'escribir-lista', 'crear-manual'], accion: 'tocar', texto: 'Elige cómo armar tu lista: **Sube tu Lista** (una foto, imagen o PDF), **Escribir Lista** o **Crear Manualmente**.' },
         {
           objetivo: ['procesar-texto', 'enviar-solicitud'], accion: 'leer',
-          texto: 'Si la escribiste, toca **Procesar**. Luego revisa los materiales y las cantidades, elige la especialidad y toca **Cotizar con expertos**.',
-          siNoEsta: 'Cuando aparezca tu lista, revisa los materiales y las cantidades, elige la especialidad y envíala.',
+          texto: 'Si la escribiste, toca **Procesar**. Luego revisa los materiales y las cantidades, elige la **tienda experta** (te sugerimos una según tus productos) y toca **Cotizar con expertos**.',
+          siNoEsta: 'Cuando aparezca tu lista, revisa los materiales y las cantidades, elige la tienda experta y envíala.',
         },
         { accion: 'leer', texto: '¡Listo! Las ferreterías te responden en **Cotizaciones → Recibidas**, hasta 5 por solicitud. Te avisamos cuando llegue una.' },
       ],

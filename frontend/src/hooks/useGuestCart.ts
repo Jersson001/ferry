@@ -6,6 +6,7 @@ const EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 horas
 export interface GuestCart {
   items: MaterialItem[];
   selectedCategory: string | null;
+  segundaTienda?: string | null; // segunda tienda experta (opcional)
   deliveryAddress: string;
   quoteTitle: string;
   savedAt: number;

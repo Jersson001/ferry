@@ -51,6 +51,7 @@ export const applyFerryMarkup = (
 
 export interface QuoteRequestPayload {
   category: string;
+  categories?: string[]; // una o dos tiendas expertas; la primera es `category`
   items: MaterialItem[];
   userLocation?: { lat: number; lng: number } | null;
   radioKm?: number;

@@ -36,6 +36,10 @@ export class MaterialRequest {
   @Column({ type: 'varchar' })
   category: string;
 
+  // Segunda tienda experta (opcional): el pedido también llega a las ferreterías de esta especialidad
+  @Column({ type: 'varchar', nullable: true })
+  categoriaExtra?: string | null;
+
   @Column({ type: 'jsonb' })
   items: any[];
 

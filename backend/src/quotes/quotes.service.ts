@@ -11,6 +11,7 @@ import { armarHistorial, HistorialCliente } from './historial-cliente';
 import { PushService } from '../push/push.service';
 import { MailService } from '../mail/mail.service';
 import { Aviso, avisosPedidoPagado, avisoComprobanteRechazado } from './avisos-pago';
+import { tiendasDelPedido, categoriasDeLaSolicitud } from './tiendas-pedido';
 import { leerUbicacion, leerRadioKm, estaEnRadio, distanciaKm, Punto } from './ubicacion';
 import { planVigente } from '../subscriptions/plan-vigente';
 import { COTIZACIONES_POR_SOLICITUD, VIGENCIA_SOLICITUD_MS, publicadaEn, solicitudVigente, inicioDelDiaColombia, itemsDeCotizacionValidos } from './cupos';
@@ -108,7 +109,7 @@ export class QuotesService {
     const request = this.requestRepository.create({
       userId,
       title: data.title,
-      category: data.category,
+      ...tiendasDelPedido(data),
       items: data.items,
       deliveryAddress: data.deliveryAddress,
       imageUrl: this.sanitizeImageUrl(data.imageUrl),
@@ -187,6 +188,7 @@ export class QuotesService {
       userId,
       title: request.title,
       category: request.category,
+      categoriaExtra: request.categoriaExtra ?? null,
       items: request.items,
       deliveryAddress: request.deliveryAddress,
       imageUrl: request.imageUrl,
@@ -226,7 +228,7 @@ export class QuotesService {
     if (!Array.isArray(lista.items) || lista.items.length === 0) throw new BadRequestException('La lista no tiene artículos');
     const nueva = await this.createRequest(userId, {
       title: lista.title,
-      category: lista.category,
+      categories: categoriasDeLaSolicitud(lista),
       items: lista.items,
       deliveryAddress: lista.deliveryAddress,
       imageUrl: lista.imageUrl,
@@ -305,7 +307,7 @@ export class QuotesService {
     // No se carga el usuario que pidió: la tienda no lo necesita y esa fila trae su contraseña y sus tokens.
     const query = this.requestRepository.createQueryBuilder('request')
       .where('request.status = :status', { status: RequestStatus.OPEN })
-      .andWhere('request.category IN (:...categorias)', { categorias })
+      .andWhere('(request.category IN (:...categorias) OR request.categoriaExtra IN (:...categorias))', { categorias })
       .andWhere(CON_CUPO, { cupoSolicitud: COTIZACIONES_POR_SOLICITUD })
       // Solo las de la última hora: las viejas no aparecen, ni siquiera a una ferretería que entra después.
       .andWhere('COALESCE(request.publishedAt, request.createdAt) >= :vigenteDesde', {
@@ -383,7 +385,7 @@ export class QuotesService {
         storeTotal: q.storeBaseTotal + (q.transportCost || 0),
         storeName: q.store?.displayName || q.store?.email || 'Tienda',
         requestTitle: q.request?.title,
-        requestCategory: q.request?.category,
+        requestCategory: categoriasDeLaSolicitud(q.request ?? {}).join(' · ') || undefined,
         requestDisplayId: q.request?.displayId,
         clientName: isPaidOrLater ? q.request?.user?.displayName : undefined,
         clientPhone: isPaidOrLater ? q.request?.user?.phoneNumber : undefined,
@@ -419,7 +421,7 @@ export class QuotesService {
 
     // Solo cotiza quien tiene la categoría habilitada: la bandeja ya la filtra, pero la ruta se puede llamar directo
     const categorias = await this.categoriasDeLaTienda(storeId);
-    if (!categorias.includes(request.category)) {
+    if (!categoriasDeLaSolicitud(request).some(c => categorias.includes(c))) {
       throw new ForbiddenException('Esta solicitud no es de tu especialidad');
     }
 
@@ -512,7 +514,7 @@ export class QuotesService {
       .leftJoinAndSelect('quote.store', 'store')
       // Solo el nombre y el código de la solicitud (son del mismo cliente), para mostrarlos en el aviso
       .leftJoin('quote.request', 'request')
-      .addSelect(['request.id', 'request.title', 'request.displayId', 'request.category', 'request.items'])
+      .addSelect(['request.id', 'request.title', 'request.displayId', 'request.category', 'request.categoriaExtra', 'request.items'])
       .where('quote.requestId IN (:...requestIds)', { requestIds })
       .orderBy('quote.createdAt', 'DESC')
       .getMany();
@@ -541,7 +543,7 @@ export class QuotesService {
         request: undefined,
         requestTitle: quote.request?.title,
         requestDisplayId: quote.request?.displayId,
-        requestCategory: quote.request?.category,
+        requestCategory: categoriasDeLaSolicitud(quote.request ?? {}).join(' · ') || undefined,
         // Los artículos de la cotización no guardan orden: se muestran en el de la solicitud
         items: ordenarComoSolicitud(quote.items, quote.request?.items).map(item => ({
           ...item,
@@ -629,6 +631,7 @@ export class QuotesService {
             userId: quote.request.userId,
             title: quote.request.title + ' (Complemento)',
             category: quote.request.category,
+            categoriaExtra: quote.request.categoriaExtra ?? null,
             items: unavailableItems.map(i => ({
               name: i.name,
               quantity: i.quantity,

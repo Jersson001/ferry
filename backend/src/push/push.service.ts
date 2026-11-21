@@ -1,3 +1,4 @@
+import { categoriasDeLaSolicitud } from '../quotes/tiendas-pedido';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
@@ -72,8 +73,10 @@ export class PushService {
     try {
       const tiendas = await this.users.find({ where: { role: 'STORE' as any }, select: ['uid', 'specialties', 'location'] });
       const obra = leerUbicacion(request);
+      // El pedido llega a las tiendas de cualquiera de sus especialidades (una o dos)
+      const delPedido = categoriasDeLaSolicitud(request);
       const destino = tiendas.filter(t =>
-        categoriasDeLaTienda(t.specialties).includes(request.category) &&
+        categoriasDeLaTienda(t.specialties).some(c => delPedido.includes(c)) &&
         estaEnRadio(leerUbicacion({ userLocation: t.location }), obra, request.radioKm ?? 10),
       );
       if (destino.length === 0) return 0;
@@ -81,7 +84,8 @@ export class PushService {
       let enviados = 0;
       await Promise.all(suscripciones.map(async (s) => {
         const tienda = destino.find(t => t.uid === s.userId)!;
-        const aviso = textoDeAviso(request.category, leerUbicacion({ userLocation: tienda.location }), obra);
+        const suya = delPedido.find(c => categoriasDeLaTienda(tienda.specialties).includes(c)) ?? request.category;
+        const aviso = textoDeAviso(suya, leerUbicacion({ userLocation: tienda.location }), obra);
         try {
           await webpush.sendNotification(
             { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
