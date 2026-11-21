@@ -215,8 +215,10 @@ const ReviewModal: React.FC<{
 // Payment Checkout Modal
 // ---------------------------------------------------------------------------
 
-type ManualMethod = 'nequi';
-type PayMethod = ManualMethod | 'wompi';
+// Nequi y tarjeta/PSE van por Wompi, que confirma solo (webhook). La transferencia a la llave de Ferry
+// queda como respaldo: el pedido espera a que un administrador revise el comprobante.
+type ManualMethod = 'transferencia';
+type PayMethod = ManualMethod | 'nequi' | 'tarjeta';
 
 const NEQUI_KEY = '0091829443';
 
@@ -271,7 +273,8 @@ const PaymentCheckoutModal: React.FC<{
   const availableCount = quote.items.filter(i => i.available).length;
   const amountInCents = Math.round(quote.total * 100);
 
-  const isManual = selectedMethod === 'nequi';
+  const isManual = selectedMethod === 'transferencia';
+  const isWompi = selectedMethod === 'nequi' || selectedMethod === 'tarjeta';
 
   const handleWompiRedirect = async () => {
     setPayError(null);
@@ -331,7 +334,7 @@ const PaymentCheckoutModal: React.FC<{
         submitManualPayment({
           quoteId:         quote.id,
           requestId:       quote.requestId,
-          method:          'nequi',
+          method:          'transferencia',
           amount:          quote.total,
           referenceNumber,
           proofFile:       proofFile!,
@@ -439,9 +442,9 @@ const PaymentCheckoutModal: React.FC<{
               >
                 <Smartphone className={`w-5 h-5 ${selectedMethod === 'nequi' ? 'text-purple-700' : 'text-slate-400'}`} />
                 <span className={`text-sm font-bold ${selectedMethod === 'nequi' ? 'text-purple-700' : 'text-slate-700'}`}>
-                  Nequi / Bre-B
+                  Nequi
                 </span>
-                <span className="text-[10px] text-slate-400">Escanea y paga</span>
+                <span className="text-[10px] text-slate-400">Apruebas en tu app</span>
                 {selectedMethod === 'nequi' && (
                   <div className="absolute top-2 right-2 w-4 h-4 rounded-full flex items-center justify-center bg-purple-50 border border-purple-300">
                     <CheckCircle2 className="w-3 h-3 text-purple-700" />
@@ -449,47 +452,70 @@ const PaymentCheckoutModal: React.FC<{
                 )}
               </button>
 
-              {/* Wompi */}
+              {/* Tarjeta / PSE (Wompi) */}
               <button
-                onClick={() => setSelectedMethod('wompi')}
+                onClick={() => setSelectedMethod('tarjeta')}
                 className={`relative flex flex-col items-start gap-1 px-4 py-3 rounded-2xl border-2 text-left transition-all ${
-                  selectedMethod === 'wompi'
+                  selectedMethod === 'tarjeta'
                     ? 'border-green-400 bg-green-50'
                     : 'border-slate-200 bg-white hover:border-slate-300'
                 }`}
               >
-                <CreditCard className={`w-5 h-5 ${selectedMethod === 'wompi' ? 'text-green-700' : 'text-slate-400'}`} />
-                <span className={`text-sm font-bold ${selectedMethod === 'wompi' ? 'text-green-700' : 'text-slate-700'}`}>
-                  Wompi
+                <CreditCard className={`w-5 h-5 ${selectedMethod === 'tarjeta' ? 'text-green-700' : 'text-slate-400'}`} />
+                <span className={`text-sm font-bold ${selectedMethod === 'tarjeta' ? 'text-green-700' : 'text-slate-700'}`}>
+                  Tarjeta · PSE
                 </span>
-                <span className="text-[10px] text-slate-400">Tarjeta · PSE · Nequi</span>
-                {selectedMethod === 'wompi' && (
+                <span className="text-[10px] text-slate-400">Débito, crédito o banco</span>
+                {selectedMethod === 'tarjeta' && (
                   <div className="absolute top-2 right-2 w-4 h-4 rounded-full flex items-center justify-center bg-green-50 border border-green-400">
                     <CheckCircle2 className="w-3 h-3 text-green-700" />
                   </div>
                 )}
               </button>
             </div>
+
+            {/* Respaldo: transferencia a la llave de Ferry, revisada a mano */}
+            <button
+              onClick={() => setSelectedMethod('transferencia')}
+              className={`mt-2 w-full text-left px-3 py-2 rounded-xl border text-xs transition-all ${
+                isManual ? 'border-purple-300 bg-purple-50 text-purple-700' : 'border-transparent text-slate-500 hover:bg-slate-50'
+              }`}
+            >
+              ¿Prefieres transferir a la llave Bre-B de Ferry? <span className="underline font-semibold">Sube el comprobante</span>
+              <span className="block text-[10px] text-slate-400">Se revisa a mano: tu pedido se confirma en 2–4 horas hábiles.</span>
+            </button>
           </div>
 
-          {/* Step 2 — Wompi (redirect directo, sin widget script) */}
-          {selectedMethod === 'wompi' && (
-            <div className="bg-green-50 border border-green-200 rounded-2xl p-4 space-y-3 animate-in fade-in duration-200">
-              <div>
-                <p className="text-xs font-semibold text-green-700 mb-0.5">Pago seguro con Wompi</p>
-                <p className="text-xs text-green-600">
-                  El monto de <strong>{formatCOP(quote.total)}</strong> se pre-carga automáticamente.
-                  Acepta tarjetas, PSE y Nequi.
-                </p>
-              </div>
+          {/* Step 2 — Wompi: Nequi o tarjeta/PSE. Se confirma solo con el aviso de Wompi. */}
+          {isWompi && (
+            <div className={`${selectedMethod === 'nequi' ? 'bg-purple-50 border-purple-200' : 'bg-green-50 border-green-200'} border rounded-2xl p-4 space-y-3 animate-in fade-in duration-200`}>
+              {selectedMethod === 'nequi' ? (
+                <div>
+                  <p className="text-xs font-semibold text-purple-700 mb-1">Así pagas con Nequi</p>
+                  <ol className="text-xs text-purple-700/90 space-y-0.5 list-decimal list-inside">
+                    <li>En la ventana de pago elige <strong>Nequi</strong> y escribe tu celular.</li>
+                    <li>Te llega una notificación en la app Nequi: <strong>acéptala</strong>.</li>
+                    <li>Listo: tu pedido queda pagado al instante, sin enviar pantallazos.</li>
+                  </ol>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-xs font-semibold text-green-700 mb-0.5">Pago seguro con Wompi</p>
+                  <p className="text-xs text-green-600">
+                    El monto de <strong>{formatCOP(quote.total)}</strong> se pre-carga automáticamente.
+                    Paga con tarjeta débito o crédito, o con PSE desde tu banco.
+                  </p>
+                </div>
+              )}
               <button
                 onClick={handleWompiRedirect}
-                disabled={!WOMPI_PUBLIC_KEY}
+                disabled={!WOMPI_PUBLIC_KEY || processing}
                 className="w-full py-3 rounded-xl bg-[#7B3FF2] hover:bg-[#6a35d4] text-white font-bold text-sm transition-colors disabled:opacity-40 flex items-center justify-center gap-2"
               >
-                <ShieldCheck className="w-4 h-4" />
-                Pagar con Wompi — {formatCOP(quote.total)}
+                {processing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                {selectedMethod === 'nequi' ? 'Pagar con Nequi' : 'Pagar con tarjeta o PSE'} — {formatCOP(quote.total)}
               </button>
+              <p className="text-[10px] text-slate-400 text-center">Procesado por Wompi (Grupo Bancolombia)</p>
               {!WOMPI_PUBLIC_KEY && (
                 <p className="text-[10px] text-amber-600 text-center">
                   Configura VITE_WOMPI_PUBLIC_KEY en .env
