@@ -36,9 +36,10 @@ interface Props {
   profile: UserProfile | null;
   onUpdateProfile: (profile: UserProfile) => void;
   onSignOut?: () => void;
+  onVerTutorial?: () => void;
 }
 
-export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSignOut }) => {
+export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSignOut, onVerTutorial }) => {
   const [activeTab, setActiveTab] = useState<'PROFESSIONAL' | 'ACCOUNT'>('PROFESSIONAL');
   const [isGpsActive, setIsGpsActive] = useState(() => localStorage.getItem('ferry_disponible') === 'true');
   const [isEditingBio, setIsEditingBio] = useState(false);
@@ -954,8 +955,27 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
               </>
             )}
 
+            {/* Volver a ver el tutorial de bienvenida */}
+            {onVerTutorial && (
+              <button
+                onClick={onVerTutorial}
+                className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-ferry-50 rounded-lg text-ferry-600">
+                    <PlayCircle className="w-5 h-5" />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-bold text-sm text-slate-800">Ver tutorial</p>
+                    <p className="text-xs text-slate-500">Cómo funciona Ferry, paso a paso</p>
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5 text-slate-300" />
+              </button>
+            )}
+
             {/* Seguridad / Cambio de Contraseña */}
-            <button 
+            <button
               onClick={() => setShowSecurityModal(true)}
               className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
             >

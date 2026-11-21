@@ -19,6 +19,7 @@ import ferryLogo from './assets/logo.svg';
 import { getCurrentUser, signOut as logoutUser, verifyEmailToken } from './services/authService';
 import { rolDeLaSesion } from './utils/sesion';
 import { ErrorDePantalla } from './components/ErrorDePantalla';
+import { TutorialInicio, tutorialVisto, marcarTutorialVisto, RolTutorial } from './components/TutorialInicio';
 import { verifySubscriptionWompiPayment } from './services/subscriptionService';
 import { getStorePendingRequestsCount, verifyWompiPayment } from './services/quoteService';
 import { recordarCodigoDeLlegada, reclamarCodigoPendiente } from './services/referralService';
@@ -262,6 +263,21 @@ const App: React.FC = () => {
   // para administradores. Es solo para mostrarlo; las rutas de administración las protege el backend.
   const esAdmin = useMemo(() => rolDeLaSesion() === 'ADMIN', [currentUserProfile?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Tutorial de bienvenida: una vez por cuenta y rol, después de completar el perfil. Se vuelve a ver desde el perfil.
+  const rolTutorial: RolTutorial | null =
+    currentUserRole === UserRole.STORE ? 'ferreteria' : currentUserRole === UserRole.USER ? 'cliente' : null;
+  const [tutorialAbierto, setTutorialAbierto] = useState(false);
+  useEffect(() => {
+    const uid = currentUserProfile?.uid;
+    // Al administrador no se le abre solo: cambia de vista entre roles a cada rato.
+    if (!isLoggedIn || isGuest || !uid || !rolTutorial || esAdmin) return;
+    if (!tutorialVisto(uid, rolTutorial)) setTutorialAbierto(true);
+  }, [isLoggedIn, isGuest, currentUserProfile?.uid, rolTutorial, esAdmin]);
+  const cerrarTutorial = () => {
+    if (currentUserProfile?.uid && rolTutorial) marcarTutorialVisto(currentUserProfile.uid, rolTutorial);
+    setTutorialAbierto(false);
+  };
+
   // Lógica de Negocio
   const handleManualQuote = (reqId: string) => {
     setRequests(prev => {
@@ -437,6 +453,8 @@ const App: React.FC = () => {
     <APIProvider apiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string} language="es" region="CO">
       <div className="flex flex-col h-screen bg-gray-50 max-w-md mx-auto shadow-2xl overflow-hidden relative">
 
+      {tutorialAbierto && rolTutorial && !isGuest && <TutorialInicio rol={rolTutorial} onTerminar={cerrarTutorial} />}
+
       {/* Modal de Auth Gate */}
       {showAuthGate && (
         <div className="absolute inset-0 z-50 flex items-end bg-black/40" onClick={() => setShowAuthGate(false)}>
@@ -561,7 +579,7 @@ const App: React.FC = () => {
         {currentUserRole === UserRole.ADMIN && <AdminPanel requests={requests} onManualQuote={handleManualQuote} />}
 
         {currentView === 'PROFILE' ? (
-          <UnifiedProfile profile={currentUserProfile} onUpdateProfile={(p) => setCurrentUserProfile(p)} onSignOut={() => { setIsLoggedIn(false); setIsGuest(false); setCurrentUserProfile(null); }} />
+          <UnifiedProfile profile={currentUserProfile} onUpdateProfile={(p) => setCurrentUserProfile(p)} onSignOut={() => { setIsLoggedIn(false); setIsGuest(false); setCurrentUserProfile(null); }} onVerTutorial={rolTutorial ? () => setTutorialAbierto(true) : undefined} />
         ) : (
           <>
             {currentUserRole === UserRole.STORE && currentView === 'HOME' && <StorePanel requests={requests} profile={currentUserProfile} />}
