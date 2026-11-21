@@ -492,6 +492,7 @@ export class PaymentsService {
       }
     } else {
       await this.quotesService.quitarValidacion(tx.quoteId, (tx.quoteStatusBefore as QuoteStatus) || QuoteStatus.ACCEPTED);
+      void this.quotesService.avisarComprobanteRechazado(tx.quoteId);
     }
     this.logger.log(`Comprobante ${txId} ${aprobar ? 'aprobado' : 'rechazado'} por ${adminId}.`);
     return { status: nuevo };

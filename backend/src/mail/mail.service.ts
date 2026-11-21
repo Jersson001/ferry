@@ -137,6 +137,37 @@ export class MailService {
   }
 
   // ── Helper interno ───────────────────────────────────────────────────────────
+  // ── Aviso simple (pagos, pedidos): título, párrafos en texto plano y un botón a Ferry ──────
+  async sendAviso(to: string, aviso: { titulo: string; parrafos: string[] }): Promise<void> {
+    const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+    const url = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const html = `
+      <!DOCTYPE html>
+      <html lang="es">
+      <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background:#f8fafc; margin:0; padding:20px;">
+        <div style="max-width:520px; margin:0 auto; background:white; border-radius:20px; overflow:hidden; box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+          <div style="background:linear-gradient(135deg, #f97316 0%, #fb923c 100%); padding:28px 32px;">
+            <h1 style="color:white; font-size:22px; font-weight:900; margin:0;">🔩 Ferry</h1>
+          </div>
+          <div style="padding:32px;">
+            <h2 style="color:#1e293b; font-size:19px; font-weight:800; margin:0 0 16px;">${esc(aviso.titulo)}</h2>
+            ${aviso.parrafos.map(p => `<p style="color:#475569; font-size:15px; line-height:1.6; margin:0 0 12px;">${esc(p)}</p>`).join('')}
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:20px 0 0;">
+              <tr>
+                <td align="center" bgcolor="#f97316" style="border-radius:14px;">
+                  <a href="${url}" style="display:block; background-color:#f97316; color:#ffffff; text-align:center; padding:14px 24px; border-radius:14px; font-size:15px; font-weight:700; text-decoration:none;">Abrir Ferry</a>
+                </td>
+              </tr>
+            </table>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+    await this.send({ to, subject: aviso.titulo, html });
+  }
+
   private async send({ to, subject, html }: { to: string; subject: string; html: string }) {
     try {
       const response = await fetch(RESEND_ENDPOINT, {

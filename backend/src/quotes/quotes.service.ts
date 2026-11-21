@@ -9,6 +9,8 @@ import { categoriasDeLaTienda, contactoPublico } from '../users/perfil';
 import { limpiarTexto } from '../stores/opiniones';
 import { armarHistorial, HistorialCliente } from './historial-cliente';
 import { PushService } from '../push/push.service';
+import { MailService } from '../mail/mail.service';
+import { Aviso, avisosPedidoPagado, avisoComprobanteRechazado } from './avisos-pago';
 import { leerUbicacion, leerRadioKm, estaEnRadio, distanciaKm, Punto } from './ubicacion';
 import { planVigente } from '../subscriptions/plan-vigente';
 import { COTIZACIONES_POR_SOLICITUD, VIGENCIA_SOLICITUD_MS, publicadaEn, solicitudVigente, inicioDelDiaColombia, itemsDeCotizacionValidos } from './cupos';
@@ -54,7 +56,48 @@ export class QuotesService {
     private quoteRepository: Repository<Quote>,
     private dataSource: DataSource, // Para transacciones atómicas
     @Optional() private push?: PushService,
+    @Optional() private mail?: MailService,
   ) {}
+
+  // ==========================================
+  // AVISOS DE PAGO (push + correo). Nunca fallan: el pago ya quedó guardado.
+  // ==========================================
+  private async avisar(user: User | undefined | null, aviso: Aviso): Promise<void> {
+    if (!user) return;
+    await Promise.allSettled([
+      this.push?.avisarUsuario(user.uid, { title: aviso.titulo, body: aviso.cuerpo }),
+      user.email ? this.mail?.sendAviso(user.email, aviso) : undefined,
+    ]);
+  }
+
+  async avisarPedidoPagado(quoteId: string): Promise<void> {
+    try {
+      const q = await this.quoteRepository.findOne({ where: { id: quoteId }, relations: ['store', 'request', 'request.user'] });
+      if (!q) return;
+      const { tienda, cliente } = avisosPedidoPagado({
+        displayId: q.request?.displayId,
+        title: q.request?.title,
+        deliveryAddress: q.request?.deliveryAddress,
+        clientName: q.request?.user?.displayName,
+        clientPhone: q.request?.user?.phoneNumber,
+        storeName: q.store?.displayName,
+        storeTotal: q.storeBaseTotal + (q.transportCost || 0),
+      });
+      await Promise.all([this.avisar(q.store, tienda), this.avisar(q.request?.user, cliente)]);
+    } catch (e: any) {
+      console.error(`[Quotes] No se pudo avisar el pago de ${quoteId}: ${e?.message}`);
+    }
+  }
+
+  async avisarComprobanteRechazado(quoteId: string): Promise<void> {
+    try {
+      const q = await this.quoteRepository.findOne({ where: { id: quoteId }, relations: ['request', 'request.user'] });
+      if (!q) return;
+      await this.avisar(q.request?.user, avisoComprobanteRechazado({ displayId: q.request?.displayId, title: q.request?.title }));
+    } catch (e: any) {
+      console.error(`[Quotes] No se pudo avisar el rechazo de ${quoteId}: ${e?.message}`);
+    }
+  }
 
   // ==========================================
   // CLIENTE: SOLICITUDES
@@ -671,6 +714,8 @@ export class QuotesService {
       await queryRunner.manager.save(request);
 
       await queryRunner.commitTransaction();
+      // Solo tras guardar, y una vez: si ya estaba pagada se salió arriba (idempotencia).
+      void this.avisarPedidoPagado(quote.id);
       return quote;
     } catch (err) {
       await queryRunner.rollbackTransaction();

@@ -13,6 +13,7 @@ import { StorageModule } from '../storage/storage.module';
 import { UsersModule } from '../users/users.module';
 import { QuotesCronService } from './quotes.cron';
 import { PushModule } from '../push/push.module';
+import { MailModule } from '../mail/mail.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { PushModule } from '../push/push.module';
     UsersModule,
     PushModule,
     StorageModule,
+    MailModule, // Avisos de pago por correo
   ],
   controllers: [QuotesController, QuoteChatController],
   providers: [QuotesService, QuotesCronService, QuoteChatService],

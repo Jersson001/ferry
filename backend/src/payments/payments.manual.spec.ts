@@ -18,6 +18,7 @@ const armar = (opts: { tx?: any; affected?: number; payQuoteFalla?: boolean; fot
   const quotesService: any = {
     marcarEnValidacion: jest.fn(async () => ({ antes: QuoteStatus.ACCEPTED, clientFinalTotal: 150000 })),
     quitarValidacion: jest.fn(async () => undefined),
+    avisarComprobanteRechazado: jest.fn(async () => undefined),
     payQuote: jest.fn(async () => { if (opts.payQuoteFalla) throw new Error('estado'); return {}; }),
   };
   const storage: any = {
@@ -60,6 +61,7 @@ describe('Pago manual por Nequi: el comprobante no paga el pedido por sí solo',
     await expect(service.revisarPagoManual('t', false, 'admin')).resolves.toEqual({ status: PaymentStatus.DECLINED });
     expect(quotesService.payQuote).not.toHaveBeenCalled();
     expect(quotesService.quitarValidacion).toHaveBeenCalledWith(QUOTE, 'PENDING');
+    expect(quotesService.avisarComprobanteRechazado).toHaveBeenCalledWith(QUOTE); // Se le avisa al cliente
   });
 
   it('un comprobante ya revisado (o que otro admin acaba de revisar) no se procesa dos veces', async () => {
