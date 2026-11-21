@@ -678,19 +678,6 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
     }
   };
 
-  const handleConfirmPayment = async (q: PendingPaymentQuote) => {
-    setActionLoadingId(q.id);
-    try {
-      await updateQuoteLogisticStatus(q.id, q.requestId, 'preparing');
-      setPendingPaymentQuotes(prev => prev.filter(x => x.id !== q.id));
-      setPreparingQuotes(prev => [...prev, { ...q, status: 'preparing' }]);
-    } catch (e) {
-      console.error('[Ferry/StorePanel] confirmPayment', e);
-    } finally {
-      setActionLoadingId(null);
-    }
-  };
-
   const handleMarkShipped = async (q: PendingPaymentQuote) => {
     setActionLoadingId(q.id);
     try {
@@ -1324,7 +1311,7 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
               <div className="flex items-center justify-between px-1 mb-2">
                 <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
                   <Clock className="w-4 h-4 text-amber-500" />
-                  Por cobrar — Aprobar comprobante
+                  Pago en revisión por Ferry
                   {pendingPaymentQuotes.length > 0 && (
                     <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">
                       {pendingPaymentQuotes.length}
@@ -1342,7 +1329,7 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
                 </div>
               ) : pendingPaymentQuotes.length === 0 ? (
                 <div className="text-center py-6 bg-white rounded-2xl border border-dashed border-slate-200">
-                  <p className="text-sm text-slate-400">Sin comprobantes por revisar</p>
+                  <p className="text-sm text-slate-400">Ningún pago en revisión</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -1378,31 +1365,10 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
                         })()}
                       </div>
 
-                      {/* Ver comprobante */}
-                      {q.proofImageUrl ? (
-                        <button
-                          onClick={() => setProofModalUrl(q.proofImageUrl!)}
-                          className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold transition-colors"
-                        >
-                          <Eye className="w-4 h-4" /> Ver comprobante
-                        </button>
-                      ) : (
-                        <p className="text-xs text-slate-400 text-center py-1">Sin imagen adjunta</p>
-                      )}
-
-                      {/* Confirmar pago */}
-                      <button
-                        onClick={() => handleConfirmPayment(q)}
-                        disabled={actionLoadingId === q.id}
-                        className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-green-600 hover:bg-green-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-sm font-bold transition-colors"
-                      >
-                        {actionLoadingId === q.id ? (
-                          <RefreshCw className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <CheckCircle2 className="w-4 h-4" />
-                        )}
-                        {actionLoadingId === q.id ? 'Confirmando...' : 'Confirmar Pago'}
-                      </button>
+                      {/* El cliente le pagó a Ferry: Ferry confirma que la plata llegó, no la ferretería */}
+                      <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-xl p-3 leading-relaxed">
+                        El cliente envió un comprobante y Ferry está verificando que el pago llegó. <strong>No despaches todavía:</strong> cuando se confirme, el pedido pasa a "Alistando" y verás los datos del cliente.
+                      </p>
                     </div>
                   ))}
                 </div>

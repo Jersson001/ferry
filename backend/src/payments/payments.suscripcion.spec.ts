@@ -19,7 +19,7 @@ const armar = (opts: { existente?: any; wompi?: any } = {}) => {
     purchasePlan: jest.fn(async () => ({})),
   };
   global.fetch = jest.fn(async () => ({ json: async () => ({ data: opts.wompi }) })) as any;
-  const service = new PaymentsService(transactionRepository, {} as any, configService, subscriptionsService, {} as any);
+  const service = new PaymentsService(transactionRepository, {} as any, configService, subscriptionsService, {} as any, {} as any);
   return { service, subscriptionsService, guardadas };
 };
 

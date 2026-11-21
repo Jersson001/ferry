@@ -1012,7 +1012,7 @@ const QuoteCard: React.FC<{
       )}
       {isPendingValidation && (
         <div className="bg-amber-500 text-white text-xs font-bold text-center py-1 flex items-center justify-center gap-1">
-          <Clock className="w-3 h-3" /> Pago en validación — La ferretería revisará tu comprobante
+          <Clock className="w-3 h-3" /> Pago en validación — Ferry está confirmando que llegó tu pago
         </div>
       )}
       {isPreparing && (
@@ -1651,6 +1651,8 @@ export const UserQuotesInbox: React.FC<{
   const [actionError, setActionError] = useState<string | null>(null);
   const [newQuoteToast, setNewQuoteToast] = useState<string | null>(null);
   const [wompiPaidToast, setWompiPaidToast]       = useState(false);
+  // El aviso es el mismo, pero un comprobante manual todavía no es un pago confirmado
+  const [toastEnRevision, setToastEnRevision]     = useState(false);
   const [reviewQuote, setReviewQuote]             = useState<ReceivedQuote | null>(null);
   const [partialAcceptQuote, setPartialAcceptQuote] = useState<ReceivedQuote | null>(null);
   const [partialAccepting, setPartialAccepting] = useState(false);
@@ -1844,8 +1846,9 @@ export const UserQuotesInbox: React.FC<{
       q.id === quoteId ? { ...q, status: 'pending_validation' } : q
     ));
     setCheckoutQuote(null);
+    setToastEnRevision(true);
     setWompiPaidToast(true); // reuse same toast
-    setTimeout(() => setWompiPaidToast(false), 6000);
+    setTimeout(() => { setWompiPaidToast(false); setToastEnRevision(false); }, 6000);
     await loadQuotes(); // Refetch to get unblinded store info
   }, [loadQuotes]);
 
@@ -2200,9 +2203,13 @@ export const UserQuotesInbox: React.FC<{
             <CheckCircle2 className="w-4 h-4 text-green-600" />
           </div>
           <div className="flex-1">
-            <p className="text-sm font-bold text-slate-800 leading-snug mb-0.5">¡Pago confirmado!</p>
+            <p className="text-sm font-bold text-slate-800 leading-snug mb-0.5">
+              {toastEnRevision ? '¡Comprobante recibido!' : '¡Pago confirmado!'}
+            </p>
             <p className="text-xs text-slate-500 leading-relaxed">
-              La ferretería ya recibió tu orden y está alistando los materiales. Pronto se realizará el despacho.
+              {toastEnRevision
+                ? 'Ferry está confirmando que llegó tu pago. Apenas se confirme, la ferretería empieza a alistar tu pedido.'
+                : 'La ferretería ya recibió tu orden y está alistando los materiales. Pronto se realizará el despacho.'}
             </p>
           </div>
           <button onClick={() => setWompiPaidToast(false)} className="shrink-0 text-slate-300 hover:text-slate-500 mt-0.5">

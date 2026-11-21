@@ -7,7 +7,7 @@ import { StorageService } from '../../storage/storage.service';
 import { PushService } from '../../push/push.service';
 
 // El chat se abre cuando el cliente acepta la cotización y sigue disponible hasta la entrega y después.
-export const ESTADOS_CON_CHAT = [QuoteStatus.ACCEPTED, QuoteStatus.PAID, QuoteStatus.PREPARING, QuoteStatus.SHIPPED, QuoteStatus.DELIVERED];
+export const ESTADOS_CON_CHAT = [QuoteStatus.ACCEPTED, QuoteStatus.PENDING_VALIDATION, QuoteStatus.PAID, QuoteStatus.PREPARING, QuoteStatus.SHIPPED, QuoteStatus.DELIVERED];
 
 export const MAX_TEXTO = 2000;
 // Como en Worky: se cargan los últimos 100 mensajes; lo anterior no se pagina.
@@ -73,7 +73,7 @@ export class QuoteChatService {
     // Se pide descendente y se da la vuelta: con ascendente el límite recortaría los más nuevos.
     const filas = await this.messages.find({ where: { quoteId }, order: { createdAt: 'DESC' }, take: ULTIMOS });
     // Mientras no haya pagado, el cliente no sabe qué ferretería es (estrategia a ciegas).
-    const aCiegas = quote.status === QuoteStatus.ACCEPTED;
+    const aCiegas = quote.status === QuoteStatus.ACCEPTED || quote.status === QuoteStatus.PENDING_VALIDATION;
     return {
       rol,
       aCiegas,
@@ -114,7 +114,7 @@ export class QuoteChatService {
     // Sin await: el aviso al otro lado no debe demorar ni romper el envío.
     const resumen = text ? text.slice(0, 120) : adjunto?.type === 'pdf' ? '📄 Te envió un PDF' : '📷 Te envió una imagen';
     void this.push?.avisarUsuario(otroId, {
-      title: rol === 'client' ? 'Mensaje del cliente' : quote.status === QuoteStatus.ACCEPTED ? 'Mensaje de la ferretería' : 'Mensaje de tu ferretería',
+      title: rol === 'client' ? 'Mensaje del cliente' : (quote.status === QuoteStatus.ACCEPTED || quote.status === QuoteStatus.PENDING_VALIDATION) ? 'Mensaje de la ferretería' : 'Mensaje de tu ferretería',
       body: resumen,
       url: '/',
     });

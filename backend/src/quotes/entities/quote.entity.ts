@@ -8,6 +8,9 @@ export enum QuoteStatus {
   PENDING = 'PENDING',
   ACCEPTED = 'ACCEPTED',
   REJECTED = 'REJECTED',
+  // El cliente subió un comprobante de Nequi/Bre-B y Ferry aún no lo ha revisado. No es pago:
+  // la ferretería no despacha ni ve al cliente hasta que un administrador lo apruebe.
+  PENDING_VALIDATION = 'PENDING_VALIDATION',
   PAID = 'PAID',
   PREPARING = 'PREPARING',
   SHIPPED = 'SHIPPED',

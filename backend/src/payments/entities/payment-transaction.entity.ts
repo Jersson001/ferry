@@ -44,6 +44,21 @@ export class PaymentTransaction {
   @Column({ type: 'varchar', nullable: true })
   signature: string;
 
+  // Pagos manuales: foto del comprobante en Storage (no en base64 dentro de la fila)
+  @Column({ type: 'text', nullable: true })
+  proofUrl: string | null;
+
+  // Estado en que estaba la cotización antes del comprobante, para devolverla ahí si se rechaza
+  @Column({ type: 'varchar', nullable: true })
+  quoteStatusBefore: string | null;
+
+  // Administrador que aprobó o rechazó el comprobante, y cuándo
+  @Column({ type: 'varchar', nullable: true })
+  reviewedBy: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  reviewedAt: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }

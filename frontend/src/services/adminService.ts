@@ -44,3 +44,23 @@ export const ocultarOpinion = (o: Pick<OpinionAdmin, 'kind' | 'id'>, hidden: boo
       body: JSON.stringify({ hidden }),
     },
   );
+
+// Comprobantes de Nequi/Bre-B que los clientes subieron y Ferry aún no revisa
+export interface PagoManualPendiente {
+  id: string;
+  quoteId: string | null;
+  reference: string;
+  amount: number;
+  proofUrl: string | null;
+  createdAt: string;
+  quoteStatus?: string;
+  requestDisplayId?: string;
+  requestTitle?: string;
+  clientName?: string;
+  clientPhone?: string;
+  storeName?: string;
+}
+
+export const getPagosManualesPendientes = () => request<PagoManualPendiente[]>('/payments/manual/pending');
+export const revisarPagoManual = (id: string, aprobar: boolean) =>
+  request<{ status: string }>(`/payments/manual/${encodeURIComponent(id)}/${aprobar ? 'approve' : 'reject'}`, { method: 'POST' });

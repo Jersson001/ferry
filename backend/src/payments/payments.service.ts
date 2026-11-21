@@ -9,6 +9,7 @@ import * as crypto from 'crypto';
 import { PaymentTransaction, PaymentStatus } from './entities/payment-transaction.entity';
 import { QuotesService } from '../quotes/quotes.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import { StorageService } from '../storage/storage.service';
 
 @Injectable()
 export class PaymentsService {
@@ -22,6 +23,7 @@ export class PaymentsService {
     @Inject(forwardRef(() => SubscriptionsService))
     private subscriptionsService: SubscriptionsService,
     private dataSource: DataSource,
+    private storageService: StorageService,
   ) {}
 
   // 1. Generar Hash de Integridad para el Frontend (Widget)
@@ -403,35 +405,95 @@ export class PaymentsService {
     );
   }
 
-  // 5. Pagos Manuales (Nequi/Comprobantes)
+  // 5. Pagos Manuales (Nequi / Bre-B a la llave de Ferry)
+  // Un pantallazo no prueba nada: se falsifica en segundos. El pedido queda PENDING_VALIDATION y solo
+  // pasa a PAID cuando un administrador confirma que la plata llegó a la cuenta de Ferry.
   async processManualPayment(quoteId: string, reference: string, proofBase64: string, userId: string): Promise<{ id: string }> {
-    // Aquí el estado del quote pasa a "PENDING_VALIDATION" para que el admin/tienda revise.
-    // Usamos updateQuoteStatus del servicio.
-    // Importamos enum QuoteStatus dinámicamente o lo referenciamos mediante string si es necesario.
-    // En el entity QuoteStatus es 'PENDING_VALIDATION', pero por ahora usamos el literal si existe o actualizamos.
-    // Wait, let's call QuotesService.updateQuoteStatus. 
-    // En quote.entity.ts, status es enum. PENDING_VALIDATION no existe ahí en backend.
-    // El frontend usa 'pending_validation'. Debemos asegurar que el status enum lo soporta.
-    // Si no lo soporta, por simplicidad, si la plataforma lo requiere, 
-    // podemos dejarlo en PAID directo para que avance el MVP, O agregarlo.
-    // Como es MVP, y el usuario dice "Actualizará la cotización a estado PENDING_VALIDATION o PAID según corresponda",
-    // Lo forzamos a PAID por ahora para que el flujo termine, asumiendo confianza.
-    // Luego el administrador podría reversarlo.
-    await this.quotesService.payQuote(quoteId, userId);
-    
-    // Guardamos el registro del pago manual
+    if (!quoteId || typeof quoteId !== 'string') throw new BadRequestException('Falta la cotización.');
+    if (!proofBase64 || typeof proofBase64 !== 'string') throw new BadRequestException('Adjunta la foto del comprobante.');
+
+    // Primero se guarda la foto: si es inválida, el pedido no cambia de estado.
+    const dataUrl = proofBase64.startsWith('data:') ? proofBase64 : `data:image/jpeg;base64,${proofBase64}`;
+    let proofUrl: string;
+    try {
+      proofUrl = await this.storageService.saveBase64Image(dataUrl, userId, 'comprobantes');
+    } catch (e: any) {
+      throw new BadRequestException(e?.message || 'No se pudo leer la imagen del comprobante.');
+    }
+
+    const { antes, clientFinalTotal } = await this.quotesService.marcarEnValidacion(quoteId, userId);
+
     const tx = this.transactionRepository.create({
-      transactionId: `MANUAL-${Date.now()}`,
-      reference: reference,
-      amountInCents: 0, // Desconocido aquí
+      transactionId: `MANUAL-${quoteId}-${Date.now()}`,
+      reference: (typeof reference === 'string' ? reference.trim().slice(0, 100) : '') || 'SIN-REFERENCIA',
+      amountInCents: Math.round(clientFinalTotal * 100), // Lo que debía pagar; el admin confirma que llegó
       currency: 'COP',
-      status: PaymentStatus.APPROVED, // O PENDING
+      status: PaymentStatus.PENDING,
       paymentMethodType: 'MANUAL',
-      signature: proofBase64, // Guardamos la foto en Base64 en el campo signature temporalmente (debería ser TEXT)
+      proofUrl,
+      quoteStatusBefore: antes,
       quoteId,
     });
-    await this.transactionRepository.save(tx);
-
+    try {
+      await this.transactionRepository.save(tx);
+    } catch (e) {
+      await this.quotesService.quitarValidacion(quoteId, antes); // Sin registro no hay nada que revisar
+      throw e;
+    }
+    this.logger.log(`Comprobante manual ${tx.id} para la cotización ${quoteId}: pendiente de revisión.`);
     return { id: tx.id };
+  }
+
+  // Comprobantes por revisar, para el panel del administrador
+  async listarPagosManualesPendientes() {
+    const txs = await this.transactionRepository.find({
+      where: { paymentMethodType: 'MANUAL', status: PaymentStatus.PENDING },
+      relations: ['quote', 'quote.request', 'quote.request.user', 'quote.store'],
+      order: { createdAt: 'ASC' },
+    });
+    return txs.map(tx => ({
+      id: tx.id,
+      quoteId: tx.quoteId,
+      reference: tx.reference,
+      amount: Math.round(tx.amountInCents / 100),
+      proofUrl: tx.proofUrl,
+      createdAt: tx.createdAt,
+      quoteStatus: tx.quote?.status, // Si ya dice PAID, el cliente terminó pagando por Wompi
+      requestDisplayId: tx.quote?.request?.displayId,
+      requestTitle: tx.quote?.request?.title,
+      clientName: tx.quote?.request?.user?.displayName || tx.quote?.request?.user?.email,
+      clientPhone: tx.quote?.request?.user?.phoneNumber,
+      storeName: tx.quote?.store?.displayName || tx.quote?.store?.email,
+    }));
+  }
+
+  // El administrador revisó el Nequi de Ferry: aprueba (el pedido queda pagado) o rechaza (vuelve a esperar pago).
+  async revisarPagoManual(txId: string, aprobar: boolean, adminId: string): Promise<{ status: PaymentStatus }> {
+    const tx = await this.transactionRepository.findOne({ where: { id: txId, paymentMethodType: 'MANUAL' } });
+    if (!tx) throw new BadRequestException('Comprobante no encontrado.');
+    if (tx.status !== PaymentStatus.PENDING) throw new BadRequestException('Este comprobante ya fue revisado.');
+
+    // Reclamar el comprobante: si dos administradores lo revisan a la vez, solo uno lo procesa.
+    const nuevo = aprobar ? PaymentStatus.APPROVED : PaymentStatus.DECLINED;
+    const res = await this.transactionRepository.update(
+      { id: txId, status: PaymentStatus.PENDING },
+      { status: nuevo, reviewedBy: adminId, reviewedAt: new Date() },
+    );
+    if (!res.affected) throw new BadRequestException('Este comprobante ya fue revisado.');
+
+    if (!tx.quoteId) return { status: nuevo };
+    if (aprobar) {
+      try {
+        await this.quotesService.payQuote(tx.quoteId, 'SYSTEM_ADMIN');
+      } catch (e) {
+        // Si no se pudo marcar como pagado, el comprobante vuelve a la fila para no perderlo
+        await this.transactionRepository.update({ id: txId }, { status: PaymentStatus.PENDING, reviewedBy: null, reviewedAt: null });
+        throw e;
+      }
+    } else {
+      await this.quotesService.quitarValidacion(tx.quoteId, (tx.quoteStatusBefore as QuoteStatus) || QuoteStatus.ACCEPTED);
+    }
+    this.logger.log(`Comprobante ${txId} ${aprobar ? 'aprobado' : 'rechazado'} por ${adminId}.`);
+    return { status: nuevo };
   }
 }

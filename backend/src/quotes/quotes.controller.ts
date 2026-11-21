@@ -169,7 +169,11 @@ export class QuotesController {
   @Post(':id/logistic-status')
   async updateLogisticStatus(@Param('id') id: string, @Body('status') status: string, @Req() req: RequestWithUser) {
     if (req.user.role !== 'STORE') throw new ForbiddenException('Solo tiendas');
-    const upperStatus = status.toUpperCase() as QuoteStatus;
+    const upperStatus = String(status || '').toUpperCase() as QuoteStatus;
+    // Igual que en :id/status: la tienda solo avanza la logística, nunca marca pagado ni aceptado
+    if (![QuoteStatus.PREPARING, QuoteStatus.SHIPPED, QuoteStatus.DELIVERED].includes(upperStatus)) {
+      throw new ForbiddenException(`Tu rol no puede establecer el estado "${upperStatus}"`);
+    }
     return this.quotesService.updateQuoteStatus(id, upperStatus, req.user.uid, true);
   }
 }

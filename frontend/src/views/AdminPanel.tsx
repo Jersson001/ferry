@@ -5,7 +5,8 @@ import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell } from 'rechar
 import { ReferidosAdmin } from '../components/ReferidosAdmin';
 import { ResumenAdminPanel } from '../components/ResumenAdmin';
 import { OpinionesAdmin } from '../components/OpinionesAdmin';
-import { LayoutDashboard, Star, Zap, DollarSign, Package, Users, Crown, ShieldAlert, Loader2 } from 'lucide-react';
+import { PagosManualesAdmin } from '../components/PagosManualesAdmin';
+import { LayoutDashboard, Star, Zap, DollarSign, Package, Users, Crown, ShieldAlert, Loader2, Wallet } from 'lucide-react';
 import { getAdminUsersWithSubscriptions, adminAssignPlan, getSubscriptionPlans, SubscriptionPlan, adminVerificarRutsPendientes, adminVerificarRut } from '../services/subscriptionService';
 import { InsigniaRut } from '../components/EstadoRut';
 
@@ -15,7 +16,7 @@ interface Props {
 }
 
 export const AdminPanel: React.FC<Props> = ({ requests, onManualQuote }) => {
-  const [activeTab, setActiveTab] = useState<'RESUMEN' | 'PEDIDOS' | 'USUARIOS' | 'OPINIONES' | 'REFERIDOS'>('RESUMEN');
+  const [activeTab, setActiveTab] = useState<'RESUMEN' | 'PAGOS' | 'PEDIDOS' | 'USUARIOS' | 'OPINIONES' | 'REFERIDOS'>('RESUMEN');
   const [users, setUsers] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [plansStore, setPlansStore] = useState<SubscriptionPlan[]>([]);
@@ -103,6 +104,7 @@ export const AdminPanel: React.FC<Props> = ({ requests, onManualQuote }) => {
       <div className="flex gap-1.5 bg-slate-200/80 backdrop-blur-md p-1.5 rounded-2xl shadow-inner border border-slate-300/60 my-6 overflow-x-auto no-scrollbar">
         {([
           ['RESUMEN', 'Resumen', LayoutDashboard],
+          ['PAGOS', 'Pagos por revisar', Wallet],
           ['PEDIDOS', 'Pedidos', Package],
           ['USUARIOS', 'Usuarios y planes', Users],
           ['OPINIONES', 'Opiniones', Star],
@@ -125,6 +127,9 @@ export const AdminPanel: React.FC<Props> = ({ requests, onManualQuote }) => {
 
       {/* RESUMEN TAB */}
       {activeTab === 'RESUMEN' && <ResumenAdminPanel />}
+
+      {/* PAGOS TAB: comprobantes de Nequi/Bre-B */}
+      {activeTab === 'PAGOS' && <PagosManualesAdmin />}
 
       {/* OPINIONES TAB */}
       {activeTab === 'OPINIONES' && <OpinionesAdmin />}

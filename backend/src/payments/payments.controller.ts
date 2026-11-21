@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, UseGuards, Req, NotFoundException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, UseGuards, Req, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { Request } from 'express';
@@ -82,5 +82,33 @@ export class PaymentsController {
     @Req() req: RequestWithUser
   ) {
     return this.paymentsService.processManualPayment(quoteId, reference, proofBase64, req.user.uid);
+  }
+
+  // ==========================================
+  // ADMIN: revisar comprobantes manuales contra el Nequi de Ferry
+  // ==========================================
+  private soloAdmin(req: RequestWithUser) {
+    if (req.user.role !== 'ADMIN') throw new ForbiddenException('Solo administradores');
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('manual/pending')
+  async listManualPending(@Req() req: RequestWithUser) {
+    this.soloAdmin(req);
+    return this.paymentsService.listarPagosManualesPendientes();
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('manual/:id/approve')
+  async approveManual(@Param('id') id: string, @Req() req: RequestWithUser) {
+    this.soloAdmin(req);
+    return this.paymentsService.revisarPagoManual(id, true, req.user.uid);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('manual/:id/reject')
+  async rejectManual(@Param('id') id: string, @Req() req: RequestWithUser) {
+    this.soloAdmin(req);
+    return this.paymentsService.revisarPagoManual(id, false, req.user.uid);
   }
 }

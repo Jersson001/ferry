@@ -526,7 +526,8 @@ export const submitManualPayment = async (params: {
   if (params.proofFile) {
     proofBase64 = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
-      reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+      // Data URL completo: el backend necesita el tipo de imagen para guardarla
+      reader.onloadend = () => resolve(reader.result as string);
       reader.onerror = reject;
       reader.readAsDataURL(params.proofFile!);
     });

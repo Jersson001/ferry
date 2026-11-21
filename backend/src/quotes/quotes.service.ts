@@ -123,7 +123,7 @@ export class QuotesService {
       throw new BadRequestException('Solo se pueden borrar o guardar las solicitudes de más de 48 horas');
     }
     const enCurso = await this.quoteRepository.count({
-      where: { requestId, status: In([QuoteStatus.ACCEPTED, QuoteStatus.PAID, QuoteStatus.PREPARING, QuoteStatus.SHIPPED, QuoteStatus.DELIVERED]) },
+      where: { requestId, status: In([QuoteStatus.ACCEPTED, QuoteStatus.PENDING_VALIDATION, QuoteStatus.PAID, QuoteStatus.PREPARING, QuoteStatus.SHIPPED, QuoteStatus.DELIVERED]) },
     });
     if (enCurso > 0) throw new BadRequestException('Esta solicitud tiene una cotización aceptada; no se puede borrar');
     return request;
@@ -526,7 +526,7 @@ export class QuotesService {
       });
 
       // Si no ha pagado, NO MOSTRAR la tienda
-      if (quote.status === QuoteStatus.PENDING || quote.status === QuoteStatus.ACCEPTED || quote.status === QuoteStatus.REJECTED) {
+      if ([QuoteStatus.PENDING, QuoteStatus.ACCEPTED, QuoteStatus.REJECTED, QuoteStatus.PENDING_VALIDATION].includes(quote.status)) {
         return {
           ...mappedQuote,
           store: undefined, // Ocultar tienda completamente
@@ -632,7 +632,8 @@ export class QuotesService {
 
       if (!quote) throw new NotFoundException('Cotización no encontrada');
       if (quote.status === QuoteStatus.PAID) return quote; // Idempotencia
-      if (quote.status !== QuoteStatus.ACCEPTED && quote.status !== QuoteStatus.PENDING) {
+      // PENDING_VALIDATION: lo aprueba un administrador, o el cliente terminó pagando por Wompi mientras tanto
+      if (![QuoteStatus.ACCEPTED, QuoteStatus.PENDING, QuoteStatus.PENDING_VALIDATION].includes(quote.status)) {
         throw new ForbiddenException('La cotización no está en estado válido para pagar');
       }
 
@@ -645,11 +646,13 @@ export class QuotesService {
 
       // PARCHE DE SEGURIDAD: Validar que la cotización pertenece al usuario que paga.
       // Excepción: SYSTEM_WEBHOOK cuando viene del procesador de webhooks de Wompi.
-      if (userId !== 'SYSTEM_WEBHOOK' && request.userId !== userId) {
+      // SYSTEM_ADMIN: un administrador aprobó el comprobante de un pago manual.
+      if (userId !== 'SYSTEM_WEBHOOK' && userId !== 'SYSTEM_ADMIN' && request.userId !== userId) {
         throw new ForbiddenException('No tienes permiso para pagar esta cotización');
       }
 
-      const wasPending = quote.status === QuoteStatus.PENDING;
+      // Un comprobante pudo llegar con la cotización aún PENDING: al pagarse, las demás también se descartan.
+      const wasPending = quote.status === QuoteStatus.PENDING || quote.status === QuoteStatus.PENDING_VALIDATION;
 
       // 1. Marcar como pagada
       quote.status = QuoteStatus.PAID;
@@ -677,6 +680,38 @@ export class QuotesService {
     }
   }
 
+  /**
+   * El cliente subió un comprobante: la cotización queda en revisión (no pagada). Devuelve el estado
+   * que tenía, para poder regresarla ahí si el administrador rechaza el comprobante.
+   */
+  async marcarEnValidacion(quoteId: string, userId: string): Promise<{ antes: QuoteStatus; clientFinalTotal: number }> {
+    return this.dataSource.transaction(async manager => {
+      const quote = await manager.createQueryBuilder(Quote, 'q')
+        .where('q.id = :id', { id: quoteId })
+        .setLock('pessimistic_write')
+        .getOne();
+      if (!quote) throw new NotFoundException('Cotización no encontrada');
+      const request = await manager.findOne(MaterialRequest, { where: { id: quote.requestId } });
+      if (!request || request.userId !== userId) throw new ForbiddenException('No tienes permiso para pagar esta cotización');
+      if (quote.status === QuoteStatus.PENDING_VALIDATION) {
+        throw new ConflictException('Ya enviaste un comprobante para este pedido; Ferry lo está revisando');
+      }
+      if (quote.status !== QuoteStatus.PENDING && quote.status !== QuoteStatus.ACCEPTED) {
+        throw new BadRequestException('Este pedido no está pendiente de pago');
+      }
+      const antes = quote.status;
+      quote.status = QuoteStatus.PENDING_VALIDATION;
+      await manager.save(quote);
+      return { antes, clientFinalTotal: quote.clientFinalTotal };
+    });
+  }
+
+  /** Comprobante rechazado: la cotización vuelve a esperar el pago, solo si sigue en revisión. */
+  async quitarValidacion(quoteId: string, volverA: QuoteStatus): Promise<void> {
+    const destino = volverA === QuoteStatus.PENDING ? QuoteStatus.PENDING : QuoteStatus.ACCEPTED;
+    await this.quoteRepository.update({ id: quoteId, status: QuoteStatus.PENDING_VALIDATION }, { status: destino });
+  }
+
   async updateQuoteStatus(
     quoteId: string, 
     status: QuoteStatus, 
@@ -690,6 +725,16 @@ export class QuotesService {
     
     if (isStore && quote.storeId !== userId) throw new ForbiddenException('No es tu cotización');
     if (!isStore && quote.request.userId !== userId) throw new ForbiddenException('No es tu solicitud');
+
+    // Solo se alista, despacha o entrega lo que ya está pagado, y solo se rechaza lo que aún no se ha pagado
+    // (con un comprobante en revisión tampoco: el cliente ya envió la plata).
+    const pagada = [QuoteStatus.PAID, QuoteStatus.PREPARING, QuoteStatus.SHIPPED, QuoteStatus.DELIVERED].includes(quote.status);
+    if ([QuoteStatus.PREPARING, QuoteStatus.SHIPPED, QuoteStatus.DELIVERED].includes(status) && !pagada) {
+      throw new BadRequestException('Este pedido todavía no está pagado');
+    }
+    if (status === QuoteStatus.REJECTED && ![QuoteStatus.PENDING, QuoteStatus.ACCEPTED, QuoteStatus.REJECTED].includes(quote.status)) {
+      throw new BadRequestException('Este pedido ya no se puede rechazar');
+    }
 
     quote.status = status;
 
