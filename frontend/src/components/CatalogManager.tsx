@@ -551,6 +551,7 @@ export const CatalogManager: React.FC<Props> = ({ storeId, storeName, onClose })
           <p className="text-xs text-slate-400">{storeName}</p>
         </div>
         <button
+          data-tour="compartir-catalogo"
           onClick={() => setCompartir(true)}
           aria-label="Compartir catálogo con QR"
           className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors"
@@ -595,7 +596,7 @@ export const CatalogManager: React.FC<Props> = ({ storeId, storeName, onClose })
                 >
                   <Layers className="w-3.5 h-3.5" /> Familias
                 </button>
-                <button onClick={() => setTab('manual')} className="flex items-center gap-1.5 px-3 py-1.5 bg-ferry-500 text-white text-xs font-semibold rounded-lg">
+                <button data-tour="agregar-producto" onClick={() => setTab('manual')} className="flex items-center gap-1.5 px-3 py-1.5 bg-ferry-500 text-white text-xs font-semibold rounded-lg">
                   <Plus className="w-3.5 h-3.5" /> Agregar
                 </button>
               </div>

@@ -1080,7 +1080,7 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
       <div className="space-y-6 pb-20">
 
         {/* ── Dirección de entrega ── */}
-        <div className="bg-gray-50 rounded-2xl border border-gray-200 p-4 space-y-3">
+        <div data-tour="direccion" className="bg-gray-50 rounded-2xl border border-gray-200 p-4 space-y-3">
 
           {/* Dirección — Google Places Autocomplete + Historial */}
           <div className="relative">
@@ -1181,7 +1181,7 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
           </p>
 
           <div className="grid grid-cols-2 gap-4">
-            <Card onClick={() => fileInputRef.current?.click()} className="group flex flex-col items-center justify-center h-40 border-2 border-dashed border-ferry-200 hover:border-ferry-500 transition-all hover:-translate-y-1 hover:shadow-lg bg-ferry-50 cursor-pointer">
+            <Card tour="subir-lista" onClick={() => fileInputRef.current?.click()} className="group flex flex-col items-center justify-center h-40 border-2 border-dashed border-ferry-200 hover:border-ferry-500 transition-all hover:-translate-y-1 hover:shadow-lg bg-ferry-50 cursor-pointer">
               <div className="flex items-center gap-2 mb-3 relative">
                 <Camera
                   className="w-9 h-9 text-ferry-500 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-[-5deg] relative z-10"
@@ -1199,7 +1199,7 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
               <span className="text-[11px] text-center text-ferry-600/70 mt-1">Foto, imagen o PDF</span>
             </Card>
 
-            <Card onClick={() => setMode('TEXT_INPUT')} className="group flex flex-col items-center justify-center h-40 border-2 border-dashed border-slate-200 hover:border-slate-400 transition-all hover:-translate-y-1 hover:shadow-lg bg-white cursor-pointer">
+            <Card tour="escribir-lista" onClick={() => setMode('TEXT_INPUT')} className="group flex flex-col items-center justify-center h-40 border-2 border-dashed border-slate-200 hover:border-slate-400 transition-all hover:-translate-y-1 hover:shadow-lg bg-white cursor-pointer">
               <div className="flex items-center gap-2 mb-3 relative">
                 <MessageSquareText
                   className="w-9 h-9 text-slate-500 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-[-5deg] relative z-10"
@@ -1219,7 +1219,7 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
           </div>
 
           <div className="mt-4">
-            <Card onClick={() => { openNewItemForm([]); setMode('EDITING'); }} className="flex items-center justify-center p-4 border-2 border-dashed border-slate-200 hover:border-slate-400 bg-white cursor-pointer">
+            <Card tour="crear-manual" onClick={() => { openNewItemForm([]); setMode('EDITING'); }} className="flex items-center justify-center p-4 border-2 border-dashed border-slate-200 hover:border-slate-400 bg-white cursor-pointer">
               <Plus className="w-5 h-5 text-slate-400 mr-2" />
               <span className="font-semibold text-slate-700">Crear Manualmente</span>
             </Card>
@@ -1281,6 +1281,7 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
           <div className="bg-slate-50 p-3 border-t border-slate-100 flex justify-between items-center">
             <span className="text-xs text-slate-400 italic">Nuestra IA extraerá los materiales por ti</span>
             <Button
+              data-tour="procesar-texto"
               onClick={handleTextExtraction}
               disabled={!textInput.trim() || isAnalyzing}
               className="px-6"
@@ -1627,6 +1628,7 @@ export const MaterialFlow: React.FC<Props> = ({ onRequestCreate, activeRequest, 
             </div>
           ) : (
             <Button
+              data-tour="enviar-solicitud"
               onClick={() => submitRequest()}
               disabled={items.length === 0 || isSendingQuote || isUploadingImage}
               className="w-full shadow-lg shadow-ferry-200"

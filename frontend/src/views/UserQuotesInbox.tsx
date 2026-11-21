@@ -433,6 +433,7 @@ const PaymentCheckoutModal: React.FC<{
 
               {/* Nequi / Bre-B */}
               <button
+                data-tour="metodo-nequi"
                 onClick={() => setSelectedMethod('nequi')}
                 className={`relative flex flex-col items-start gap-1 px-4 py-3 rounded-2xl border-2 text-left transition-all ${
                   selectedMethod === 'nequi'
@@ -1231,6 +1232,7 @@ const QuoteCard: React.FC<{
               Ver Detalle
             </button>
             <button
+              data-tour="pagar-cotizacion"
               onClick={() => onProceedToPayment(quote)}
               className="flex-1 py-2.5 rounded-xl bg-ferry-600 text-white font-bold text-xs flex items-center justify-center gap-1 hover:bg-ferry-700 transition-colors shadow-md shadow-ferry-100"
             >
@@ -1242,6 +1244,7 @@ const QuoteCard: React.FC<{
         {isAccepted && !isPaid && !isPendingValidation && (
           <div className="mt-4">
             <button
+              data-tour="pagar-cotizacion"
               onClick={() => onProceedToPayment(quote)}
               className="w-full py-2.5 rounded-xl bg-ferry-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-ferry-700 transition-colors"
             >
@@ -1984,6 +1987,7 @@ export const UserQuotesInbox: React.FC<{
         ).map(tab => (
           <button
             key={tab.key}
+            data-tour={`tab-${tab.key}`}
             onClick={() => setActiveTab(tab.key)}
             className={`inline-flex items-center gap-1.5 px-4 py-2 text-sm transition-colors border-b-2 -mb-px ${
               activeTab === tab.key

@@ -966,8 +966,8 @@ export const UnifiedProfile: React.FC<Props> = ({ profile, onUpdateProfile, onSi
                     <PlayCircle className="w-5 h-5" />
                   </div>
                   <div className="text-left">
-                    <p className="font-bold text-sm text-slate-800">Ver tutorial</p>
-                    <p className="text-xs text-slate-500">Cómo funciona Ferry, paso a paso</p>
+                    <p className="font-bold text-sm text-slate-800">Guías paso a paso</p>
+                    <p className="text-xs text-slate-500">Te mostramos cómo hacer cada cosa en Ferry</p>
                   </div>
                 </div>
                 <ChevronRight className="w-5 h-5 text-slate-300" />

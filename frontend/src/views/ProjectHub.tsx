@@ -408,12 +408,14 @@ export const ProjectHub: React.FC = () => {
       {/* ROLE SWITCHER */}
       <div className="bg-white p-1 rounded-xl border border-slate-200 flex mb-4">
         <button 
+          data-tour="modo-cliente"
           onClick={() => setViewMode('CLIENT')}
           className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-all ${viewMode === 'CLIENT' ? 'bg-ferry-100 text-ferry-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
         >
           <User className="w-4 h-4" /> Busco Profesional
         </button>
         <button 
+          data-tour="modo-trabajo"
           onClick={() => setViewMode('CONTRACTOR')}
           className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-all ${viewMode === 'CONTRACTOR' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
         >
@@ -430,7 +432,7 @@ export const ProjectHub: React.FC = () => {
                 <Briefcase className="w-12 h-12 text-ferry-500 mx-auto mb-3" />
                 <h3 className="text-lg font-bold text-slate-800">¿Necesitas ayuda experta?</h3>
                 <p className="text-slate-500 text-sm mb-4">Publica tu proyecto y recibe ofertas de contratistas y profesionales verificados.</p>
-                <Button onClick={() => setIsPosting(true)} className="w-full shadow-lg shadow-ferry-200">
+                <Button data-tour="publicar-proyecto" onClick={() => setIsPosting(true)} className="w-full shadow-lg shadow-ferry-200">
                   <Plus className="w-5 h-5" /> Publicar Solicitud
                 </Button>
               </div>
@@ -481,7 +483,7 @@ export const ProjectHub: React.FC = () => {
                 <button onClick={() => setIsPosting(false)} className="text-slate-400 text-sm">Cancelar</button>
               </div>
               
-              <div className="space-y-3">
+              <div data-tour="form-proyecto" className="space-y-3">
                 {error && <div className="p-3 bg-red-50 text-red-600 text-xs rounded-xl flex items-start gap-2"><AlertCircle className="w-4 h-4 shrink-0 mt-0.5" /><p>{error}</p></div>}
                 <div>
                   <label className="text-xs font-bold text-slate-500 uppercase">Título *</label>
@@ -622,7 +624,7 @@ export const ProjectHub: React.FC = () => {
                   </div>
                 )}
 
-                <Button onClick={handlePostProject} className="w-full mt-4" disabled={posting}>
+                <Button data-tour="boton-publicar" onClick={handlePostProject} className="w-full mt-4" disabled={posting}>
                   {posting ? <Loader2 className="w-5 h-5 animate-spin" /> : (newProject.postType === 'STANDARD' ? 'Publicar Gratis' : `Pagar ${newProject.postType === 'MULTIMEDIA' ? '$9.900' : '$19.900'} y Publicar`)}
                 </Button>
               </div>
@@ -642,7 +644,7 @@ export const ProjectHub: React.FC = () => {
           </div>
 
           <div className="bg-slate-100 p-1 rounded-xl flex mb-4">
-            <button onClick={() => setContractorTab('FEED')} className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${contractorTab === 'FEED' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}>
+            <button data-tour="tab-oportunidades" onClick={() => setContractorTab('FEED')} className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${contractorTab === 'FEED' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}>
               Oportunidades
             </button>
             <button onClick={() => setContractorTab('MINE')} className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${contractorTab === 'MINE' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}>
@@ -777,6 +779,7 @@ export const ProjectHub: React.FC = () => {
                         {formatBudget(project.budgetInCents)}
                         </div>
                         <Button 
+                        data-tour={isApplied ? undefined : 'postularme'}
                         onClick={() => !isApplied && setApplyModal({ projectId: project.id, title: project.title })}
                         variant={isApplied ? "secondary" : "outline"} 
                         className={`!py-1 !px-4 !text-sm !rounded-lg transition-all ${isApplied ? 'bg-green-100 text-green-700 hover:bg-green-200 cursor-default' : ''}`}
@@ -850,7 +853,7 @@ export const ProjectHub: React.FC = () => {
               {sinCupo ? (
                 <Button onClick={() => setShowPlans(true)} className="w-full mt-2">Ver planes para postularte</Button>
               ) : (
-                <Button onClick={handleApply} className="w-full mt-2" disabled={applyLoading}>
+                <Button data-tour="enviar-postulacion" onClick={handleApply} className="w-full mt-2" disabled={applyLoading}>
                   {applyLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Enviar Postulación'}
                 </Button>
               )}

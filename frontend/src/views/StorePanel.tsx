@@ -554,6 +554,7 @@ const QuoteResponseModal: React.FC<QuoteResponseModalProps> = ({ req, storeName,
         {/* ── Footer / Submit ── */}
         <div className="px-5 py-4 border-t border-slate-100">
           <button
+            data-tour="enviar-cotizacion"
             onClick={handleSubmit}
             disabled={!hasAtLeastOnePrice || subtotalBruto === 0 || isSubmitting}
             className="w-full py-4 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2
@@ -868,6 +869,7 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
       {/* Tabs — Sales Funnel: Nuevas → Enviadas → Ventas Cerradas → Catálogo */}
       <div className="flex p-1.5 bg-white border border-slate-100 rounded-2xl shadow-sm gap-0.5">
         <button
+          data-tour="tab-nuevas"
           onClick={() => setActiveTab('INBOX')}
           className={`flex-1 py-3 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1 relative ${
             activeTab === 'INBOX'
@@ -883,6 +885,7 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
           )}
         </button>
         <button
+          data-tour="tab-enviadas"
           onClick={() => setActiveTab('QUOTES')}
           className={`flex-1 py-3 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1 ${
             activeTab === 'QUOTES'
@@ -893,6 +896,7 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
           <Send className="w-3.5 h-3.5" /> Enviadas
         </button>
         <button
+          data-tour="tab-cerradas"
           onClick={() => setActiveTab('ORDERS')}
           className={`flex-1 py-3 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1 ${
             activeTab === 'ORDERS'
@@ -920,7 +924,7 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
             )}
 
             {avisos.estado !== 'no-soportado' && (
-              <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 flex items-center justify-between gap-3">
+              <div data-tour="avisos" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 flex items-center justify-between gap-3">
                 <span>
                   {avisos.estado === 'activo' && 'Avisos activados: te avisamos cuando llegue una solicitud de tu zona.'}
                   {avisos.estado === 'inactivo' && 'Recibe un aviso apenas llegue una solicitud de tu zona y responde primero.'}
@@ -1180,6 +1184,7 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
                         Rechazar
                       </button>
                       <button
+                        data-tour="ver-cotizar"
                         onClick={() => setQuotingInboxRequest(req)}
                         className="flex-[2] py-2.5 bg-ferry-600 hover:bg-ferry-700 text-white text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 shadow-sm shadow-ferry-200"
                       >
@@ -1452,6 +1457,7 @@ export const StorePanel: React.FC<Props> = ({ requests, profile }) => {
 
                       {/* Marcar en camino */}
                       <button
+                        data-tour="marcar-enviado"
                         onClick={() => handleMarkShipped(q)}
                         disabled={actionLoadingId === q.id}
                         className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-ferry-600 hover:bg-ferry-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-sm font-bold transition-colors"

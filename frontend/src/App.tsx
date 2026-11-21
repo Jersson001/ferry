@@ -19,7 +19,7 @@ import ferryLogo from './assets/logo.svg';
 import { getCurrentUser, signOut as logoutUser, verifyEmailToken } from './services/authService';
 import { rolDeLaSesion } from './utils/sesion';
 import { ErrorDePantalla } from './components/ErrorDePantalla';
-import { TutorialInicio, tutorialVisto, marcarTutorialVisto, RolTutorial } from './components/TutorialInicio';
+import { CentroAyuda, GuiaFlotante, Guia, RolAyuda, bienvenidaVista, marcarBienvenidaVista } from './components/GuiaAyuda';
 import { verifySubscriptionWompiPayment } from './services/subscriptionService';
 import { getStorePendingRequestsCount, verifyWompiPayment } from './services/quoteService';
 import { recordarCodigoDeLlegada, reclamarCodigoPendiente } from './services/referralService';
@@ -263,19 +263,28 @@ const App: React.FC = () => {
   // para administradores. Es solo para mostrarlo; las rutas de administración las protege el backend.
   const esAdmin = useMemo(() => rolDeLaSesion() === 'ADMIN', [currentUserProfile?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Tutorial de bienvenida: una vez por cuenta y rol, después de completar el perfil. Se vuelve a ver desde el perfil.
-  const rolTutorial: RolTutorial | null =
+  // Ayuda: la ventana con las guías por tarea (botón ? del encabezado), que se abre sola la primera vez
+  // después de completar el perfil, y la guía flotante que acompaña la tarea elegida.
+  const rolAyuda: RolAyuda | null =
     currentUserRole === UserRole.STORE ? 'ferreteria' : currentUserRole === UserRole.USER ? 'cliente' : null;
-  const [tutorialAbierto, setTutorialAbierto] = useState(false);
+  const [ayudaAbierta, setAyudaAbierta] = useState(false);
+  const [esBienvenida, setEsBienvenida] = useState(false);
+  const [guiaActiva, setGuiaActiva] = useState<Guia | null>(null);
   useEffect(() => {
     const uid = currentUserProfile?.uid;
-    // Al administrador no se le abre solo: cambia de vista entre roles a cada rato.
-    if (!isLoggedIn || isGuest || !uid || !rolTutorial || esAdmin) return;
-    if (!tutorialVisto(uid, rolTutorial)) setTutorialAbierto(true);
-  }, [isLoggedIn, isGuest, currentUserProfile?.uid, rolTutorial, esAdmin]);
-  const cerrarTutorial = () => {
-    if (currentUserProfile?.uid && rolTutorial) marcarTutorialVisto(currentUserProfile.uid, rolTutorial);
-    setTutorialAbierto(false);
+    // Al administrador no se le abre sola: cambia de vista entre roles a cada rato.
+    if (!isLoggedIn || isGuest || !uid || !rolAyuda || esAdmin) return;
+    if (!bienvenidaVista(uid)) { setEsBienvenida(true); setAyudaAbierta(true); }
+  }, [isLoggedIn, isGuest, currentUserProfile?.uid, rolAyuda, esAdmin]);
+  const cerrarAyuda = () => {
+    if (currentUserProfile?.uid) marcarBienvenidaVista(currentUserProfile.uid);
+    setAyudaAbierta(false);
+    setEsBienvenida(false);
+  };
+  const abrirAyuda = () => { setGuiaActiva(null); setEsBienvenida(false); setAyudaAbierta(true); };
+  const empezarGuia = (guia: Guia) => {
+    cerrarAyuda();
+    setGuiaActiva(guia);
   };
 
   // Lógica de Negocio
@@ -338,7 +347,7 @@ const App: React.FC = () => {
   };
 
   const NavItem = ({ icon: Icon, label, view, badgeCount = 0 }: { icon: any, label: string, view: any, badgeCount?: number }) => (
-    <button onClick={() => {
+    <button data-tour={`nav-${view}`} onClick={() => {
       if (view === 'SHOP') setActiveRequestId(null);
       setCurrentView(view);
     }} className={`relative flex flex-col items-center justify-center w-full h-full space-y-1 ${currentView === view ? 'text-ferry-600' : 'text-slate-400'}`}>
@@ -453,7 +462,10 @@ const App: React.FC = () => {
     <APIProvider apiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string} language="es" region="CO">
       <div className="flex flex-col h-screen bg-gray-50 max-w-md mx-auto shadow-2xl overflow-hidden relative">
 
-      {tutorialAbierto && rolTutorial && !isGuest && <TutorialInicio rol={rolTutorial} onTerminar={cerrarTutorial} />}
+      {ayudaAbierta && rolAyuda && !isGuest && (
+        <CentroAyuda rol={rolAyuda} bienvenida={esBienvenida} onElegir={empezarGuia} onCerrar={cerrarAyuda} />
+      )}
+      {guiaActiva && !isGuest && <GuiaFlotante key={guiaActiva.id} guia={guiaActiva} onTerminar={() => setGuiaActiva(null)} />}
 
       {/* Modal de Auth Gate */}
       {showAuthGate && (
@@ -544,7 +556,19 @@ const App: React.FC = () => {
               {currentUserRole === UserRole.ADMIN && 'Admin'}
             </button>
           )}
-          
+
+          {/* Ayuda: guías paso a paso */}
+          {!isGuest && rolAyuda && (
+            <button
+              onClick={abrirAyuda}
+              aria-label="Ayuda: guías paso a paso"
+              title="Ayuda"
+              className="w-8 h-8 rounded-full bg-ferry-50 text-ferry-600 border border-ferry-100 flex items-center justify-center font-black text-sm hover:bg-ferry-100 transition-colors"
+            >
+              ?
+            </button>
+          )}
+
           {!isGuest ? (
             <button 
               onClick={() => {
@@ -579,7 +603,7 @@ const App: React.FC = () => {
         {currentUserRole === UserRole.ADMIN && <AdminPanel requests={requests} onManualQuote={handleManualQuote} />}
 
         {currentView === 'PROFILE' ? (
-          <UnifiedProfile profile={currentUserProfile} onUpdateProfile={(p) => setCurrentUserProfile(p)} onSignOut={() => { setIsLoggedIn(false); setIsGuest(false); setCurrentUserProfile(null); }} onVerTutorial={rolTutorial ? () => setTutorialAbierto(true) : undefined} />
+          <UnifiedProfile profile={currentUserProfile} onUpdateProfile={(p) => setCurrentUserProfile(p)} onSignOut={() => { setIsLoggedIn(false); setIsGuest(false); setCurrentUserProfile(null); }} onVerTutorial={rolAyuda ? abrirAyuda : undefined} />
         ) : (
           <>
             {currentUserRole === UserRole.STORE && currentView === 'HOME' && <StorePanel requests={requests} profile={currentUserProfile} />}
