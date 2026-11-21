@@ -273,14 +273,39 @@ export const GuiaFlotante: React.FC<{ guia: Guia; onTerminar: () => void }> = ({
     : false;
   const esperandoToque = actual.accion === 'tocar' && !!caja;
   const RELLENO = 5;
+  // Hueco sobre el botón: todo lo demás queda oscuro y no responde, el botón sí se puede tocar
+  const hueco = caja && {
+    top: Math.max(0, caja.top - RELLENO),
+    left: Math.max(0, caja.left - RELLENO),
+    right: Math.min(window.innerWidth, caja.left + caja.width + RELLENO),
+    bottom: Math.min(window.innerHeight, caja.top + caja.height + RELLENO),
+  };
 
   return (
     <>
-      {caja && (
-        <div
-          className="fixed z-[65] pointer-events-none rounded-2xl ring-4 ring-ferry-500 shadow-[0_0_0_6px_rgba(249,115,22,0.25)] animate-pulse transition-all duration-200"
-          style={{ top: caja.top - RELLENO, left: caja.left - RELLENO, width: caja.width + RELLENO * 2, height: caja.height + RELLENO * 2 }}
-        />
+      {hueco ? (
+        <>
+          {/* Lo oscuro, con el hueco redondeado (solo se ve: los toques los frenan los bloques de abajo) */}
+          <div
+            className="fixed z-[64] pointer-events-none rounded-2xl transition-all duration-200"
+            style={{
+              top: hueco.top, left: hueco.left, width: hueco.right - hueco.left, height: hueco.bottom - hueco.top,
+              boxShadow: '0 0 0 9999px rgba(15, 23, 42, 0.6)',
+            }}
+          />
+          {/* Cuatro bloques transparentes alrededor del hueco: tocar lo oscuro no hace nada */}
+          <div className="fixed z-[64] left-0 right-0 top-0" style={{ height: hueco.top }} />
+          <div className="fixed z-[64] left-0 right-0 bottom-0" style={{ top: hueco.bottom }} />
+          <div className="fixed z-[64] left-0" style={{ top: hueco.top, height: hueco.bottom - hueco.top, width: hueco.left }} />
+          <div className="fixed z-[64] right-0" style={{ top: hueco.top, height: hueco.bottom - hueco.top, left: hueco.right }} />
+          <div
+            className="fixed z-[65] pointer-events-none rounded-2xl ring-4 ring-ferry-500 animate-pulse transition-all duration-200"
+            style={{ top: hueco.top, left: hueco.left, width: hueco.right - hueco.left, height: hueco.bottom - hueco.top }}
+          />
+        </>
+      ) : (
+        // Sin botón que mostrar (un paso para leer, o mientras cambia la pantalla): todo oscuro
+        <div className="fixed inset-0 z-[64] bg-slate-900/60" />
       )}
       {esperandoToque && (
         <div
